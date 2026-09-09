@@ -1,0 +1,8 @@
+*.hgn
+*.safetensors
+*.log
+__pycache__/
+.DS_Store
+
+# host-specific validation log (kept local, not published)
+docs/fedora-44-setup.md
