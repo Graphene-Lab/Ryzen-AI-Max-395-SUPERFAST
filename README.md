@@ -701,6 +701,17 @@ documents and your language. The "-it" Gemma repository names Italian, but
 neither vendor publishes Italian-specific quality numbers, so that claim
 stays unverified until measured here.
 
+The community reputation of Qwen3.8-27B matches those numbers. Reviews and
+headlines describe it as a "frontier-level model that runs on home PC
+hardware", with agentic and coding results that rival paid frontier models on
+key benchmarks while staying small enough for a single consumer GPU or an
+APU like the one this machine is built on. The same sources add the
+qualifiers we already stated: the numbers are the vendor's own, cloud models
+still win where raw knowledge or very long reasoning matter, and the model
+takes its time to think. What is genuinely remarkable is the combination:
+capabilities that a few years ago needed a paid cloud API now run locally on
+consumer hardware, privately, with no subscription.
+
 What this means for the machine: the dense and Flash-Next Qwen profiles stay
 the quality-first defaults, running on the purpose-built engine at high
 precision. Gemma-4 is downloaded as a candidate profile for speed and vision,
