@@ -1,46 +1,52 @@
 # SUPERFAST
 
-**The fastest way to run Qwen3.8-27B on AMD Strix Halo — at higher precision
-than any engine that gets close.**
+**Turn an AMD Ryzen AI Max into a fast, high-quality and private LLM
+machine.**
 
-SUPERFAST is built for one GPU: AMD Strix Halo (gfx1151). Every kernel is
-written for this GPU and for this model family. There is no general-purpose
-runtime, no portability layer, and no fallback path. That is why it can be
-faster than a general engine — and why it runs on exactly one piece of
-silicon.
+SUPERFAST is a goal, not a fixed architecture: take an AMD Strix Halo APU
+(gfx1151 — for example the Ryzen AI Max+ 395) and make it run excellent open
+LLMs as fast as the hardware allows, without trading away quality. What makes
+this silicon special is that CPU and GPU share one pool of very fast
+LPDDR5X memory: 16 Zen 5 cores and the Radeon 8060S integrated graphics draw
+from the same 124 GB, and AMD's ROCm stack turns that shared memory into GPU
+compute. A general engine cannot fully exploit that; a machine built for it
+can.
 
-Measured on a 32K prompt with a 256-token answer, against the fastest
-published numbers for this model on this hardware:
+The project packages that machine as a repeatable recipe: a Fedora
+installation, models running in containers that carry their own ROCm, and a
+small switch that changes which model is active. Every speed and quality
+claim in this document was measured on the reference machine, and nothing is
+kept because it looks good in theory.
+
+A running model is called a **profile**. Only one profile is active at a
+time, and every profile serves the same OpenAI-compatible endpoint on port
+8731, so the tools you connect never change. Today the machine runs the
+dense Qwen3.8-27B and the Qwen3.8-Flash-Next MoE; other models can be added
+as profiles the same way. See [Choose a model profile](#choose-a-model-profile).
+
+### A measured starting point
+
+On the reference machine, the dense Qwen3.8-27B profile answers a 32K prompt
+with a 256-token answer faster than the fastest published numbers for the
+same model on the same silicon by other runtimes:
 
 | | prefill | decode | **total** |
 |---|---|---|---|
-| **SUPERFAST** (6.32 bpw) | **57.9 s** | 8.1 s | **66.0 s** |
+| **SUPERFAST** dense profile (6.32 bpw) | **57.9 s** | 8.1 s | **66.0 s** |
 | [KyaniteLabs](https://github.com/KyaniteLabs/qwen38-27b-strix-halo) (Q4_K_XL) | 84.0 s | 8.5 s | 92.5 s |
 | [q38rocm](https://github.com/julianmb/q38rocm) (4.26 bpw) | 133.7 s | 7.8 s | 141.5 s |
 
-SUPERFAST is **2.1× faster than q38rocm and 1.4× faster than KyaniteLabs**
-end to end, while carrying about 1.5× their weight precision. Most of the
-difference is in prefill, and prefill is most of the wall-clock time on any
-prompt with real context.
+That is **2.1× faster than q38rocm and 1.4× faster than KyaniteLabs** end to
+end, while carrying about 1.5× their weight precision. Most of the difference
+is in prefill, and prefill is most of the wall-clock time on any prompt with
+real context. Speculative decoding in the engine is byte-identical to serial
+greedy decode — a pure speed optimization, not a quality trade, verified on
+every release.
 
-Output is **byte-identical to serial greedy decode**. Speculation here is a
-pure speed optimization, not a quality trade. This is verified on every
-release.
-
-```bash
-podman run --rm -p 8731:8731 \
-  --device /dev/kfd --device /dev/dri --group-add keep-groups \
-  --security-opt seccomp=unconfined --ipc=host \
-  -v /path/to/models:/models:ro -v /path/to/tokenizer:/tokenizer:ro \
-  ghcr.io/peonist-ai/superfast:0.1.3
-```
-
-An OpenAI-compatible endpoint comes up on `:8731`.
-
-On Docker instead of Podman, replace `--group-add keep-groups` with
-`--group-add video --group-add render`. `keep-groups` is a Podman keyword that
-Docker does not understand: Docker resolves `--group-add` names against the
-container's `/etc/group` and fails with `unable to find group keep-groups`.
+If you do not have the machine yet, [build it step by
+step](#set-up-a-new-machine). If you already have it, choose a model profile
+with `superfast-switch` (see
+[Choose a model profile](#choose-a-model-profile)).
 
 ---
 
@@ -185,8 +191,12 @@ Things we learned on the reference machine:
 
 ## Get the weights
 
-The image has **no model weights**. It is 3.5 GB of engine, and the
-checkpoint is 35.9 GB. Download it once and mount it:
+Profiles ship as containers with **no model weights** inside: the dense
+profile image is 3.5 GB of engine, and its checkpoint is 35.9 GB. The setup
+script and the switch know where each profile keeps its weights — the dense
+profile in `~/superfast-models`, the Flash-Next profile in
+`~/superfast-flash`. For the dense profile, download the checkpoint once and
+mount it:
 
 ```bash
 pip install -U "huggingface_hub[cli]"
@@ -213,6 +223,11 @@ podman run --rm -p 8731:8731 \
   -v ~/superfast-models/tokenizer:/tokenizer:ro \
   ghcr.io/peonist-ai/superfast:0.1.3
 ```
+
+This manual run is optional — `superfast-switch use dense` starts the same
+profile as a managed service. On Docker instead of Podman, replace
+`--group-add keep-groups` with `--group-add video --group-add render`;
+`keep-groups` is a Podman keyword that Docker cannot resolve.
 
 ### Or let SUPERFAST fetch the weights for you
 
@@ -445,7 +460,12 @@ set, for the reason above. That request is not a licensing condition.
 
 ---
 
-## What it does
+## What every profile inherits from the engine
+
+All profiles run on the same purpose-built engine layer, so every profile
+gets the properties below. Profiles differ in their checkpoint, not in these
+behaviors — and the numbers and capabilities are re-measured per profile;
+`/health` reports what the running one supports.
 
 **Byte-identical speculative decoding.** Draft-then-verify only commits
 tokens the full model would have produced, so output is bit-for-bit identical
@@ -480,7 +500,9 @@ per request; output is identical, only speed changes.
 Everything is set by environment variable — there is no config file. The
 complete list of levers, with defaults and whether each one can change
 output, is in [`docs/FLAGS.md`](docs/FLAGS.md). These are the ones most
-people touch:
+people touch. The tables below describe the dense profile; every other
+profile image ships its own tuned defaults and reports them through
+`/health`.
 
 | variable | default | what it does |
 |---|---|---|
