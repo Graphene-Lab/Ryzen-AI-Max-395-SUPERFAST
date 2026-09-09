@@ -662,6 +662,55 @@ responsibility.
 
 ---
 
+## How good are the models: benchmarks and community
+
+The machine can run different model families, and choosing well means
+comparing quality, not just speed. The numbers below come from the official
+model cards of the two families this machine targets — the dense Qwen3.8-27B
+and the Gemma-4-26B-A4B MoE (the variant behind the Gemma ROCmFP4 files).
+They are the vendors' own measurements on the instruction-tuned versions.
+
+| benchmark | Qwen3.8-27B (dense) | Gemma-4-26B-A4B (MoE) |
+|---|---|---|
+| LiveCodeBench v6 | **90.3** | 77.1 |
+| GPQA Diamond | **89.2** | 82.3 |
+| Humanity's Last Exam | **30.8** | 8.7 |
+| SWE-bench Pro | **61.7** | not published |
+| Terminal-Bench 2.1 | **73.0** | not published |
+| MMLU Pro | not published | 82.6 |
+| AIME 2026 | not published | 88.3 |
+| active parameters | 27 B (all) | 3.8 B (of 25.2 B) |
+| context | 262,144 tokens | 256,000 tokens |
+| license | Apache-2.0 | Apache-2.0 |
+
+On the shared benchmarks, Qwen3.8-27B leads comfortably on coding and
+reasoning. Gemma-4-26B-A4B is an Apache-2.0 MoE built for speed: it activates
+only a few billion parameters per token, which is why its publishers report
+it running "almost as fast as a 4B model" while carrying far more knowledge.
+It also reads images. These two roles are complementary: Qwen is the
+quality-first brain, Gemma the fast, permissive, multimodal option.
+
+What the community says follows the same pattern. Third-party write-ups and
+developer tests consistently report that Qwen coders win on formal
+benchmarks, but that the gap narrows noticeably in real local usage on
+constrained hardware, and Reddit threads sometimes rank models differently
+from leaderboards — so treat any single leaderboard as orientation, not
+truth. All figures above are vendor-reported, and no benchmark answers the
+question that matters most for your own use: how the model behaves on your
+documents and your language. The "-it" Gemma repository names Italian, but
+neither vendor publishes Italian-specific quality numbers, so that claim
+stays unverified until measured here.
+
+What this means for the machine: the dense and Flash-Next Qwen profiles stay
+the quality-first defaults, running on the purpose-built engine at high
+precision. Gemma-4 is downloaded as a candidate profile for speed and vision,
+but it is not in the switch yet: it needs its own ROCmFPX runtime, and its
+4-bit quality on this exact box must be benchmarked before it can be
+recommended. That measurement will be published here, exactly like the ones
+above.
+
+---
+
 ## Choose a model profile
 
 The machine runs **one model profile at a time**, and every profile serves
