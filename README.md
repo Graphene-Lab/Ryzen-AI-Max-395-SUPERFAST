@@ -756,6 +756,16 @@ refuses to start until its checkpoint has finished downloading. The measured
 numbers behind each profile live in the Performance section and are updated
 as new models are validated on this machine.
 
+**Roadmap: other model families.** A second runtime is planned for the
+machine — llama.cpp with the ROCmFPX fork, which serves GGUF models with
+AMD's FP4 tensor types. One such runtime can host several profiles, because a
+profile is just a weight folder plus a systemd unit. The candidate profiles
+for it are Gemma-4-26B-A4B (weights already downloaded) and
+DeepSeek-V4-Flash, the two most promising recent families for this APU.
+Nothing from this runtime enters the switch before it is measured on this
+exact machine and its numbers are published here; the Qwen profiles remain
+the validated defaults.
+
 ---
 
 ## Make it your personal assistant with AgentBridge
