@@ -49,6 +49,15 @@ container's `/etc/group` and fails with `unable to find group keep-groups`.
 New to SUPERFAST and no Linux machine yet? Do these steps in order. This is
 the path we follow on a Ryzen AI Max+ 395.
 
+**The whole journey, in order** — each step links to its section:
+
+1. Install Fedora Workstation 44 and enable SSH — [step 1](#1-install-fedora-workstation-44-recommended) below.
+2. Connect to the machine over SSH — [step 2](#2-connect-to-the-machine-over-ssh-optional-but-recommended).
+3. Run the setup script, which downloads the model and starts the engine — [step 3](#3-configure-the-machine-for-superfast).
+4. Download the weights and learn the API — [Get the weights](#get-the-weights).
+5. Measure and compare the speed — [Performance](#performance).
+6. Turn the machine into your personal assistant — [AgentBridge](#make-it-your-personal-assistant-with-agentbridge).
+
 ### 1. Install Fedora Workstation 44 (recommended)
 
 This is the distribution we recommend. Why:
@@ -628,6 +637,52 @@ responsibility.
 - **The comparison table is cross-published, not head-to-head.** We have not
   run the other engines ourselves on our box under matched settings. When we
   do, we will publish whatever it says.
+
+---
+
+## Make it your personal assistant with AgentBridge
+
+The machine you built is a fast and private LLM server. The last step turns
+it into a personal assistant you can actually talk to.
+
+**What AgentBridge is, in plain words.** AgentBridge is a program that runs
+your own AI agents on a normal computer. You chat with it in a terminal and
+it can do real work for you: reading and summarizing your documents, drafting
+files, working with spreadsheets, browsing the web, sending email. Everything
+runs on your own hardware and stays private. AgentBridge is self-hosted and
+open source, and it follows a "bring your own model" approach: it uses
+whatever LLM you point it at — and that is exactly what the SUPERFAST server
+on this machine provides.
+
+**Where it runs.** AgentBridge does not have to run on the Fedora machine.
+The Fedora machine is the brain: an OpenAI-compatible API on port 8731.
+Install AgentBridge on your everyday computer (Windows, Linux or macOS), add
+the SUPERFAST server as its model provider, and the assistant works locally
+on your computer while asking the server for intelligence. The API needs no
+key on a private network.
+
+**How to install it.** AgentBridge ships self-contained binaries, so no .NET
+runtime is needed. On Windows, open PowerShell and run:
+
+```powershell
+irm https://graphenelab.it/AgentBridge/install.ps1 | iex
+```
+
+On Linux or macOS:
+
+```bash
+curl -fsSL https://graphenelab.it/AgentBridge/install.sh | bash
+```
+
+Alternatively, download the archive for your operating system from the
+[download page](https://graphenelab.it/AgentBridge/download/). Then start it,
+type `/setup`, open the LLM and Providers tab, add the SUPERFAST server as a
+provider pointing at `http://<your-fedora-host>:8731`, and leave the API key
+empty.
+
+The official repository is [github.com/Graphene-Lab/AgentBridge](https://github.com/Graphene-Lab/AgentBridge/):
+there you will find the releases, the full manual and the tools the agents can
+use.
 
 ---
 
