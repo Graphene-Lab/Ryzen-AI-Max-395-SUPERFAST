@@ -337,6 +337,15 @@ the Gemma row is **without its MTP drafter** (the speculative head): we keep
 it disabled until the draft-context flag is resolved in the runtime, and the
 few percent it adds are not included above.
 
+Memory-region note (measured): where the weights live is the one placement
+lever that matters — the dense profile is ~12% faster when its weights sit in
+the GPU carve instead of the shared pool, because decode is DRAM-bandwidth
+bound and the APU has a single LPDDR5X bus (no closer cache or HBM tier to
+move to). Inside a region, micro-levers change nothing: on Gemma-4 ROCmFP4,
+`llama-bench` reports pp512 ~1480 t/s and tg128 **60.6 t/s** (matching the
+publisher's own ceiling) with default settings, and thread counts or batch
+sizes move those numbers by less than 1%.
+
 We validated three well-known tuning levers against the dense baseline and
 then rolled them back, because none produced a real change:
 
