@@ -671,6 +671,16 @@ behind the endpoint is the only thing that changes. Stopping one profile
 releases its memory before the next one loads, so dense 27B, the Flash-Next
 MoE and any future profile do not compete for resources.
 
+The setup script ([`deploy/setup-fedora.sh`](deploy/setup-fedora.sh), phases
+8-9) installs everything: the dense profile unit, the Flash-Next profile
+unit and the switch itself into `~/.local/bin/superfast-switch`. If you only
+want the switch on an already-configured machine:
+
+```bash
+cp tools/superfast-switch.sh ~/.local/bin/superfast-switch
+chmod +x ~/.local/bin/superfast-switch
+```
+
 Use the switch tool on the machine:
 
 ```bash

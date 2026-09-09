@@ -15,13 +15,15 @@ set -euo pipefail
 
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export XDG_RUNTIME_DIR
-HEALTH="http://127.0.0.1:8731/health"
-FLASH_CKPT="$HOME/superfast-flash/qwen38-flash-next-w4b.hgn"
-FLASH_MARKER="$HOME/superfast-flash/.download-complete"
+PORT="${SUPERFAST_PORT:-8731}"
+HEALTH="http://127.0.0.1:${PORT}/health"
+FLASH_DIR="${SUPERFAST_FLASH_DIR:-$HOME/superfast-flash}"
+FLASH_CKPT="$FLASH_DIR/qwen38-flash-next-w4b.hgn"
+FLASH_MARKER="$FLASH_DIR/.download-complete"
 
 declare -A UNIT=(
-    [dense]="superfast.service"
-    [flash]="superfast-flash.service"
+    [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
+    [flash]="${SUPERFAST_FLASH_UNIT:-superfast-flash.service}"
 )
 declare -A LABEL=(
     [dense]="Qwen3.8-27B dense (halogen)"
@@ -56,7 +58,7 @@ cmd_use() {
     local p="$1"
     [ -n "${UNIT[$p]:-}" ] || { echo "unknown profile '$p' (use: dense|flash)" >&2; exit 2; }
     if [ "$p" = "flash" ] && { [ ! -f "$FLASH_CKPT" ] || [ ! -f "$FLASH_MARKER" ]; }; then
-        echo "flash profile: weights not complete yet (~/superfast-flash). Aborting." >&2
+        echo "flash profile: weights not complete yet ($FLASH_DIR). Aborting." >&2
         exit 3
     fi
     for q in dense flash; do
