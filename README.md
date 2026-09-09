@@ -1,5 +1,7 @@
 # SUPERFAST
 
+![SUPERFAST logo — a speedometer](assets/superfast.gif)
+
 **Turn an AMD Ryzen AI Max into a fast, high-quality and private LLM
 machine.**
 
