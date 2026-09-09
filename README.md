@@ -640,6 +640,32 @@ responsibility.
 
 ---
 
+## Choose a model profile
+
+The machine runs **one model profile at a time**, and every profile serves
+the same OpenAI-compatible endpoint on port 8731. Clients — scripts, apps,
+AgentBridge — never change their configuration when you switch: the model
+behind the endpoint is the only thing that changes. Stopping one profile
+releases its memory before the next one loads, so dense 27B, the Flash-Next
+MoE and any future profile do not compete for resources.
+
+Use the switch tool on the machine:
+
+```bash
+superfast-switch status          # what is running now
+superfast-switch use dense       # Qwen3.8-27B (halogen engine)
+superfast-switch use flash       # Qwen3.8-Flash-Next MoE (needs its weights)
+superfast-switch stop            # stop everything
+```
+
+The tool stops the current profile, starts the requested one and waits until
+`/health` answers, so after `use` the endpoint is ready. The `flash` profile
+refuses to start until its checkpoint has finished downloading. The measured
+numbers behind each profile live in the Performance section and are updated
+as new models are validated on this machine.
+
+---
+
 ## Make it your personal assistant with AgentBridge
 
 The machine you built is a fast and private LLM server. The last step turns
