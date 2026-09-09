@@ -324,7 +324,7 @@ low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 | profile | runtime | prose | code | context probe (~2.2K) |
 |---|---|---|---|---|
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
-| Gemma-4-26B-A4B it, Q4_0 ROCmFP4 (no MTP) | llama-rocmfpx | **52.2 t/s** | **53.7 t/s** | ~1527 t/s |
+| Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Qwen3.8-Flash-Next MoE w4b | halogen-flash | *weights loading, numbers land here* | | |
 | DeepSeek-V4-Flash ROCmFPX | llama-rocmfpx | *weights loading, numbers land here* | | |
 
@@ -344,7 +344,21 @@ bound and the APU has a single LPDDR5X bus (no closer cache or HBM tier to
 move to). Inside a region, micro-levers change nothing: on Gemma-4 ROCmFP4,
 `llama-bench` reports pp512 ~1480 t/s and tg128 **60.6 t/s** (matching the
 publisher's own ceiling) with default settings, and thread counts or batch
-sizes move those numbers by less than 1%.
+sizes move those numbers by less than 1%. n-gram self-speculation changes
+nothing either (measured: prose 51.5 vs 52.2 without it).
+
+Measured characteristics so far (dense vs Gemma). Both profiles answer the
+same probes correctly when given budget — logic riddle, arithmetic and code
+bug-finding all came back right. They differ in *how*: the dense Qwen
+profile answers briefly and directly (a few reasoning tokens), while
+Gemma-4 reasons extensively before answering and needs a generous
+`max_tokens` — with a 192-token budget its answers come back empty (all
+budget spent thinking), which is why the Gemma row above is measured on a
+512-token budget and includes its reasoning. Cutting Gemma's thinking short
+hurts accuracy, not just style: with thinking effectively disabled it
+answered the arithmetic probe wrong (65 instead of 67). The practical rule
+for clients: dense Qwen suits tight budgets and quick turns; Gemma-4 needs
+room to think but stays correct, and its raw decode is far faster.
 
 We validated three well-known tuning levers against the dense baseline and
 then rolled them back, because none produced a real change:
