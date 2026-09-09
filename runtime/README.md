@@ -21,7 +21,7 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
 
 ```bash
 cd runtime
-podman build -t llama-rocmfpx:rocm10 .
+podman build -t llama-rocmfpx:7.2.4 .
 ```
 
 The build takes a while (it downloads the ROCm dev toolchain and compiles

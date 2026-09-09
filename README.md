@@ -316,43 +316,48 @@ so it can honestly quote one number. SUPERFAST cannot.
 
 ### Performance tuning on Fedora 44 — what we tested
 
-End-to-end numbers on the reference host (Fedora Workstation 44, engine
-served by `superfast.service`, measured with
-[`tools/quick-bench.py`](tools/quick-bench.py): greedy, `reasoning_effort:
-low`, `max_tokens: 192`, 3 reps, stable within ±0.1%):
+Measured profiles on the reference host (2026-09-10, Fedora 44, same
+memory layout for every row — BIOS UMA 1 GB, unified pool;
+[`tools/quick-bench.py`](tools/quick-bench.py), greedy, `reasoning_effort:
+low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 
-| test | result |
-|---|---|
-| prose | **23.9 t/s** |
-| code | **29.5 t/s** |
-| context probe (~2.2K prompt) | ~585 t/s end-to-end (prefill-dominated) |
+| profile | runtime | prose | code | context probe (~2.2K) |
+|---|---|---|---|---|
+| Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
+| Gemma-4-26B-A4B it, Q4_0 ROCmFP4 (no MTP) | llama-rocmfpx | **52.2 t/s** | **53.7 t/s** | ~1527 t/s |
+| Qwen3.8-Flash-Next MoE w4b | halogen-flash | *weights loading, numbers land here* | | |
+| DeepSeek-V4-Flash ROCmFPX | llama-rocmfpx | *weights loading, numbers land here* | | |
 
-We validated three well-known tuning levers against that baseline and then
-rolled them back, because none produced a real change:
+Two notes on the dense row. Its numbers were **23.9/29.5 t/s under the old
+BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (needed for the big MoE
+checkpoints, and matching AMD's large-model guidance) costs the dense profile
+about 12%, because its weights now live in the shared system pool. Every A/B
+on this machine is measured at the same memory layout for that reason. And
+the Gemma row is **without its MTP drafter** (the speculative head): we keep
+it disabled until the draft-context flag is resolved in the runtime, and the
+few percent it adds are not included above.
+
+We validated three well-known tuning levers against the dense baseline and
+then rolled them back, because none produced a real change:
 
 | setting tried | effect | outcome |
 |---|---|---|
-| `tuned-adm profile accelerator-performance` (CPU performance governor + EPP) | prose 23.90, code 29.47 | **no change** — reverted to `balanced` |
+| `tuned-adm profile accelerator-performance` (CPU performance governor + EPP) | prose 23.90, code 29.47 (old layout) | **no change** — reverted to `balanced` |
 | GPU performance level `high` (force max clocks) | prose 23.90, code 29.49 | **no change** — reverted to `auto` |
 | `transparent_hugepage=always` | prose 23.89, code 29.49 | **no change** — reverted to `madvise` |
 
 Why nothing moves: batch-1 decode runs at the memory-bandwidth wall
 (249 GB/s against a ~240 GB/s ceiling), and these levers change clocks or
-page granularity, not bandwidth. Prefill was unchanged as well.
-
-AMD guidance agrees with the hardware as shipped: AMD's own hands-on LLM
-guide for this APU uses a **64 GB GPU-accessible allocation on a 128 GB
-machine** — exactly the BIOS configuration this host already has. (AMD's
-ROCm *system optimization* doc suggests a small VRAM reservation with a large
-TTM/GTT limit for other workflows; switching to it would need a BIOS+reboot
-change and we found no workload-based reason to try it here.) Overclocking
+page granularity, not bandwidth. Prefill was unchanged as well. Overclocking
 advice from specialists (`ppfeaturemask`/`pp_od_clk_voltage`, or UXTU on
 Windows) targets clock-limited paths — it does not apply to a
 bandwidth-bound decode workload and would require a kernel parameter +
 reboot.
 
 **Conclusion:** the stock Fedora 44 configuration already performs at the
-practical ceiling for this engine. Re-measure any time with:
+practical ceiling for this machine; measured gains come from choosing the
+right profile (MoE/FP4 for speed, dense for precision), not from tuning
+knobs. Re-measure any profile any time with:
 
 ```bash
 python3 tools/quick-bench.py --api http://<host>:8731
