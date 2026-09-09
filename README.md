@@ -804,6 +804,19 @@ use.
 
 ---
 
+## Why this matters
+
+A few years ago, this level of quality required a paid API and sent your
+questions to someone else's datacenter. A model that rivals paid frontier
+services while running entirely on a machine you own changes the economics:
+no subscription, no usage caps, and nothing leaves your home. That is the
+deeper point of this project — models this good are what make independence
+possible. It is also why this space moves so quickly: every user who stops
+renting intelligence and runs it locally is a cost that the giant datacenter
+build-outs find harder and harder to justify.
+
+---
+
 ## License
 
 Free for any use, including commercial. Unmodified redistribution permitted.
