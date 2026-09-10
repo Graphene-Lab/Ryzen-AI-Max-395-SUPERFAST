@@ -4,9 +4,10 @@
 # running the SUPERFAST engine container.
 #
 # STATUS (2026-09-10):
-#   Phases 1-10 VALIDATED on the reference host (phase 10 added 2026-09-10:
-#   control panel + API-key gateway). Every command below was run and verified
-#   there; see docs/fedora-44-setup.md for the log.
+#   Phases 1-10 VALIDATED on the reference host. Every command below was run
+#   and verified there; see docs/fedora-44-setup.md for the log. Phase 9
+#   installs one unit and one downloader per requested profile, so a single
+#   run can prepare the machine for all four models plus the orchestrator.
 #
 # Run as the admin user (sudo is used internally where needed):
 #   bash deploy/setup-fedora.sh
@@ -15,7 +16,17 @@
 #   SUPERFAST_IMAGE   image to run (default: the published halogen tag).
 #                     A `superfast` tag does not exist yet; when it is
 #                     published it will be the same content.
-#   MODELS_DIR        where the checkpoint lives (default: ~/superfast-models)
+#   MODELS_DIR        where the dense checkpoint lives (default: ~/superfast-models)
+#   PROFILES          which profiles to prepare, space separated. Default
+#                     "dense". Also accepted: flash, gemma, deepseek, small
+#                     (the small orchestrator). Example:
+#                       PROFILES="dense flash gemma deepseek small" bash deploy/setup-fedora.sh
+#                     Weights for the extra profiles are fetched by a systemd
+#                     unit per profile, so this script returns without waiting
+#                     for tens of gigabytes to arrive.
+#   ONLY              run only these phases (suffixes of the phase function
+#                     names, space separated), e.g. ONLY="profiles" to install
+#                     the profile units and downloaders again.
 #   SKIP_UPDATE=1     skip `dnf upgrade`
 #   SMOKE=1           also run the small container device test
 #
@@ -33,17 +44,88 @@
 set -euo pipefail
 
 IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
+RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
+FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.2}"
 REBOOT_NEEDED=0
+PROFILES="${PROFILES:-dense}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
-CKPT="$MODELS_DIR/qwen3.8-27b-p1w4d-d2.hgn"
-PART="$CKPT.part"
-DONE_MARKER="$MODELS_DIR/.download-complete"
-URL="${CHECKPOINT_URL:-https://huggingface.co/peonist-ai/halogen-qwen3.8-27b/resolve/main/qwen3.8-27b-p1w4d-d2.hgn}"
-DEFAULT_EXPECTED_SIZE=35865565184
+MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"
+MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
+MODELS_DIR_DEEPSEEK="${MODELS_DIR_DEEPSEEK:-$HOME/deepseek-models}"
+MODELS_DIR_SMALL="${MODELS_DIR_SMALL:-$HOME/small-models}"
 
 TARGET_USER="${SUDO_USER:-$USER}"
+UID_NUM="$(id -u)"
 
 log() { echo "[$(date '+%F %T')] $*"; }
+
+# Is a word in a space-separated list?
+is_in() { # "list" word
+    case " $1 " in *" $2 "*) return 0 ;; esac
+    return 1
+}
+
+# Is a profile in the PROFILES list?
+in_profiles() {
+    is_in "$PROFILES" "$1"
+}
+
+# Weights directory of a profile.
+profile_dir() {
+    case "$1" in
+        dense)    echo "$MODELS_DIR" ;;
+        flash)    echo "$MODELS_DIR_FLASH" ;;
+        gemma)    echo "$MODELS_DIR_GEMMA" ;;
+        deepseek) echo "$MODELS_DIR_DEEPSEEK" ;;
+        small)    echo "$MODELS_DIR_SMALL" ;;
+    esac
+}
+
+# Unit name of a profile (the orchestrator is named after its role).
+unit_for() {
+    case "$1" in
+        flash) echo "superfast-flash" ;;
+        small) echo "orchestrator" ;;
+        *)     echo "$1" ;;
+    esac
+}
+
+# Have this profile's weights already been downloaded (and verified)?
+weights_complete() {
+    [ -f "$(profile_dir "$1")/.download-complete" ]
+}
+
+# Copy a template from deploy/profiles/, filling in the placeholders. The
+# profile directories are substituted too, so MODELS_DIR_* overrides reach the
+# installed units.
+install_template() { # src dst
+    sed -e "s#__HOME__#$HOME#g" \
+        -e "s#__XDG__#/run/user/$UID_NUM#g" \
+        -e "s#__DENSE_DIR__#$MODELS_DIR#g" \
+        -e "s#__FLASH_DIR__#$MODELS_DIR_FLASH#g" \
+        -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
+        -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
+        -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" "$1" > "$2"
+}
+
+# Install the shared weights downloader (one script, one unit template).
+install_downloader() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ ! -f "$script_dir/profiles/download-weights.sh" ]; then
+        log "deploy/profiles/download-weights.sh not found; cannot install the downloader"
+        return 1
+    fi
+    mkdir -p "$HOME/.local/bin/superfast-downloads" "$HOME/.config/systemd/user"
+    # install_template, not cp: the script carries the same __*_DIR__
+    # placeholders as the units, so MODELS_DIR_* overrides reach it too.
+    install_template "$script_dir/profiles/download-weights.sh" \
+        "$HOME/.local/bin/superfast-downloads/download-weights.sh"
+    chmod 755 "$HOME/.local/bin/superfast-downloads/download-weights.sh"
+    install_template "$script_dir/profiles/superfast-download@.service" \
+        "$HOME/.config/systemd/user/superfast-download@.service"
+    return 0
+}
 
 phase_os_check() {
     log "== phase 1/10: OS check =="
@@ -56,7 +138,24 @@ phase_os_check() {
         echo "Fedora >= 44 required (found $VERSION_ID) for gfx1151 support"; exit 1
     fi
     if [ "$(id -u)" -eq 0 ]; then
-        echo "Run as the admin user, not root (rootless podman is used later)."; exit 1
+        echo "Refusing to run as root: rootless podman and the user units are the point."; exit 1
+    fi
+    # Tools the script needs beyond a base install. curl and flock do the
+    # downloads, grubby edits the kernel command line, podman runs the
+    # profiles. Missing ones are installed here, and a failure is not fatal:
+    # the phase that needs the tool reports the error.
+    for t in curl flock sha256sum grubby podman; do
+        if ! command -v "$t" >/dev/null 2>&1; then
+            log "installing missing tool: $t"
+            sudo dnf install -y "$t" || log "could not install $t; a later phase may fail"
+        fi
+    done
+    # Several phases use sudo, so this needs either a terminal to type the
+    # password or a NOPASSWD rule. Say so now instead of failing in phase 5.
+    if sudo -n true 2>/dev/null; then
+        log "sudo: ready without a password"
+    else
+        log "sudo: will ask for your password during this run (or configure NOPASSWD for $TARGET_USER)"
     fi
 }
 
@@ -112,44 +211,27 @@ phase_suspend_mask() {
 }
 
 phase_weights() {
-    log "== phase 6/10: checkpoint download (curl -C -, exact-offset resume) =="
-    mkdir -p "$MODELS_DIR"
-
-    # Expected size from the server; fall back to the validated value.
-    EXPECTED=$(curl -sIL --max-time 60 "$URL" \
-        | awk 'tolower($1)=="content-length:"{v=$2} END{gsub("\r","",v); print v}')
-    if [ -z "$EXPECTED" ] || [ "$EXPECTED" -lt 35000000000 ] 2>/dev/null; then
-        EXPECTED=$DEFAULT_EXPECTED_SIZE
+    log "== phase 6/10: dense checkpoint download (resumable, sha256-verified) =="
+    if ! in_profiles dense; then
+        log "dense is not in PROFILES ($PROFILES); skipping its checkpoint"
+        return 0
     fi
-    log "expected checkpoint size: $EXPECTED"
-
-    if [ -f "$CKPT" ] && [ "$(stat -c %s "$CKPT")" -ge "$EXPECTED" ]; then
-        log "checkpoint already complete"
-        touch "$DONE_MARKER"
-        return
-    fi
-
-    # NOTE: do NOT switch this to `hf download` for the big file. Xet stalls
-    # on constrained links and hf's resume silently breaks (HF rotates etags
-    # between runs, each restart starts a new .incomplete). curl -C - resumes
-    # at the exact byte offset and loses nothing. See docs/fedora-44-setup.md.
-    while true; do
-        sz=$(stat -c %s "$PART" 2>/dev/null || echo 0)
-        timeout 300 curl -sL -C - --max-time 290 -o "$PART" "$URL" || true
-        sz2=$(stat -c %s "$PART" 2>/dev/null || echo 0)
-        log "curl attempt: size=$sz2 delta=$((sz2 - sz))"
-        if [ "$sz2" -ge "$EXPECTED" ]; then
-            mv -f "$PART" "$CKPT"
-            touch "$DONE_MARKER"
-            log "checkpoint complete: $(stat -c %s "$CKPT") bytes"
-            return
-        fi
-        sleep 20
-    done
+    install_downloader || return 0
+    # Run in the foreground: the unit installed later in this script expects
+    # the checkpoint to be there. The downloader resumes at the exact byte
+    # offset if it is interrupted, keeps one writer per file, and checks the
+    # SHA-256 published by Hugging Face before the final rename.
+    log "dense: downloading into $MODELS_DIR (log: $MODELS_DIR/.download.log)"
+    bash "$HOME/.local/bin/superfast-downloads/download-weights.sh" dense
+    log "dense: checkpoint ready"
 }
 
 phase_image() {
     log "== phase 7/10: engine image =="
+    if ! in_profiles dense; then
+        log "dense is not in PROFILES ($PROFILES); skipping the engine image"
+        return 0
+    fi
     if podman image exists "$IMAGE"; then
         log "image already present: $IMAGE"
     else
@@ -169,6 +251,10 @@ phase_smoke() {
 
 phase_engine() {
     log "== phase 8/10: engine service (systemd user unit) =="
+    if ! in_profiles dense; then
+        log "dense is not in PROFILES ($PROFILES); skipping its unit"
+        return 0
+    fi
     # OpenAI-compatible API port, reachable from the LAN. The engine's token
     # protocol stays unpublished inside the container.
     sudo firewall-cmd --add-port=8731/tcp --permanent
@@ -178,6 +264,13 @@ phase_engine() {
     # regenerated by `daemon-reload` on the reference host, while a classic
     # unit works everywhere. Linger must be on for the unit to start at boot:
     sudo loginctl enable-linger "$TARGET_USER"
+
+    # Only one profile can own port 8731. Stop the others first, exactly like
+    # the switch does, so that re-running this script on a machine that is
+    # already serving does not fail to bind the port.
+    for q in superfast-flash gemma deepseek; do
+        XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user stop "$q.service" 2>/dev/null || true
+    done
 
     UID_NUM="$(id -u)"
     mkdir -p "$HOME/.config/systemd/user"
@@ -197,7 +290,11 @@ ExecStart=/usr/bin/podman run --name superfast --rm -p 8731:8731 \\
   -v $MODELS_DIR:/models:ro \\
   -v $MODELS_DIR/tokenizer:/tokenizer:ro \\
   $IMAGE
-ExecStop=/usr/bin/podman stop -t 20 superfast
+ExecStop=/usr/bin/podman stop -t 30 superfast
+# podman run in the foreground exits 143 (SIGTERM) or 137 (SIGKILL) when the
+# container is stopped. Without this line a profile switch leaves the unit in
+# the "failed" state, which `superfast-switch status` then reports.
+SuccessExitStatus=137 143
 Restart=on-failure
 RestartSec=10
 
@@ -209,7 +306,8 @@ EOF
     XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable --now superfast.service
     log "superfast.service enabled; waiting for /health on :8731"
     for i in $(seq 1 40); do
-        if curl -s -o /dev/null --max-time 5 http://127.0.0.1:8731/health; then
+        # Require 200: the port can be open while the engine is still loading.
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8731/health)" = "200" ]; then
             log "engine healthy after ~$((i * 10))s"
             return 0
         fi
@@ -219,14 +317,22 @@ EOF
     return 1
 }
 
-phase_flash_profile() {
-    log "== phase 9/10: Flash-Next profile (optional) + model switch =="
-    # Install the model switch CLI from this repo, so `superfast-switch` is
-    # available even when the repo clone is not on PATH.
+phase_profiles() {
+    log "== phase 9/10: model switch, profile units, weights (PROFILES=$PROFILES) =="
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROF_DIR="$SCRIPT_DIR/profiles"
+    if [ ! -d "$PROF_DIR" ]; then
+        log "$PROF_DIR not found (the repository must sit next to this script); skipping the profile units"
+        return 0
+    fi
+    XDG_RUNTIME_DIR="/run/user/$UID_NUM"
+    export XDG_RUNTIME_DIR
+    mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
+
+    # 1. The model switch itself, so `superfast-switch` is on PATH even when
+    # the repository is not.
     SWITCH_SRC="$SCRIPT_DIR/../tools/superfast-switch.sh"
     if [ -f "$SWITCH_SRC" ]; then
-        mkdir -p "$HOME/.local/bin"
         cp "$SWITCH_SRC" "$HOME/.local/bin/superfast-switch"
         chmod +x "$HOME/.local/bin/superfast-switch"
         log "installed superfast-switch to ~/.local/bin"
@@ -234,38 +340,60 @@ phase_flash_profile() {
         log "tools/superfast-switch.sh not found next to the script; skipping"
     fi
 
-    # The Flash-Next MoE profile. The unit is created but stays disabled: the
-    # switch starts it once the checkpoint is present (see superfast-switch).
-    MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"
-    FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.2}"
-    UID_NUM="$(id -u)"
-    mkdir -p "$HOME/.config/systemd/user"
-    cat > "$HOME/.config/systemd/user/superfast-flash.service" <<EOF
-[Unit]
-Description=SUPERFAST flash engine (Qwen3.8-Flash-Next MoE, Strix Halo)
-After=network-online.target
-Wants=network-online.target
+    # 2. The GGUF runtime, needed by gemma, deepseek and the orchestrator.
+    # It is not published on GHCR yet, so build it from runtime/ (that takes a
+    # while and needs about 10 GB of disk).
+    if in_profiles gemma || in_profiles deepseek || in_profiles small; then
+        if podman image exists "$RUNTIME_IMAGE"; then
+            log "GGUF runtime already present: $RUNTIME_IMAGE"
+        else
+            log "building $RUNTIME_IMAGE from runtime/ -- this takes a while"
+            if (cd "$SCRIPT_DIR/../runtime" && podman build -t "$RUNTIME_IMAGE" .); then
+                log "runtime built: $RUNTIME_IMAGE"
+            else
+                log "runtime build FAILED: gemma/deepseek/orchestrator cannot start until it succeeds"
+            fi
+        fi
+    fi
 
-[Service]
-Type=simple
-Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
-ExecStartPre=-/usr/bin/podman rm -f superfast-flash
-ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 8731:8731 \\
-  --device /dev/kfd --device /dev/dri --group-add keep-groups \\
-  --security-opt seccomp=unconfined --ipc=host \\
-  -v $MODELS_DIR_FLASH:/models:ro \\
-  -v $MODELS_DIR_FLASH/tokenizer:/tokenizer:ro \\
-  $FLASH_IMAGE
-ExecStop=/usr/bin/podman stop -t 30 superfast-flash
-Restart=on-failure
-RestartSec=15
+    # 3. One downloader script (all profiles) and one downloader unit template.
+    install_downloader || true
 
-[Install]
-WantedBy=default.target
-EOF
+    # 4. Per profile: install the unit, and start the download only if the
+    # weights are still missing. The download runs as its own service, so this
+    # script returns instead of waiting for tens of gigabytes.
+    local requested="$PROFILES"
+    case " $requested " in *" small "*) ;; *)
+        # Keep the orchestrator available when its weights are already there.
+        [ -f "$MODELS_DIR_SMALL/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ] && requested="$requested small"
+    ;; esac
 
-    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user daemon-reload
-    log "superfast-flash.service ready (disabled until 'superfast-switch use flash')"
+    for p in flash gemma deepseek small; do
+        case " $requested " in *" $p "*) ;; *) continue ;; esac
+        u="$(unit_for "$p")"
+        if [ -f "$PROF_DIR/$u.service" ]; then
+            install_template "$PROF_DIR/$u.service" "$HOME/.config/systemd/user/$u.service"
+            if [ "$p" = "small" ]; then
+                log "$u.service installed (stopped; toggle with 'superfast-switch orchestrator on')"
+            else
+                log "$u.service installed (disabled until 'superfast-switch use $p')"
+            fi
+        else
+            log "$PROF_DIR/$u.service missing; skipping the $p unit"
+        fi
+        if weights_complete "$p"; then
+            log "$p: weights already complete"
+        else
+            log "$p: weights missing; starting superfast-download@$p.service (keeps running after this script)"
+            systemctl --user enable --now "superfast-download@$p.service" \
+                || log "$p: could not start the downloader now; start it later with: systemctl --user start superfast-download@$p.service"
+        fi
+    done
+
+    systemctl --user daemon-reload
+    log "profiles prepared: $requested"
+    log "switch between them with: superfast-switch use dense|flash|gemma|deepseek"
+    log "the small router runs beside the active profile: superfast-switch orchestrator on|off"
 }
 
 phase_ui_auth() {
@@ -281,41 +409,31 @@ phase_ui_auth() {
 # GATEWAY_PORT=8741
 EOF
     fi
-    for f in superfast-tui.sh superfast-gateway.py; do
-        if [ -f "$SCRIPT_DIR/../tools/$f" ]; then
-            cp "$SCRIPT_DIR/../tools/$f" "$HOME/.local/bin/"
-            chmod +x "$HOME/.local/bin/$f"
+    # Console tools, installed with the names the documentation uses:
+    # `superfast-tui` (not superfast-tui.sh) and `superfast-gateway.py`, which
+    # is the name the gateway unit above refers to.
+    install_tool() { # src name
+        if [ -f "$SCRIPT_DIR/../tools/$1" ]; then
+            cp "$SCRIPT_DIR/../tools/$1" "$HOME/.local/bin/$2"
+            chmod +x "$HOME/.local/bin/$2"
+            log "installed ~/.local/bin/$2"
+        else
+            log "tools/$1 not found; skipping ~/.local/bin/$2"
         fi
-    done
+    }
+    install_tool superfast-tui.sh superfast-tui
+    install_tool superfast-gateway.py superfast-gateway.py
+    # Remove the older name, in case this machine was set up before.
+    rm -f "$HOME/.local/bin/superfast-tui.sh"
 
-    # Orchestrator unit, only if its small model is already present.
-    if [ -f "$HOME/small-models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ]; then
-        cat > "$HOME/.config/systemd/user/orchestrator.service" <<EOF
-[Unit]
-Description=LFM2.5-1.2B orchestrator (small fast router, port 8732)
-After=network-online.target
-
-[Service]
-Type=simple
-Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
-ExecStartPre=-/usr/bin/podman rm -f orchestrator
-ExecStart=/usr/bin/podman run --name orchestrator --rm -p 8732:8731 \\
-  --device /dev/kfd --device /dev/dri --group-add keep-groups \\
-  --security-opt seccomp=unconfined --ipc=host \\
-  -v $HOME/small-models:/models:ro \\
-  llama-rocmfpx:7.2.4 \\
-  -m /models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf \\
-  --host 0.0.0.0 --port 8731 -c 8192 --alias lfm25-1.2b
-ExecStop=/usr/bin/podman stop -t 20 orchestrator
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=default.target
-EOF
-        log "orchestrator.service created (stopped; toggle with superfast-switch orchestrator on)"
-    else
-        log "orchestrator model not present in ~/small-models; skipping its unit"
+    # The orchestrator unit is installed by phase 9 (deploy/profiles), so there
+    # is only one copy of it. Install it here too if the small model is present
+    # and phase 9 was skipped.
+    if [ -f "$HOME/small-models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ] \
+       && [ ! -f "$HOME/.config/systemd/user/orchestrator.service" ]; then
+        install_template "$SCRIPT_DIR/profiles/orchestrator.service" \
+            "$HOME/.config/systemd/user/orchestrator.service"
+        log "orchestrator.service installed (stopped; toggle with superfast-switch orchestrator on)"
     fi
 
     # API-key gateway in front of the main endpoint (needs a key file).
@@ -343,34 +461,54 @@ EOF
         log "gateway installed but disabled: create a key with 'superfast-tui api-key set' first"
     fi
 
-    # GNOME Shell extension (control panel), if a GNOME session is present.
-    if command -v gnome-extensions >/dev/null 2>&1; then
+    # GNOME Shell extension (control panel), if a GNOME session is present and
+    # the extension is part of this checkout.
+    if command -v gnome-extensions >/dev/null 2>&1 \
+       && [ -d "$SCRIPT_DIR/../gnome-shell-extension" ]; then
         EXT_DIR="$HOME/.local/share/gnome-shell/extensions/superfast@graphene-lab"
         mkdir -p "$EXT_DIR"
         cp -r "$SCRIPT_DIR/../gnome-shell-extension/." "$EXT_DIR/"
         log "GNOME extension installed; run: gnome-extensions enable superfast@graphene-lab (then log out/in once)"
     else
-        log "gnome-extensions not found; skipping the desktop control panel"
+        log "gnome-extensions or gnome-shell-extension/ not found; skipping the desktop control panel"
     fi
 
     XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user daemon-reload
     log "console tools: superfast-tui (menu), superfast-switch (CLI)"
 }
 
+# Run one phase, unless ONLY names a different set of phases.
+run_phase() {
+    local name="$1"
+    if [ -n "${ONLY:-}" ] && ! is_in "$ONLY" "$name"; then
+        log "-- phase $name: skipped (ONLY=$ONLY)"
+        return 0
+    fi
+    "phase_$name"
+}
+
 main() {
-    phase_os_check
-    phase_update
-    phase_sshd
-    phase_groups
-    phase_suspend_mask
-    phase_weights
-    phase_image
+    # Refuse to run as root here, not only in phase 1: with ONLY=... a user can
+    # select phases, and running them as root uses root's podman storage and
+    # root's systemd (no user bus), which is not what this script configures.
+    if [ "$(id -u)" -eq 0 ]; then
+        echo "Run as the admin user, not root (rootless podman is used)." >&2
+        exit 1
+    fi
+    run_phase os_check
+    run_phase update
+    run_phase sshd
+    run_phase groups
+    run_phase suspend_mask
+    run_phase weights
+    run_phase image
     [ "${SMOKE:-0}" = "1" ] && phase_smoke
-    phase_engine
-    phase_flash_profile
-    phase_ui_auth
-    log "setup complete — dense profile serving on http://<host>:8731"
-    log "control: superfast-tui (terminal) or the GNOME extension; switch with superfast-switch"
+    run_phase engine
+    run_phase profiles
+    run_phase ui_auth
+    log "setup complete — profiles prepared: $PROFILES"
+    log "start one with: superfast-switch use dense|flash|gemma|deepseek"
+    log "control: superfast-tui (terminal) or the GNOME extension"
     if [ "$REBOOT_NEEDED" = "1" ]; then
         log "REBOOT REQUIRED: the shared-memory kernel parameters take effect only after a reboot."
         log "After rebooting, the large profiles (flash, deepseek) can load; check with:"

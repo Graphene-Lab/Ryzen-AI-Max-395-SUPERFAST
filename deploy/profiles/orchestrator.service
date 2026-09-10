@@ -1,0 +1,25 @@
+[Unit]
+Description=SUPERFAST orchestrator (LFM2.5 small router, port 8732)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=__XDG__
+ExecStartPre=-/usr/bin/podman rm -f orchestrator
+ExecStart=/usr/bin/podman run --name orchestrator --rm -p 8732:8731 \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __SMALL_DIR__:/models:ro \
+  llama-rocmfpx:7.2.4 \
+  -m /models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf \
+  --host 0.0.0.0 --port 8731 -c 8192 --alias lfm25-1.2b
+ExecStop=/usr/bin/podman stop -t 20 orchestrator
+# podman run exits 143/137 when the container is stopped: accept those, so
+# turning the orchestrator off does not leave its unit failed.
+SuccessExitStatus=137 143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

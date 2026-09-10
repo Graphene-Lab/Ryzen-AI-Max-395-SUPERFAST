@@ -34,7 +34,11 @@ show_status() {
     else
         echo "api key: not set (use: superfast-tui api-key set)"
     fi
-    echo "thinking default: $(grep -E '^THINKING_EFFORT=' "$CONF" | cut -d= -f2 | head -n1 || echo '(unset)')"
+    # grep exits 1 when the setting is absent, so guard the pipeline; the
+    # value may carry a trailing comment, which is stripped here.
+    local effort
+    effort="$(grep -E '^THINKING_EFFORT=' "$CONF" | cut -d= -f2 | sed 's/#.*//' | tr -d '[:space:]' | head -n1 || true)"
+    echo "thinking default: ${effort:-(unset: low is what we recommend for chat)}"
 }
 
 api_key() {
@@ -44,7 +48,10 @@ api_key() {
         set)
             local k="${2:-}"
             if [ -z "$k" ]; then
-                k="$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)"
+                # 48 random bytes, base64, then keep the alphanumeric part: a
+                # longer source avoids the short key that `tr -d '/+='` alone
+                # could leave behind.
+                k="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
                 echo "generated a new key"
             fi
             printf '%s' "$k" > "$KEY_FILE"; chmod 600 "$KEY_FILE"

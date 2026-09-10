@@ -75,6 +75,18 @@ unit_active() {
     [ "$(unit_state "$1")" = "active" ]
 }
 
+# The DeepSeek profile needs both shared-memory kernel parameters. Without
+# them llama.cpp cannot allocate the model and stops with "cudaMalloc failed:
+# out of memory" (see the README). The marker file is an escape hatch for a
+# machine where those limits are raised some other way.
+deepseek_memory_ok() {
+    if grep -q 'amdgpu.gttsize=' /proc/cmdline 2>/dev/null \
+       && grep -q 'ttm.pages_limit=' /proc/cmdline 2>/dev/null; then
+        return 0
+    fi
+    [ -f "$DEEPSEEK_DIR/.deepseek-enabled" ]
+}
+
 weights_ready() {
     case "$1" in
         dense) return 0 ;;
@@ -84,8 +96,7 @@ weights_ready() {
         gemma)
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
         deepseek)
-            [ -f "$DEEPSEEK_DIR/.download-complete" ] \
-                && [ -f "$DEEPSEEK_DIR/.deepseek-enabled" ] ;;
+            [ -f "$DEEPSEEK_DIR/.download-complete" ] && deepseek_memory_ok ;;
     esac
 }
 
@@ -107,7 +118,11 @@ cmd_status() {
 }
 
 orch_ready() {
-    [ -f "$ORCH_DIR/.download-complete" ] || [ -f "$ORCH_DIR"/*.gguf ]
+    [ -f "$ORCH_DIR/.download-complete" ] && return 0
+    # Do not write this as [ -f "$ORCH_DIR"/*.gguf ]: the glob expands into
+    # more arguments when the directory holds two files, and the test then
+    # fails with "binary operator expected". compgen -G is safe.
+    compgen -G "$ORCH_DIR/*.gguf" >/dev/null 2>&1
 }
 
 cmd_orchestrator() {
@@ -154,7 +169,15 @@ cmd_use() {
     local p="$1"
     [ -n "${UNIT[$p]:-}" ] || { echo "unknown profile '$p'" >&2; exit 2; }
     if ! weights_ready "$p"; then
-        echo "profile '$p': not ready on this machine yet (weights missing or the profile is disabled)." >&2
+        echo "profile '$p': not ready on this machine yet." >&2
+        if [ "$p" = "deepseek" ] && [ -f "$DEEPSEEK_DIR/.download-complete" ]; then
+            echo "  Its weights are complete, but the shared-memory kernel parameters are not set," >&2
+            echo "  so llama.cpp cannot allocate the model. As root, then reboot:" >&2
+            echo "    grubby --update-kernel=ALL --args=\"amdgpu.gttsize=118784 ttm.pages_limit=31457280\"" >&2
+            echo "  (or create $DEEPSEEK_DIR/.deepseek-enabled to skip this check)" >&2
+        else
+            echo "  Its weights are missing or still downloading; see the log in its directory." >&2
+        fi
         exit 3
     fi
     for q in "${PROFILES[@]}"; do

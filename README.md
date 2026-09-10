@@ -185,7 +185,22 @@ Workstation 44. There are two ways to get there:
   running SUPERFAST service in one run: system update, SSH, GPU groups,
   auto-suspend off, the kernel memory parameters, checkpoint download with
   exact-offset resume, and the engine installed as `superfast.service`,
-  waiting for `/health`.
+  waiting for `/health`. Add more profiles with `PROFILES`:
+
+  ```bash
+  # dense (default) is prepared alone
+  bash deploy/setup-fedora.sh
+
+  # the whole set: two engine profiles, two GGUF profiles, the small router
+  PROFILES="dense flash gemma deepseek small" bash deploy/setup-fedora.sh
+  ```
+
+  The weights of the extra profiles are fetched by one systemd service per
+  profile, so the script returns instead of waiting hours for them, the
+  transfers resume after a reboot, and each file is checked against the
+  SHA-256 published by Hugging Face before it is used. Gemma, DeepSeek and the
+  orchestrator also need the GGUF runtime image, which the script builds when
+  it is not present on the machine yet.
 - **Step by step:** every phase of the script is a command that was run and
   verified on the reference machine, in order. Read the script with
   `less deploy/setup-fedora.sh` if you prefer to do it by hand; it is
@@ -919,6 +934,41 @@ the quality-first defaults, running on the purpose-built engine at high
 precision. Gemma-4 and DeepSeek-V4-Flash are the speed-oriented profiles;
 their measured numbers are in the table above.
 
+### How it compares with paid models (public numbers)
+
+The numbers in this section are **not ours**. They were collected from public
+sources — Artificial Analysis indices, vendor reports and BrainBench — to
+answer one question a buyer asks: does a model that runs on a machine you own
+compete with the paid frontier? Keep the caveats that come with them, listed
+below the table.
+
+| benchmark | Qwen3.8-27B (local) | paid model in the same range | note |
+|---|---|---|---|
+| Artificial Analysis Intelligence Index | **52** | GPT-5.6 Luna (52), DeepSeek V4 Flash | same band |
+| Artificial Analysis Agentic Index | **51** | GPT-5.6 Terra, Claude Opus 4.8 | Qwen3.8-27B is ahead of both |
+| SWE-bench Pro (agentic coding) | **61.7** | Claude Opus 4.6 Max (53.4) | ahead of Anthropic's model by 8.3 points |
+| BrainBench-llama (accuracy) | **80.0%** (IQ3_XXS) / 78.0% (Q4_K_S) | Claude Opus 4.6 with thinking (80.3%) | almost level with the top Claude |
+| AIME 2026 (mathematics) | **29/30 (96.7%)** | Claude Opus 4.6 (96.7%) | level; GPT-5.4 xhigh scores higher (99.2%) |
+| LiveCodeBench v6 | **90.3** | — | self-reported by Alibaba |
+
+**Where it is strong.** Agentic coding and reasoning: it is ahead of Claude
+Opus 4.6 Max on SWE-bench Pro, and it answers faster than the paid models
+compared here (about 190 ms to the first token, against about 1.4 s for
+GPT-5.6 Luna).
+
+**Where to be careful.** Most of these figures are **self-reported by
+Alibaba**, and full independent evaluations are still missing. The model is
+also slower overall and more verbose: it generates many more reasoning tokens
+than the paid models here, which is visible in everyday use. On BrainBench it
+scores 80.0%, clearly above GPT-5.4 (74.0%) and GPT-4o (39.7%), but that is
+one benchmark, on one quantized build.
+
+**In one sentence:** the model is comparable to paid services such as GPT-5.6
+Luna and DeepSeek V4 Flash, and in coding it can beat Claude Opus 4.6 Max —
+with the caveats above, and with the note that the quality is the model's
+while the speed you get is the machine's (measure yours with
+[`tools/quick-bench.py`](tools/quick-bench.py)).
+
 ---
 
 ### Defaults we ship, and why (in plain words)
@@ -1077,10 +1127,13 @@ before the next one loads, so the dense 27B, the Flash-Next MoE and any future
 profile do not compete for resources.
 
 The setup script ([`deploy/setup-fedora.sh`](deploy/setup-fedora.sh), phases
-8–10) installs everything: the dense profile unit, the Flash-Next profile
-unit, the switch itself into `~/.local/bin/superfast-switch`, the TUI, the
-API-key gateway and the GNOME panel. If you only want the switch on a machine
-that is already configured:
+8–10) installs everything: the profile units, the switch itself into
+`~/.local/bin/superfast-switch`, the TUI, the API-key gateway and the GNOME
+panel. Which profiles it prepares depends on `PROFILES` (see
+[step 3](#3-configure-the-machine-for-superfast)); the units live in
+[`deploy/profiles/`](deploy/profiles/README.md) and stay stopped until the
+switch starts them. If you only want the switch on a machine that is already
+configured:
 
 ```bash
 cp tools/superfast-switch.sh ~/.local/bin/superfast-switch

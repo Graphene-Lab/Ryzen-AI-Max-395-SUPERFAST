@@ -14,6 +14,7 @@ Clients then use http://<host>:8741 and send:
 or  X-API-Key: <key>
 """
 import argparse
+import hmac
 import socket
 import sys
 import threading
@@ -37,13 +38,24 @@ def relay(a, b):
 
 
 def authorized(head: bytes, key: bytes) -> bool:
+    """True when the request carries the key.
+
+    The header value is compared exactly (as bytes, in constant time) instead
+    of searching for the key anywhere in the header block: a substring match
+    would accept any value that merely *contains* the key.
+    """
     if not key:
         return True
     for line in head.split(b"\r\n"):
-        low = line.lower()
-        if low.startswith(b"authorization:") and key in line:
-            return True
-        if low.startswith(b"x-api-key:") and key in line:
+        name, sep, value = line.partition(b":")
+        if not sep:
+            continue
+        if name.strip().lower() not in (b"authorization", b"x-api-key"):
+            continue
+        value = value.strip()
+        if value[:7].lower() == b"bearer ":
+            value = value[7:].strip()
+        if hmac.compare_digest(value, key):
             return True
     return False
 

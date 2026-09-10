@@ -1,0 +1,25 @@
+[Unit]
+Description=SUPERFAST deepseek profile (DeepSeek-V4-Flash ROCmFPX, port 8731)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=__XDG__
+ExecStartPre=-/usr/bin/podman rm -f deepseek-server
+ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 8731:8731 \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __DEEPSEEK_DIR__:/models:ro \
+  llama-rocmfpx:7.2.4 \
+  -m /models/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf \
+  --host 0.0.0.0 --port 8731 -c 32768 --alias deepseek-v4-flash
+ExecStop=/usr/bin/podman stop -t 30 deepseek-server
+# podman run exits 143/137 when the container is stopped: accept those, so a
+# profile switch does not leave the unit in the "failed" state.
+SuccessExitStatus=137 143
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target
