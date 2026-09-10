@@ -45,7 +45,12 @@ set -euo pipefail
 
 IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
 RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
-RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1}"
+# Published candidates, in order. The first is built by this repository's
+# workflow; the second is an older hand-pushed package under the repository's
+# name (not connected to the repository, so it may stay private and need a
+# login). If neither can be pulled, the image is built from runtime/.
+RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
+RUNTIME_PUBLISHED_LEGACY="${SUPERFAST_RUNTIME_PUBLISHED_LEGACY:-ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1}"
 FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.2}"
 REBOOT_NEEDED=0
 PROFILES="${PROFILES:-dense}"
@@ -342,20 +347,29 @@ phase_profiles() {
     fi
 
     # 2. The GGUF runtime, needed by gemma, deepseek and the orchestrator.
-    #    Prefer the published image; if it cannot be pulled (it was private for
-    #    a while, or the machine is offline), build it from runtime/ instead.
+    #    Prefer a published image; if none can be pulled (still private, or the
+    #    machine is offline), build it from runtime/ instead.
     if in_profiles gemma || in_profiles deepseek || in_profiles small; then
         if podman image exists "$RUNTIME_IMAGE"; then
             log "GGUF runtime already present: $RUNTIME_IMAGE"
-        elif podman pull "$RUNTIME_PUBLISHED" \
-             && podman tag "$RUNTIME_PUBLISHED" "$RUNTIME_IMAGE"; then
-            log "runtime image pulled and tagged as $RUNTIME_IMAGE"
         else
-            log "pull failed; building $RUNTIME_IMAGE from runtime/ -- this takes a while"
-            if (cd "$SCRIPT_DIR/../runtime" && podman build -t "$RUNTIME_IMAGE" .); then
-                log "runtime built: $RUNTIME_IMAGE"
-            else
-                log "runtime build FAILED: gemma/deepseek/orchestrator cannot start until it succeeds"
+            pulled=""
+            for cand in "$RUNTIME_PUBLISHED" "$RUNTIME_PUBLISHED_LEGACY"; do
+                [ -n "$cand" ] || continue
+                if podman pull "$cand" && podman tag "$cand" "$RUNTIME_IMAGE"; then
+                    log "runtime pulled from $cand and tagged as $RUNTIME_IMAGE"
+                    pulled="$cand"
+                    break
+                fi
+                log "pull failed: $cand"
+            done
+            if [ -z "$pulled" ]; then
+                log "no published runtime available; building $RUNTIME_IMAGE from runtime/ -- this takes a while"
+                if (cd "$SCRIPT_DIR/../runtime" && podman build -t "$RUNTIME_IMAGE" .); then
+                    log "runtime built: $RUNTIME_IMAGE"
+                else
+                    log "runtime build FAILED: gemma/deepseek/orchestrator cannot start until it succeeds"
+                fi
             fi
         fi
     fi

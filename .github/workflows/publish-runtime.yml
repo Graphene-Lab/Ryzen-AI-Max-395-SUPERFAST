@@ -3,14 +3,21 @@ name: publish runtime image
 # Builds the GGUF runtime (llama.cpp with the ROCmFPX fork, see runtime/) and
 # publishes it to GitHub Container Registry.
 #
-# Why publish from here: a package pushed by hand from another machine is not
-# connected to this repository, and GitHub then refuses to change its
-# visibility through the API (`PATCH .../packages/container/...` answers 404).
-# A package pushed by a workflow of this repository is connected to it, appears
-# in the repository's Packages section, and inherits the repository's public
-# visibility. That is why the image belongs here and not on a local machine.
+# Two things about the package name matter here, and both were learned the hard
+# way. First, a package pushed by hand from another machine is not connected to
+# this repository, and GitHub then refuses to change its visibility through the
+# API (`PATCH .../packages/container/...` answers 404) — and the workflow's own
+# GITHUB_TOKEN cannot push to it either, because the token is only allowed to
+# write packages that belong to this repository ("denied:
+# permission_denied: read_package"). Second, a package created *by a workflow
+# of this repository* is connected to it from the start and appears in the
+# repository's Packages section. That is why the image is published under
+# `superfast-runtime` rather than under the repository's own name: the latter
+# already exists as a hand-pushed, unconnected package, and no workflow can
+# take it over.
 #
-# The build takes roughly half an hour: ROCm user space is most of the image.
+# The build takes roughly half an hour the first time (ROCm user space is most
+# of the image) and a few minutes afterwards, thanks to the layer cache.
 
 on:
   workflow_dispatch:
@@ -29,6 +36,12 @@ concurrency:
   group: publish-runtime-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Lower-case because GHCR requires it; a fixed name because a package created
+  # by this workflow is connected to the repository, while an older hand-pushed
+  # one under the repository's name is not (see the comment above).
+  IMAGE_NAME: superfast-runtime
+
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04
@@ -40,12 +53,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # GHCR requires a lower-case image path, and this repository's name has
-      # capitals, so the name is converted in one step and reused below.
       - name: Image name
         id: image
         run: |
-          name="ghcr.io/${GITHUB_REPOSITORY,,}"
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME,,}"
           tag="${{ inputs.tag }}"
           [ -n "$tag" ] || tag="llama-rocmfpx-1"
           echo "name=$name" >> "$GITHUB_OUTPUT"

@@ -45,6 +45,23 @@ that is, up to a 284-billion-parameter model running entirely on the machine.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
 
+**Why one model at a time.** This is a deliberate architecture choice, not a
+limitation. A single model gets the whole machine: all of the unified memory
+for its weights and its KV cache, and therefore the largest context window the
+model supports — 262,144 tokens for the Qwen profiles, 256K for Gemma-4, and
+the full 1M for DeepSeek-V4-Flash. Running two large models at once would mean
+splitting that memory, and the first thing to shrink would be the context
+window — which is exactly what an agent needs most: a long window that holds
+the conversation, the tool definitions, and the files being worked on. That is
+also why every profile ships an agent-ready configuration: tool calling, a
+large answer budget, prompt cache, and sampling defaults from the vendor.
+
+The one companion allowed to share the machine is the small orchestrator: a
+1.2B-parameter model that decodes at about 220 tokens per second and occupies
+a couple of gigabytes — insignificant on a machine with 124 GB of unified
+memory. It can stay resident while a large model works, and it costs that
+model one to two percent of memory bandwidth. Everything else waits its turn.
+
 ### A measured starting point
 
 On the reference machine, the dense Qwen3.8-27B profile answers a 32K prompt
