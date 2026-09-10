@@ -306,7 +306,7 @@ After=network-online.target
 Type=simple
 Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
 ExecStart=/usr/bin/python3 $HOME/.local/bin/superfast-gateway.py \\
-  --listen 0.0.0.0:\${GATEWAY_PORT:-8741} --upstream 127.0.0.1:8731 \\
+  --listen 0.0.0.0:8741 --upstream 127.0.0.1:8731 \\
   --key-file $CONF_DIR/api.key
 Restart=on-failure
 RestartSec=10

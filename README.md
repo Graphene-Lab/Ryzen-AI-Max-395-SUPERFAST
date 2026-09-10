@@ -912,6 +912,14 @@ batch sizes all landed within 0.2% of the defaults, so the defaults are what
 is shipped. Both files were verified byte-for-byte against the official
 Hugging Face SHA-256 sums before being used.
 
+Co-residency was measured rather than assumed. With the small model
+resident but idle, the large model's throughput did not change beyond noise
+(prose 56.5 vs 55.6 t/s, code 57.6 vs 57.6). While the orchestrator was
+actively generating in parallel, prose dipped at most about three percent
+(53.9 t/s) and code was unaffected. That is the real price of keeping a
+dispatcher ready: essentially nothing while it waits, a few percent while it
+works.
+
 The orchestrator has its own systemd unit and is toggled independently with
 `superfast-switch orchestrator on|off`, so enabling it never disturbs the
 active profile. Its measured numbers stay out of the comparison table above,
@@ -965,6 +973,34 @@ superfast-switch orchestrator status  # is it running?
 It is off by default and costs the specialist model only one to two percent
 of memory bandwidth when enabled. The setup script installs its unit once the
 small model has been chosen and measured.
+
+The same controls exist in two friendlier forms. On the desktop there is a
+small GNOME panel menu (`gnome-shell-extension/`) that shows what is serving
+and lets you switch model or toggle the orchestrator with a click. In a
+terminal — including over SSH — `superfast-tui` offers a minimal menu plus
+simple commands (`status`, `use`, `orchestrator`, `api-key`, `help`).
+
+### Locking it down (API key)
+
+The profile endpoint listens on loopback, which is what you want on a
+single-user machine. If you expose the machine to your network, put a key in
+front of it. One command generates one:
+
+```bash
+superfast-tui api-key set          # writes ~/.config/superfast/api.key
+```
+
+Enable the gateway unit (`superfast-gateway.service`, created by the setup
+script) and reach the machine on port 8741 instead of 8731. Clients must then
+send the key, and requests without it are refused with 401:
+
+```
+Authorization: Bearer <your key>
+```
+
+The loopback endpoint stays key-less, so local tools are unaffected; the
+firewall decides whether 8741 is reachable from outside, and it should be
+opened deliberately, not by default.
 
 **Roadmap: other model families.** A second runtime is planned for the
 machine — llama.cpp with the ROCmFPX fork, which serves GGUF models with
