@@ -14,6 +14,12 @@ machine:
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; it is also the only family here that reads images |
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
 
+![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
+
+*The same four names, in the GNOME panel of the machine: click one to switch
+profile. The filled circle marks what is running now, the entry below toggles
+the small orchestrator, and the last one opens the terminal menu.*
+
 One model at a time, on one OpenAI-compatible endpoint (`:8731`, or `:8741`
 behind an API key). Switch with one click in the GNOME panel, or with one
 command over SSH. No subscription, nothing leaves the machine. The full
