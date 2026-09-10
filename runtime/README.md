@@ -28,6 +28,11 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
   `deploy/setup-fedora.sh` does the pull-and-tag above, and builds the image
   locally if no published copy can be pulled.
 
+  The pull is about **4.2 GB** (7 layers; the image occupies 11.2 GB once
+  unpacked). The index also carries the build attestation that buildx adds
+  next to the `amd64` image; `podman` and `docker` pick the right entry by
+  themselves.
+
 ## Build it yourself (one time)
 
 ```bash

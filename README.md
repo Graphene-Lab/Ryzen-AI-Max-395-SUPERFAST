@@ -878,13 +878,14 @@ podman tag  ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1 \
             llama-rocmfpx:7.2.4
 ```
 
-`deploy/setup-fedora.sh` does this by itself, and falls back to building from
-[`runtime/`](runtime/README.md) when the pull fails. Why the package is not
-named after the repository: a package pushed by hand is not connected to the
-repository, GitHub refuses to change its visibility through the API in that
-state, and the workflow's own token cannot push to it either — a package
-created by the workflow is connected from the start. [`runtime/README.md`](runtime/README.md)
-has the full explanation.
+The pull is about 4.2 GB (the image takes 11.2 GB unpacked). The package is
+public, so no login is needed; `deploy/setup-fedora.sh` does this by itself,
+and falls back to building from [`runtime/`](runtime/README.md) when the pull
+fails. Why the package is not named after the repository: a package pushed by
+hand is not connected to the repository, GitHub refuses to change its
+visibility through the API in that state, and the workflow's own token cannot
+push to it either — a package created by the workflow is connected from the
+start. [`runtime/README.md`](runtime/README.md) has the full explanation.
 
 The weights are **not** in the images. They are fetched from Hugging Face by
 the downloader in [`deploy/profiles/`](deploy/profiles/README.md), which
