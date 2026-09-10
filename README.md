@@ -257,13 +257,16 @@ own directory, and the setup script and the switch know those paths.
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
 
 Two things the table does not show. The `gemma` and `deepseek` profiles need a
-second runtime, the GGUF server image built from [`runtime/`](runtime/README.md)
-(`llama-rocmfpx:7.2.4`); that image is not published on GHCR yet, so build it
-locally with one command — see `runtime/README.md`. And neither speculative
-head in the table works in our stack today: the Gemma MTP file needs a
-draft-context flag this runtime build rejects, and the DeepSeek DSpark file is
-built for another runtime (`unknown model architecture`). The measured Gemma
-and DeepSeek numbers are therefore without speculation.
+second runtime, the GGUF server image built from
+[`runtime/`](runtime/README.md). It is published on GHCR as
+`ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1`, and the
+setup script pulls it and tags it as `llama-rocmfpx:7.2.4`; if the pull fails
+(the package is private by default on GHCR, and you can make it public in the
+package settings on GitHub) the script builds it from `runtime/` instead. And
+neither speculative head in the table works in our stack today: the Gemma MTP
+file needs a draft-context flag this runtime build rejects, and the DeepSeek
+DSpark file is built for another runtime (`unknown model architecture`). The
+measured Gemma and DeepSeek numbers are therefore without speculation.
 
 For the dense profile, download the checkpoint once and mount it:
 

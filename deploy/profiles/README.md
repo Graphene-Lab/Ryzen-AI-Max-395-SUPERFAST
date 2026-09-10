@@ -22,9 +22,9 @@ them, except the downloaders, which the setup script enables only for profiles
 whose weights are still missing.
 
 The Gemma and DeepSeek units need `llama-rocmfpx:7.2.4`, the GGUF runtime built
-from [`runtime/`](../runtime/README.md). It is not published on GHCR yet, so
-the setup script builds it (that build takes a while and needs about 10 GB of
-disk).
+from [`runtime/`](../runtime/README.md). It is published on GHCR as
+`ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1`; the setup
+script pulls it (and builds it from `runtime/` if the pull fails).
 
 Two files in the download table are deliberately absent. The DeepSeek DSpark
 drafter is not downloaded: it is built for the Ember runtime and llama.cpp
