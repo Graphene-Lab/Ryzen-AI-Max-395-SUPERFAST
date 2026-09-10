@@ -7,6 +7,9 @@ __pycache__/
 # host-specific validation log (kept local, not published)
 docs/fedora-44-setup.md
 
+# maintainer's internal memory: addresses, traps, how to update the project
+docs/INTERNAL-NOTES.md
+
 # never commit these, even by accident
 *.key
 .env
