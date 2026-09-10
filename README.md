@@ -351,7 +351,7 @@ low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 |---|---|---|---|---|
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
-| Qwen3.8-Flash-Next MoE w4b | halogen-flash | *weights loading, numbers land here* | | |
+| Qwen3.8-Flash-Next MoE w4b | halogen-flash | **37.7 t/s** | **46.4 t/s** | ~709 t/s |
 | DeepSeek-V4-Flash ROCmFPX | llama-rocmfpx | *weights loading, numbers land here* | | |
 
 Two notes on the dense row. Its numbers were **23.9/29.5 t/s under the old
@@ -450,10 +450,11 @@ needs from the shared pool. This is the configuration AMD describes for
 running large models on these APUs.
 
 The measured comparison between the dense checkpoint and Flash-Next on this
-exact machine will be added to this section as soon as the validation run
-finishes. The dense reference figures are the ones above: 23.9 tokens per
-second on prose and 29.5 on code, measured end to end on the serving
-endpoint.
+exact machine is in the table above: Flash-Next answers at **37.7 tokens per
+second on prose and 46.4 on code** end to end, against 21.0 and 26.1 for the
+dense profile in the same memory layout — about **1.8 times faster** — while
+using 45 GB of memory instead of 36 and holding a 262,144-token context. Its
+cold load from disk to a healthy endpoint took about forty seconds.
 
 ---
 
@@ -689,7 +690,9 @@ Warm answers are byte-identical to cold ones by construction.
   a sibling `blobs/` and dangle inside a container.
 
 In practice the memory is comfortable: with the Gemma profile loaded the host
-reported about 18 GB in use and 106 GB available, measured. The switch still
+reported about 18 GB in use and 106 GB available, and with the much larger
+Flash-Next checkpoint resident it reported 45 GB in use and 78 GB available,
+both measured. The switch still
 runs one profile at a time by design, so the big models never compete; the
 orchestrator is the one auxiliary that is allowed to share.
 
