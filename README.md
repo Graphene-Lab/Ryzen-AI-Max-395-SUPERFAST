@@ -231,6 +231,22 @@ profile as a managed service. On Docker instead of Podman, replace
 `--group-add keep-groups` with `--group-add video --group-add render`;
 `keep-groups` is a Podman keyword that Docker cannot resolve.
 
+> Verify what you downloaded: Hugging Face publishes a SHA-256 for every
+> weight file, and it is worth comparing before trusting the file. A
+> truncated or mis-assembled download can still load and quietly be the wrong
+> model — we hit exactly that during development, which is why every weight
+> used here is checked. For example:
+>
+> ```bash
+> sha256sum ~/superfast-models/qwen3.8-27b-p1w4d-d2.hgn
+> # compare with the LFS SHA-256 shown on the file's page on Hugging Face
+> ```
+>
+> The two small orchestrator models are verified this way and their hashes
+> match the published ones exactly:
+> `LFM2.5-350M-Q4_K_M.gguf` → `7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4`,
+> `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` → `6f071c4f5893ca93a265613a0009f4db745bc79b50808ab1ce9a8821caf511d0`.
+
 ### Or let SUPERFAST fetch the weights for you
 
 If you do not want to download separately, set `SUPERFAST_DOWNLOAD` and the
@@ -839,15 +855,31 @@ handle it. Vendors of commercial routers claim 70-90% cost reductions and
 marketing numbers, the mechanism is real and it is the reason the pattern is
 everywhere in agentic stacks.
 
-On this machine the plan is concrete. A small Liquid LFM2.5 model (350M and a
-1.2B "Thinking" variant are being measured as this is written) becomes a
-resident orchestrator on its own port, while the dense, Flash-Next or
-DeepSeek profile stays on the main endpoint for the work that actually needs
-a big model. Clients keep talking to the same address; the orchestrator
-quietly decides whether the request is simple enough to answer itself or
-worth waking the specialist. Measured numbers for the small models will be
-added here as soon as they are benchmarked, and they intentionally stay out
-of the comparison table above, which is about the specialist models.
+On this machine the plan is concrete, and it is now measured. A small Liquid
+LFM2.5 model becomes a resident orchestrator on its own port, while the
+dense, Flash-Next or DeepSeek profile stays on the main endpoint for the work
+that actually needs a big model. Clients keep talking to the same address; the
+orchestrator quietly decides whether the request is simple enough to answer
+itself or worth waking the specialist.
+
+| small model | decode (llama-bench tg128) | end-to-end generation | prefill (pp512) | short routing answer |
+|---|---|---|---|---|
+| LFM2.5-350M Q4_K_M | **465 t/s** | — | 21,280 t/s | — |
+| LFM2.5-1.2B Thinking Q4_K_M | **216 t/s** | **204 t/s** | 8,182 t/s | **0.130 s** for 24 tokens |
+
+Those numbers answer the question the section opened with: yes, a small local
+model comfortably exceeds two hundred tokens per second on this machine, and a
+routing decision comes back in about a tenth of a second, which is the
+latency a voice or home-automation front-end needs. Tuning was checked rather
+than assumed: on the 1.2B model, thread counts of 8 and 16 and alternative
+batch sizes all landed within 0.2% of the defaults, so the defaults are what
+is shipped. Both files were verified byte-for-byte against the official
+Hugging Face SHA-256 sums before being used.
+
+The orchestrator has its own systemd unit and is toggled independently with
+`superfast-switch orchestrator on|off`, so enabling it never disturbs the
+active profile. Its measured numbers stay out of the comparison table above,
+which is about the specialist models.
 
 ---
 
