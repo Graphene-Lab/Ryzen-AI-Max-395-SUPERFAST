@@ -2,38 +2,51 @@
 
 ![SUPERFAST logo — a speedometer](assets/superfast.gif)
 
-**Turn an AMD Ryzen AI Max into a fast, high-quality and private LLM
-machine.**
+**Run a high-quality open LLM on an AMD Ryzen AI Max machine: fast, and in private.**
 
-New to this? There is a **[plain-language guide](docs/PLAIN-GUIDE.md)**
-written for readers who are not engineers.
+New to this? Read the **[plain-language guide](docs/PLAIN-GUIDE.md)** first.
+It is written for readers who are not engineers.
 
-SUPERFAST is a goal, not a fixed architecture: take an AMD Strix Halo APU
-(gfx1151 — for example the Ryzen AI Max+ 395) and make it run excellent open
-LLMs as fast as the hardware allows, without trading away quality. What makes
-this silicon special is that CPU and GPU share one pool of very fast
-LPDDR5X memory: 16 Zen 5 cores and the Radeon 8060S integrated graphics draw
-from the same 124 GB, and AMD's ROCm stack turns that shared memory into GPU
-compute. A general engine cannot fully exploit that; a machine built for it
-can.
+## What this project is
 
-The project packages that machine as a repeatable recipe: a Fedora
-installation, models running in containers that carry their own ROCm, and a
-small switch that changes which model is active. Every speed and quality
-claim in this document was measured on the reference machine, and nothing is
-kept because it looks good in theory.
+SUPERFAST is a goal, not a fixed architecture. The goal is to take an AMD
+Strix Halo APU (gfx1151, for example the Ryzen AI Max+ 395) and run excellent
+open LLMs on it as fast as the hardware allows, without giving up quality.
 
-A running model is called a **profile**. Only one profile is active at a
-time, and every profile serves the same OpenAI-compatible endpoint on port
-8731, so the tools you connect never change. Today the machine runs the
-dense Qwen3.8-27B and the Qwen3.8-Flash-Next MoE; other models can be added
-as profiles the same way. See [Choose a model profile](#choose-a-model-profile).
+One property of this hardware makes that possible: the CPU and the GPU share
+one pool of fast LPDDR5X memory. The 16 Zen 5 cores and the Radeon 8060S
+graphics use the same 124 GB. AMD's ROCm stack turns that shared memory into
+GPU compute. A general-purpose engine cannot use all of it. A machine built
+for it can.
+
+The project turns that machine into a repeatable recipe:
+
+- a Fedora installation,
+- models running in containers that carry their own ROCm,
+- a small switch that selects which model is active.
+
+Every speed and quality number in this document was measured on the reference
+machine. Nothing is here because it looks good in theory.
+
+### A note on names
+
+The project is called SUPERFAST. The container images and the model
+repository were published before the rename, so they still use the old name
+`halogen`. The commands below use that name, because it is the name that
+exists today.
+
+A running model is called a **profile**. Only one profile runs at a time, and
+every profile serves the same OpenAI-compatible endpoint on port 8731. The
+tools you connect to the machine never change their configuration. Today the
+machine runs the dense Qwen3.8-27B, the Qwen3.8-Flash-Next MoE, Gemma-4 and
+DeepSeek-V4-Flash. Other models can be added the same way. See
+[Choose a model profile](#choose-a-model-profile).
 
 ### A measured starting point
 
 On the reference machine, the dense Qwen3.8-27B profile answers a 32K prompt
 with a 256-token answer faster than the fastest published numbers for the
-same model on the same silicon by other runtimes:
+same model on the same silicon from other runtimes:
 
 | | prefill | decode | **total** |
 |---|---|---|---|
@@ -42,88 +55,95 @@ same model on the same silicon by other runtimes:
 | [q38rocm](https://github.com/julianmb/q38rocm) (4.26 bpw) | 133.7 s | 7.8 s | 141.5 s |
 
 That is **2.1× faster than q38rocm and 1.4× faster than KyaniteLabs** end to
-end, while carrying about 1.5× their weight precision. Most of the difference
-is in prefill, and prefill is most of the wall-clock time on any prompt with
-real context. Speculative decoding in the engine is byte-identical to serial
-greedy decode — a pure speed optimization, not a quality trade, verified on
-every release.
+end, with about 1.5× their weight precision. Most of the gain is in prefill,
+and prefill is most of the wall-clock time on any prompt with real context.
+Speculative decoding in this engine produces byte-identical output to serial
+greedy decode: it is a speed optimization, not a quality trade, and it is
+checked on every release.
+
+**Read that table together with the memory layout.** These engine-level
+numbers were measured with the 64 GB UMA carve (the older layout of this
+machine). The current layout uses a 1 GB UMA carve, which the large MoE
+checkpoints require; in that layout the same dense profile measures about 12%
+lower (21.0 t/s prose, 26.1 t/s code — see the
+[measured profiles](#performance-tuning-on-fedora-44--what-we-tested)). The
+comparison above is still the right one for the engine itself, because the
+other projects were measured under comparable settings.
 
 If you do not have the machine yet, [build it step by
-step](#set-up-a-new-machine). If you already have it, choose a model profile
-with `superfast-switch` (see
-[Choose a model profile](#choose-a-model-profile)).
+step](#set-up-a-new-machine). If you already have it, pick a model with
+`superfast-switch` (see [Choose a model profile](#choose-a-model-profile)).
 
 ---
 
 ## Set up a new machine
 
-New to SUPERFAST and no Linux machine yet? Do these steps in order. This is
-the path we follow on a Ryzen AI Max+ 395.
+You need a Linux machine before you start. Follow these steps in order; this
+is the path we used on a Ryzen AI Max+ 395.
 
-**The whole journey, in order** — each step links to its section:
+**The whole journey, in order.** Each step links to its section below.
 
-1. Install Fedora Workstation 44 and enable SSH — [step 1](#1-install-fedora-workstation-44-recommended) below.
+1. Install Fedora Workstation 44 and enable SSH — [step 1](#1-install-fedora-workstation-44-recommended).
 2. Connect to the machine over SSH — [step 2](#2-connect-to-the-machine-over-ssh-optional-but-recommended).
-3. Run the setup script, which downloads the model and starts the engine — [step 3](#3-configure-the-machine-for-superfast).
+3. Run the setup script: it downloads the model and starts the engine — [step 3](#3-configure-the-machine-for-superfast).
 4. Download the weights and learn the API — [Get the weights](#get-the-weights).
 5. Measure and compare the speed — [Performance](#performance).
 6. Turn the machine into your personal assistant — [AgentBridge](#make-it-your-personal-assistant-with-agentbridge).
 
 ### 1. Install Fedora Workstation 44 (recommended)
 
-This is the distribution we recommend. Why:
+This is the distribution we recommend. The reasons:
 
-- **It is the current Fedora.** Fedora 44 is the latest stable release
-  (April 2026) and receives updates into 2027. It ships the newest stable
-  kernel and Mesa, and that matters here: support for a brand-new AMD APU
-  like Strix Halo (gfx1151) lives in the upstream kernel and Mesa, not in
-  distro-specific patches.
-- **ROCm comes from Fedora itself.** AMD's own ROCm installer
-  (`amdgpu-install`) targets Ubuntu and Red Hat families, not Fedora.
-  Fedora instead packages the open ROCm stack in its official repositories:
-  you install it with `dnf`, and updates follow the release. No third-party
-  repositories or PPAs.
-- **A normal, well-known desktop system.** Fedora Workstation is the same
-  GNOME desktop used by millions of machines, with a straightforward
-  installer (Anaconda) that offers disk encryption and automatic
-  partitioning out of the box.
+- **It is current.** Fedora 44 is the latest stable release (April 2026) and
+  receives updates into 2027. It has the newest stable kernel and Mesa. That
+  matters here: support for a new AMD APU like Strix Halo (gfx1151) comes
+  from the upstream kernel and Mesa, not from patches added by a
+  distribution.
+- **ROCm comes from Fedora itself.** AMD's installer (`amdgpu-install`)
+  targets Ubuntu and Red Hat families, not Fedora. Fedora packages the open
+  ROCm stack in its official repositories instead, so you install it with
+  `dnf` and updates arrive with the release. No third-party repositories.
+- **It is a normal, well-known desktop.** Fedora Workstation is the same
+  GNOME desktop used on millions of machines, with a simple installer
+  (Anaconda) that offers disk encryption and automatic partitioning.
 
 Steps:
 
 1. Download the **Fedora Workstation 44** ISO (x86_64) from
    [getfedora.org](https://getfedora.org).
-2. Write it to a USB stick with [Fedora Media Writer](https://fedoraproject.org/workstation/download)
-   (or any USB writer you trust).
-3. Boot the machine from the USB. In the installer, choose your disk, turn
-   on disk encryption, create your user account, and pick a hostname.
-4. Reboot into the installed system, open a terminal, and enable SSH so the
-   rest of the setup can run from your PC:
+2. Write it to a USB stick with [Fedora Media Writer](https://fedoraproject.org/workstation/download),
+   or with any USB writer you trust.
+3. Boot the machine from the USB stick. In the installer, choose your disk,
+   decide whether to encrypt it, create your user account, and pick a
+   hostname.
+4. Reboot into the installed system, open a terminal, and enable SSH, so that
+   the rest of the setup can run from your PC:
 
    ```bash
    sudo dnf install -y openssh-server
    sudo systemctl enable --now sshd
    ```
 
-Remember the user name you created — you need it in step 2.
+Remember the user name you created: you need it in step 2.
 
 ### 2. Connect to the machine over SSH (optional, but recommended)
 
-If the machine has no keyboard or monitor attached, do every configuration
-step from your PC over SSH.
+If the machine has no keyboard or monitor, do all the configuration from your
+PC over SSH.
 
-**Option A — with Pi Easy Connect (an Ethernet cable is all you need).**
+**Option A — with Pi Easy Connect (you only need an Ethernet cable).**
 [Pi Easy Connect](https://github.com/Graphene-Lab/pi-easy-connect) shares the
-Windows PC's internet with the machine over a direct Ethernet cable (Windows
-ICS) and opens SSH for you. It works with any Linux machine that has a
-network port.
+Windows PC's internet connection with the machine over a direct Ethernet
+cable (Windows ICS) and opens SSH for you. It works with any Linux machine
+that has a network port.
 
 1. Connect an Ethernet cable between the PC and the machine.
 2. Run `.\pi-easy-connect.ps1 -SshUser <your-fedora-username>`.
 3. You land in the machine's shell, with internet on the `192.168.137.x`
    subnet.
 
-The ICS lease can change between reboots. To make the address fixed, set it
-once on the machine (subnet of the direct cable):
+The ICS lease can change at each reboot. To make the address fixed, set it
+once on the machine (the subnet of the direct cable):
 
 ```bash
 nmcli con mod "Wired connection 1" ipv4.method manual \
@@ -133,11 +153,11 @@ nmcli con mod "Wired connection 1" ipv4.method manual \
 nmcli con up "Wired connection 1"
 ```
 
-Then connect instantly with `.\pi-easy-connect.ps1 -StaticIp 192.168.137.100
--SshUser <your-fedora-username>`.
+Then connect with `.\pi-easy-connect.ps1 -StaticIp 192.168.137.100 -SshUser
+<your-fedora-username>`.
 
-**Option B — plain SSH over a normal network.** Put the machine on your LAN
-(DHCP is fine to start) and run `ssh <your-fedora-username>@<machine-ip>`
+**Option B — plain SSH over your normal network.** Put the machine on your
+LAN (DHCP is fine at the start) and run `ssh <your-fedora-username>@<machine-ip>`
 from any computer on the same network. If SSH times out, open the port on the
 machine:
 
@@ -148,68 +168,80 @@ sudo firewall-cmd --reload
 
 ### 3. Configure the machine for SUPERFAST
 
-A fresh Fedora install is not enough — but less than you might expect, because
-the SUPERFAST image carries its own ROCm user-space. The machine needs, at
-minimum:
+A fresh Fedora install is almost enough, because the SUPERFAST image carries
+its own ROCm user-space. The machine needs:
 
 - a kernel whose amdgpu driver exposes `/dev/kfd` and `/dev/dri` for gfx1151 —
   a stock Fedora 44 already does,
-- a container runtime (Podman or Docker) to run the image,
+- a container runtime (Podman or Docker),
 - your user in the `video` and `render` groups,
-- disk space for the ~36 GB checkpoint — see [Get the weights](#get-the-weights).
+- disk space for the model checkpoints — see
+  [Get the weights](#get-the-weights).
 
 All of the above is validated on a Ryzen AI Max+ 395 running Fedora
-Workstation 44. Two ways to get there:
+Workstation 44. There are two ways to get there:
 
-- **Automated:** `bash deploy/setup-fedora.sh` brings a fresh machine to a
-  running SUPERFAST service in one run — system update, SSH, GPU groups,
-  auto-suspend off, checkpoint download with exact-offset resume, and the
-  engine installed as `superfast.service`, waiting for `/health`.
-- **Step by step:** follow the chronological log in
-  [`docs/fedora-44-setup.md`](docs/fedora-44-setup.md). Every command there
-  was executed and verified on the reference machine, in order.
+- **Automated:** `bash deploy/setup-fedora.sh` takes a fresh machine to a
+  running SUPERFAST service in one run: system update, SSH, GPU groups,
+  auto-suspend off, the kernel memory parameters, checkpoint download with
+  exact-offset resume, and the engine installed as `superfast.service`,
+  waiting for `/health`.
+- **Step by step:** every phase of the script is a command that was run and
+  verified on the reference machine, in order. Read the script with
+  `less deploy/setup-fedora.sh` if you prefer to do it by hand; it is
+  commented phase by phase. The chronological log we kept while building the
+  machine is not published, because it contains host-specific details.
 
 Things we learned on the reference machine:
 
-- **No host ROCm.** AMD's `amdgpu-install` does not target Fedora, and it is
-  not needed anyway: the image bundles ROCm (see `THIRD-PARTY-NOTICES`).
-- **Slow or unreliable link?** Do not use `hf download` for the 36 GB file:
-  its transport can stall, and its resume silently restarts because the
-  server rotates etags between runs. Use the curl `-C -` loop inside
-  `deploy/setup-fedora.sh`, which resumes at the exact byte offset and loses
-  nothing. On a fast link, `hf download` (under
-  [Get the weights](#get-the-weights)) is fine.
+- **No ROCm on the host.** AMD's `amdgpu-install` does not target Fedora, and
+  it is not needed: the image bundles ROCm (see `THIRD-PARTY-NOTICES`).
+- **Slow or unstable link?** Do not use `hf download` for the big files. Its
+  transport can stall, and its resume starts over because the server changes
+  the file tag between runs. Use the `curl -C -` loop in
+  `deploy/setup-fedora.sh` instead: it resumes at the exact byte offset and
+  loses nothing. `hf download` is fine on a fast link, for the smaller files.
 - **BIOS memory split.** Set the UMA frame buffer to its minimum in the
-  firmware, so the whole unified memory is a single pool. Large checkpoints
-  such as the Flash-Next MoE need it; the setup script also raises the
-  TTM/GTT shared-memory limit to ~120 GiB.
-- **LUKS disk encryption:** every reboot stops at the passphrase prompt on
-  the console, so a headless reboot needs someone at the keyboard (TPM2
-  auto-unlock is a possible future option).
-- **SELinux stays Enforcing** — passing `/dev/kfd` and `/dev/dri` into
-  rootless Podman works out of the box.
-- **The engine runs as a systemd user service** (`superfast.service`):
-  starts at boot, restarts on failure, serves the OpenAI-compatible API on
-  port 8731.
+  firmware, so that the whole unified memory is one pool. The large
+  checkpoints need it.
+- **Two kernel parameters, not one.** The GPU can only use part of the shared
+  memory unless you raise both limits, and the allocatable size is the
+  **smaller** of the two:
+  `amdgpu.gttsize=118784` (116 GiB) and `ttm.pages_limit=31457280`
+  (120 GiB, counted in 4 KiB pages). Both must be on the kernel command line,
+  because the driver fixes the pool size when it loads. With the defaults,
+  only about 62 GiB are usable, which is not enough for the largest
+  checkpoints. Measured proof: the default `ttm.pages_limit` of 16309919
+  pages × 4096 bytes = 63710 MiB, which is exactly the amount the GPU
+  runtime reported. The setup script applies both, with a reboot.
+- **Disk encryption is a choice, and it has a cost.** The installer offers
+  encryption, and the reference machine does *not* use it. If you enable it,
+  every reboot stops at the passphrase prompt on the console, so a machine
+  without a keyboard cannot reboot on its own. TPM2 auto-unlock is a possible
+  future option.
+- **SELinux stays Enforcing.** Passing `/dev/kfd` and `/dev/dri` into
+  rootless Podman works without changes.
+- **The engine runs as a systemd user service** (`superfast.service`): it
+  starts at boot, restarts on failure, and serves the OpenAI-compatible API
+  on port 8731.
 
 ---
 
 ## Get the weights
 
-Profiles ship as containers with **no model weights** inside: the dense
-profile image is 3.5 GB of engine, and its checkpoint is 35.9 GB. The setup
-script and the switch know where each profile keeps its weights — the dense
-profile in `~/superfast-models`, the Flash-Next profile in
-`~/superfast-flash`. For the dense profile, download the checkpoint once and
-mount it:
+Images contain the engine, not the weights: the dense image is 3.5 GB of
+engine, and its checkpoint is 35.9 GB. The setup script and the switch know
+where each profile keeps its weights — the dense profile in
+`~/superfast-models`, the Flash-Next profile in `~/superfast-flash`, and so
+on. For the dense profile, download the checkpoint once and mount it:
 
 ```bash
 pip install -U "huggingface_hub[cli]"
-hf download peonist-ai/superfast-qwen3.8-27b \
+hf download peonist-ai/halogen-qwen3.8-27b \
   --local-dir ~/superfast-models
 ```
 
-That repository carries both the `.hgn` checkpoint **and a flat tokenizer
+That repository holds both the `.hgn` checkpoint and **a flat tokenizer
 directory**, so there is nothing to assemble by hand:
 
 ```
@@ -226,82 +258,91 @@ podman run --rm -p 8731:8731 \
   --security-opt seccomp=unconfined --ipc=host \
   -v ~/superfast-models:/models:ro \
   -v ~/superfast-models/tokenizer:/tokenizer:ro \
-  ghcr.io/peonist-ai/superfast:0.1.3
+  ghcr.io/peonist-ai/halogen:0.1.3
 ```
 
-This manual run is optional — `superfast-switch use dense` starts the same
+This manual run is optional: `superfast-switch use dense` starts the same
 profile as a managed service. On Docker instead of Podman, replace
 `--group-add keep-groups` with `--group-add video --group-add render`;
 `keep-groups` is a Podman keyword that Docker cannot resolve.
 
-> Verify what you downloaded: Hugging Face publishes a SHA-256 for every
-> weight file, and it is worth comparing before trusting the file. A
-> truncated or mis-assembled download can still load and quietly be the wrong
-> model — we hit exactly that during development, which is why every weight
-> used here is checked. For example:
+> **Check what you downloaded.** Hugging Face publishes a SHA-256 for every
+> weight file, and it is worth comparing it before you trust the file. A
+> truncated or wrongly assembled download can still load and quietly be the
+> wrong model — that happened to us during development, which is why every
+> weight used here is checked.
 >
 > ```bash
 > sha256sum ~/superfast-models/qwen3.8-27b-p1w4d-d2.hgn
 > # compare with the LFS SHA-256 shown on the file's page on Hugging Face
 > ```
 >
-> The two small orchestrator models are verified this way and their hashes
-> match the published ones exactly:
+> The small orchestrator models were checked this way, and both match the
+> published sums:
 > `LFM2.5-350M-Q4_K_M.gguf` → `7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4`,
 > `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` → `6f071c4f5893ca93a265613a0009f4db745bc79b50808ab1ce9a8821caf511d0`.
-> On the reference machine the big files were verified the same way, and these
-> are the values that were observed to match Hugging Face exactly:
+> The big files were checked the same way; these are the values that matched
+> Hugging Face exactly:
 > `qwen38-flash-next-w4b.hgn` → `9c116bbc01f77b7a15464c1a124eb3325b286089b8a2a6f2856c9b246a235bd6`,
 > `qwen38-flash-next-w4b.overlay.hgn` → `737d6bdaef274d3cc22de5bc265b390b89db5fb1e709f58db75287fdc35bb276`,
 > `qwen38-flash-next-w4b.overlay-speed.hgn` → `113d77358107549fa22e06643ae3a524908aa7ea011afaebec69fc5f1991c370`,
 > `DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf` → `a936e0a514385c8ae964c0f42263a4314a34fbc6efea9d9aced5320f320a3d54`.
-> The DeepSeek checkpoint verified correctly; its speculative drafter was
-> re-downloaded after a corrupted copy (two downloads had written the same
-> file) and is checked against its own published sum before use.
+> The DeepSeek speculative drafter has its own published sum
+> (`1a01c80eceae302bcc1d70836759ee97974d7983c5084ef43f6ef772a8970ae6`); our
+> first copy of it was damaged because two downloads wrote the same file, so
+> the downloader now takes a lock and checks the sum before renaming the file.
 
 ### Or let SUPERFAST fetch the weights for you
 
 If you do not want to download separately, set `SUPERFAST_DOWNLOAD` and the
-container fetches the weights on first start:
+container fetches the weights on the first start:
 
 ```bash
 podman run --rm -p 8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
-  -e SUPERFAST_DOWNLOAD=peonist-ai/superfast-qwen3.8-27b \
+  -e SUPERFAST_DOWNLOAD=peonist-ai/halogen-qwen3.8-27b \
   -e SUPERFAST_TOKENIZER=/models/tokenizer \
   -v ~/superfast-models:/models \
-  ghcr.io/peonist-ai/superfast:0.1.3
+  ghcr.io/peonist-ai/halogen:0.1.3
 ```
 
 Two differences from the manual route. The models volume is mounted
-**read-write** — it has to be, because the download writes into it. And there
-is only *one* mount: the download brings the tokenizer with it, so
-`SUPERFAST_TOKENIZER` points inside `/models` rather than at a second volume.
-Mounting `~/superfast-models/tokenizer` here would fail on a first run,
-because the container runtime would create it as an empty directory before
-the download could fill it.
+**read-write**, because the download writes into it. And there is only *one*
+mount: the download brings the tokenizer with it, so `SUPERFAST_TOKENIZER`
+points inside `/models` instead of at a second volume. Mounting
+`~/superfast-models/tokenizer` here would fail on a first run, because the
+container runtime would create it as an empty directory before the download
+could fill it.
 
-The download only fires when the checkpoint is actually missing, so restarts
-do not re-download, and an interrupted transfer resumes instead of starting
-over.
+The download starts only when the checkpoint is missing, so a restart does
+not download it again, and an interrupted transfer resumes.
 
 **With `SUPERFAST_DOWNLOAD` unset, the container opens no outbound network
-connections at all** — no telemetry, no license check, no model fetch. If the
+connection at all** — no telemetry, no license check, no model fetch. If the
 checkpoint is not on disk where `SUPERFAST_CHECKPOINT` points, the container
 says so and exits instead of reaching for the network. That default is
-deliberate: a 35.9 GB transfer should not begin because someone ran
-`podman run` to see what would happen.
+deliberate: a 35.9 GB transfer should not start because someone ran
+`podman run` to see what happens.
 
-Model weights are licensed separately from the engine by their original
+Model weights are licensed separately from the engine, by their original
 authors; see the model repository for those terms.
 
 ---
 
 ## Performance
 
+> **Which machine produced these numbers.** The engine-level figures in this
+> section (prefill, decode distribution, the comparison table) come from the
+> reference machine *before* it moved to the UMA 1 GB layout, and from the
+> engine's own `bench`/`sweep` tools. The profile table further down uses the
+> current layout and a different tool. Do not compare the two line by line:
+> in the current layout the dense profile measures about 12% lower (see
+> [A measured starting point](#a-measured-starting-point)).
+
 Measured on a Ryzen AI Max+ 395 (Radeon 8060S, 128 GB LPDDR5X), ROCm 7.14.0,
-checkpoint `p1w4d-d2` (~6.3 bits/weight effective at decode), 262,144 context.
+checkpoint `p1w4d-d2` (~6.3 bits per weight effective at decode), 262,144
+context.
 
 ### Prefill
 
@@ -326,28 +367,28 @@ Over the HTTP endpoint, ten prompt shapes, greedy, DFlash2 drafter:
 
 Aggregate throughput at 8 concurrent requests: **48.6 t/s** (4.87×).
 
-### Read the range, not just the mean
+### Read the range, not only the mean
 
-**SUPERFAST's decode rate is a distribution, not a single number.**
-Speculative decoding accepts more drafted tokens when the text is
-predictable, so the same build on the same hardware does:
+**The decode rate of this engine is a range, not one number.** Speculative
+decoding accepts more drafted tokens when the text is predictable, so the
+same build on the same hardware does:
 
 - **prose / chat: 20.8 – 23.5 t/s**
 - **procedures: 25.6 – 38.7 t/s**
 - **code / proofs: 32.7 – 44.2 t/s**
 
-A single headline figure hides a 2× spread. Any decode number quoted from
-this project — by us or anyone else — should name the prompt set that
-produced it, or it is not reproducible. `bench` prints the mean; `sweep`
-prints mean, standard deviation, and min–max, on purpose.
+A single headline number hides a factor of two. A decode number from this
+project — quoted by us or by anyone else — should name the prompt set that
+produced it, or it cannot be reproduced. `bench` prints the mean; `sweep`
+prints the mean, the standard deviation and the min–max, for this reason.
 
-An engine without speculative decoding has a content-independent decode rate,
-so it can honestly quote one number. SUPERFAST cannot.
+An engine without speculative decoding has a decode rate that does not depend
+on the text, so it can quote a single number. This engine cannot.
 
 ### Performance tuning on Fedora 44 — what we tested
 
-Measured profiles on the reference host (2026-09-10, Fedora 44, same
-memory layout for every row — BIOS UMA 1 GB, unified pool;
+Measured profiles on the reference host (2026-09-10, Fedora 44, the same
+memory layout for every row: BIOS UMA 1 GB, unified pool,
 [`tools/quick-bench.py`](tools/quick-bench.py), greedy, `reasoning_effort:
 low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 
@@ -356,85 +397,120 @@ low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Qwen3.8-Flash-Next MoE w4b | halogen-flash | **37.7 t/s** | **46.4 t/s** | ~709 t/s |
-| DeepSeek-V4-Flash ROCmFPX (~2.6 bpw) | llama-rocmfpx | *does not fit yet — see the note below* | | |
+| DeepSeek-V4-Flash ROCmFPX (~2.6 bpw) | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
 
-DeepSeek-V4-Flash deserves its own note. The weights are downloaded and their
-checksum matches Hugging Face exactly, but the model does not run on the
-machine as configured, and the reason is worth stating plainly: it needs one
-single GPU allocation of roughly 75 GiB, while the GPU side of this machine
-can currently claim only about 62 GiB. The memory is physically there — the
-box has 124 GB in one pool — but the kernel limits how much of it the GPU
-path may take, by default about half of RAM. Raising the TTM page limit does
-not move that ceiling; the knob that does is the kernel parameter
-`amdgpu.gttsize` (for example `amdgpu.gttsize=118784` for about 116 GiB),
-applied with a reboot — and on this machine a reboot needs the disk passphrase
-at the console. We also tried keeping part of the model's experts on the CPU
-so it would fit under the current ceiling, and those attempts failed under
-memory pressure even for sub-gigabyte buffers, so that is not a workaround
-here. Until the kernel parameter is applied, the deepseek profile stays
-disabled and the switch refuses to start it.
+DeepSeek-V4-Flash deserves its own note, because it needed a change to the
+machine itself. The weights are 91.5 GB, of which the runtime wanted about
+86.9 GB in one single GPU allocation. With the default kernel settings the
+GPU path can claim only about 62 GiB, so the load failed with
+`cudaMalloc failed: out of memory`. The memory was physically there — the
+machine has 124 GB in one pool — but the driver caps how much of it the GPU
+may use. Two values define that cap, and the allocatable size is the smaller
+of the two:
 
-Two notes on the dense row. Its numbers were **23.9/29.5 t/s under the old
-BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (needed for the big MoE
-checkpoints, and matching AMD's large-model guidance) costs the dense profile
-about 12%, because its weights now live in the shared system pool. Every A/B
-on this machine is measured at the same memory layout for that reason. And
-the Gemma row is **without its MTP drafter** (the speculative head): we keep
-it disabled until the draft-context flag is resolved in the runtime, and the
-few percent it adds are not included above.
+| parameter | default | set to | meaning |
+|---|---|---|---|
+| `amdgpu.gttsize` | auto (half of RAM) | `118784` | GTT aperture, in MiB (116 GiB) |
+| `ttm.pages_limit` | 16309919 pages | `31457280` | TTM limit, in 4 KiB pages (120 GiB) |
 
-Memory-region note (measured): where the weights live is the one placement
-lever that matters — the dense profile is ~12% faster when its weights sit in
-the GPU carve instead of the shared pool, because decode is DRAM-bandwidth
-bound and the APU has a single LPDDR5X bus (no closer cache or HBM tier to
-move to). Inside a region, micro-levers change nothing: on Gemma-4 ROCmFP4,
-`llama-bench` reports pp512 ~1480 t/s and tg128 **60.6 t/s** (matching the
-publisher's own ceiling) with default settings, and thread counts or batch
-sizes move those numbers by less than 1%. n-gram self-speculation changes
-nothing either (measured: prose 51.5 vs 52.2 without it).
+Evidence for "the smaller of the two": with the default `ttm.pages_limit`,
+16309919 pages × 4096 bytes = 63710 MiB, and the GPU runtime reported
+exactly 63710 MiB of usable device memory. Raising only `amdgpu.gttsize` is
+not enough; raising `ttm.pages_limit` at runtime is not enough either,
+because the driver fixes the pool size when it loads. Both parameters must be
+on the kernel command line, followed by a reboot:
 
-Measured characteristics so far (dense vs Gemma). Both profiles answer the
-same probes correctly when given budget — logic riddle, arithmetic and code
-bug-finding all came back right. They differ in *how*: the dense Qwen
-profile answers briefly and directly (a few reasoning tokens), while
-Gemma-4 reasons extensively before answering and needs a generous
-`max_tokens` — with a 192-token budget its answers come back empty (all
-budget spent thinking), which is why the Gemma row above is measured on a
-512-token budget and includes its reasoning. Cutting Gemma's thinking short
-hurts accuracy, not just style: with thinking effectively disabled it
-answered the arithmetic probe wrong (65 instead of 67). The practical rule
-for clients: dense Qwen suits tight budgets and quick turns; Gemma-4 needs
-room to think but stays correct, and its raw decode is far faster.
+```bash
+sudo grubby --update-kernel=ALL --args="amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+sudo reboot
+```
 
-We validated three well-known tuning levers against the dense baseline and
-then rolled them back, because none produced a real change:
+With both applied, the profile loads. Keeping part of the model's experts on
+the CPU was tried as a workaround before that, and it failed even for
+sub-gigabyte buffers under memory pressure, so it is not a substitute here.
+
+The DeepSeek profile is the slowest of the four, and that is expected: it has
+about 284 billion parameters, and even at ~2.6 bits per weight it reads far
+more per token than the 27B dense model. The row above is a 192-token budget;
+measured with a 512-token budget it is 10.9 t/s on prose and 11.0 on code, so
+the numbers agree within about two percent across three independent runs.
+Two things lower it in practice, both measured:
+
+- **Long generations decode more slowly.** A 1024-token request that ran
+  alone decoded at 7.2 t/s (~142 s), where a 512-token one runs at ~11 t/s.
+- **Two requests at once are each slower** (one of two concurrent 512-token
+  requests measured 6.4 t/s), because this profile serves four slots in
+  parallel. One client at a time gets the fast number.
+
+One caveat, the same as Gemma-4: this model reasons at length. With a
+192-token budget, a 512-token budget and a 1024-token budget, every request we
+measured spent the **whole** budget on reasoning and returned an empty
+`content` with `finish_reason: "length"` (the 1024-token one produced 7020
+characters of reasoning). Give clients a large `max_tokens`, and read
+`finish_reason` before concluding that the model failed. If you want short
+answers, this is not the profile for that.
+
+Two notes on the dense row. Its numbers are **23.9/29.5 t/s under the old
+BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (which the large MoE
+checkpoints need, and which matches AMD's guidance for large models) costs
+the dense profile about 12%, because its weights now live in the shared
+system pool. Every A/B on this machine is therefore measured in the same
+memory layout. And the Gemma row is **without its MTP drafter** (the
+speculative head): we keep it disabled until the draft-context flag is
+resolved in the runtime, and the few percent it adds are not included.
+
+Where the weights live is the one placement lever that matters: the dense
+profile is ~12% faster when its weights sit in the GPU carve instead of the
+shared pool, because decode is limited by DRAM bandwidth, and this APU has a
+single LPDDR5X bus (there is no closer cache or HBM to move to). Inside a
+region, small levers change nothing: on Gemma-4 ROCmFP4, `llama-bench`
+reports pp512 ~1480 t/s and tg128 **60.6 t/s** (the publisher's own ceiling)
+with default settings, and thread counts or batch sizes move those numbers by
+less than 1%. N-gram self-speculation changes nothing either (measured:
+prose 51.5 against 52.2 without it).
+
+How the profiles behave, beyond speed: both answer the same probes correctly
+when they have enough budget — a logic riddle, arithmetic and a code-bug
+question all came back right. They differ in *how*. The dense Qwen profile
+answers briefly and directly (a few reasoning tokens). Gemma-4 reasons at
+length before answering and needs a generous `max_tokens`: with a 192-token
+budget its answers came back empty, because all the budget went into
+thinking. That is why the Gemma row above uses a 512-token budget. Cutting
+Gemma's thinking short also hurts accuracy, not only style: with thinking
+effectively disabled it answered the arithmetic probe wrongly (65 instead of
+67). The practical rule for clients: dense Qwen suits tight budgets and quick
+turns; Gemma-4 needs room to think but stays correct, and its raw decode is
+much faster.
+
+We also tested three well-known tuning levers against the dense baseline and
+rolled them back, because none of them changed anything:
 
 | setting tried | effect | outcome |
 |---|---|---|
 | `tuned-adm profile accelerator-performance` (CPU performance governor + EPP) | prose 23.90, code 29.47 (old layout) | **no change** — reverted to `balanced` |
-| GPU performance level `high` (force max clocks) | prose 23.90, code 29.49 | **no change** — reverted to `auto` |
+| GPU performance level `high` (force maximum clocks) | prose 23.90, code 29.49 | **no change** — reverted to `auto` |
 | `transparent_hugepage=always` | prose 23.89, code 29.49 | **no change** — reverted to `madvise` |
 
-Why nothing moves: batch-1 decode runs at the memory-bandwidth wall
-(249 GB/s against a ~240 GB/s ceiling), and these levers change clocks or
-page granularity, not bandwidth. Prefill was unchanged as well. Overclocking
-advice from specialists (`ppfeaturemask`/`pp_od_clk_voltage`, or UXTU on
-Windows) targets clock-limited paths — it does not apply to a
-bandwidth-bound decode workload and would require a kernel parameter +
+Why nothing moved: batch-1 decode runs at the memory-bandwidth wall
+(249 GB/s against a ceiling of about 240 GB/s), and these levers change
+clocks or page granularity, not bandwidth. Prefill did not change either.
+Overclocking advice from specialists (`ppfeaturemask`/`pp_od_clk_voltage`, or
+UXTU on Windows) targets clock-limited paths. It does not apply to a
+bandwidth-limited decode workload, and it would need a kernel parameter and a
 reboot.
 
-Context depth and the KV cache were measured too, on Gemma-4: decode ran at
-56.1 tokens per second on a 442-token prompt, 50.0 on 1,325 tokens and 46.0 on
-1,761 tokens with the default f16 KV cache; switching to a quantized q8_0 KV
-cache was four to six percent *slower* at those depths, so the default is
-kept. The fork's FP4/TURBO cache types were not accepted by this runtime
-build (the server refused to start), which makes them a candidate for a future
-runtime revision rather than a shipped setting.
+Context depth and the KV cache were measured on Gemma-4: decode ran at 56.1
+tokens per second on a 442-token prompt, 50.0 on 1,325 tokens and 46.0 on
+1,761 tokens with the default f16 KV cache. Switching to a quantized q8_0 KV
+cache was four to six percent *slower* at those depths, so the default stays.
+The fork's FP4/TURBO cache types were not accepted by this runtime build (the
+server refused to start), so they are a candidate for a future runtime
+revision, not a setting we ship.
 
 **Conclusion:** the stock Fedora 44 configuration already performs at the
-practical ceiling for this machine; measured gains come from choosing the
-right profile (MoE/FP4 for speed, dense for precision), not from tuning
-knobs. Re-measure any profile any time with:
+practical ceiling for this machine. Real gains come from choosing the right
+profile (MoE/FP4 for speed, dense for precision), not from tuning knobs.
+You can re-measure any profile at any time with:
 
 ```bash
 python3 tools/quick-bench.py --api http://<host>:8731
@@ -443,38 +519,36 @@ python3 tools/quick-bench.py --api http://<host>:8731
 ### A faster family of this model: Qwen3.8-Flash-Next (MoE)
 
 The default checkpoint, Qwen3.8-27B, is a dense model. A dense model reads
-every one of its parameters from memory for every token it generates, and on
-this machine memory bandwidth is the hard limit: that is why generation
-lands at about 24 tokens per second on prose and 29 on code, end to end.
+every parameter from memory for every token it generates, and on this machine
+memory bandwidth is the hard limit. That is why generation lands at about 24
+tokens per second on prose and 29 on code, end to end.
 
-Qwen3.8-Flash-Next belongs to the same Qwen3.8 family but uses a
-mixture-of-experts design. It keeps far more parameters in total, yet for any
-single token only a small subset of its experts is active. Reading fewer
-weights per token means more tokens per second on the same memory bandwidth,
-which is why a larger model can still be the faster model on this kind of
-hardware.
+Qwen3.8-Flash-Next belongs to the same family but uses a mixture-of-experts
+design. It holds far more parameters in total, but for each single token only
+a small subset of its experts is active. Reading fewer weights per token
+means more tokens per second on the same memory bandwidth. This is why a
+larger model can be the faster model on this kind of hardware.
 
-The published checkpoints for the engine support this choice with three
-files. The main one is the 4-bit MoE checkpoint itself. Beside it sits a
-quality overlay that re-quantizes the most sensitive tensors with extra care
-and measures on par with full precision for those rows; removing it costs
-several percent on perplexity. The optional speed overlay adds the
-speculative-decoding head, which keeps the output byte-identical and only
-changes the speed.
+The published checkpoints for the engine support this with three files. The
+main one is the 4-bit MoE checkpoint. Beside it there is a quality overlay,
+which re-quantizes the most sensitive tensors with extra care and measures on
+par with full precision for those rows; removing it costs several percent on
+perplexity. The optional speed overlay adds the speculative-decoding head; it
+keeps the output byte-identical and only changes the speed.
 
-Running Flash-Next requires the full 124 GB of unified memory as one pool,
-because the checkpoint alone is about 115 GB. On this reference host that
-meant setting the BIOS UMA frame buffer to its minimum so the firmware stops
+Running Flash-Next needs the full 124 GB of unified memory as one pool,
+because the checkpoint alone is about 115 GB. On the reference host that meant
+setting the BIOS UMA frame buffer to its minimum, so that the firmware stops
 reserving a fixed slice of memory for the GPU; the engine then draws what it
-needs from the shared pool. This is the configuration AMD describes for
-running large models on these APUs.
+needs from the shared pool. This is the configuration AMD describes for large
+models on these APUs.
 
 The measured comparison between the dense checkpoint and Flash-Next on this
-exact machine is in the table above: Flash-Next answers at **37.7 tokens per
-second on prose and 46.4 on code** end to end, against 21.0 and 26.1 for the
-dense profile in the same memory layout — about **1.8 times faster** — while
-using 45 GB of memory instead of 36 and holding a 262,144-token context. Its
-cold load from disk to a healthy endpoint took about forty seconds.
+machine is in the table above: Flash-Next answers at **37.7 tokens per second
+on prose and 46.4 on code** end to end, against 21.0 and 26.1 for the dense
+profile in the same memory layout — about **1.8 times faster** — while using
+45 GB of memory instead of 36, and holding a 262,144-token context. Its cold
+load from disk to a healthy endpoint took about forty seconds.
 
 ---
 
@@ -482,8 +556,8 @@ cold load from disk to a healthy endpoint took about forty seconds.
 
 Published numbers from other projects running **the same model on the same
 silicon**. These are *their* figures on *their* configurations, not a
-head-to-head we ran. Quantization, KV-cache settings and context differ, so
-read this as orientation, not as a controlled benchmark.
+head-to-head run by us. Quantization, KV-cache settings and context differ,
+so read this as orientation, not as a controlled benchmark.
 
 | | SUPERFAST | [q38rocm](https://github.com/julianmb/q38rocm) | [KyaniteLabs](https://github.com/KyaniteLabs/qwen38-27b-strix-halo) |
 |---|---|---|---|
@@ -499,93 +573,91 @@ with real context. That is what the engine was built for.
 **Where SUPERFAST loses:** unassisted decode — and that row is a diagnostic,
 not a product configuration. Nobody ships serial decode; every project in
 this table runs speculation by default. The gap is also not a kernel-quality
-issue: decode is bandwidth-bound. q38rocm streams ~17 GB/token against our
-23.5, and fewer bits is simply faster. SUPERFAST spends those bits
-deliberately (see `docs/QUANT.md`): the only 4-bit tensors in our trunk are
-ones somebody else calibrated, and the aggressive technique is fenced to
-prefill, where it never touches token generation.
+issue: decode is bandwidth-limited. q38rocm streams about 17 GB per token
+against our 23.5, and fewer bits is simply faster. SUPERFAST spends those
+bits deliberately (see [`docs/QUANT.md`](docs/QUANT.md)): the only 4-bit
+tensors in our trunk are ones calibrated by somebody else, and the aggressive
+technique is fenced to prefill, where it never touches token generation.
 
-**Batch-1 decode is at the hardware wall.** 10.58 t/s × 23.51 GB/token =
+**Batch-1 decode is at the hardware wall.** 10.58 t/s × 23.51 GB per token =
 249 GB/s against a measured ceiling of 240 GB/s. No kernel win is left there
-for anyone; the levers left are fewer bits, better draft acceptance, and
+for anyone; what is left is fewer bits, better draft acceptance, and
 batching.
 
-**On the 148–163 t/s figure** circulating for llama.cpp on this hardware:
-that is an ngram-repetition artifact on back-to-back identical runs, and
-KyaniteLabs — whose benchmark it is — says so plainly and warns against
-quoting it for chat. Their honest conversational numbers are in the table. We
-think that is the right way to publish, and we have tried to match it.
+**About the 148–163 t/s figure** that circulates for llama.cpp on this
+hardware: it is an artifact of n-gram repetition on back-to-back identical
+runs, and KyaniteLabs — whose benchmark it is — says so and warns against
+quoting it. We think that is the right way to publish, and we have tried to
+match it.
 
 ---
 
 ## Benchmark it yourself
 
 The image ships both benchmarks. No fixtures, no extra downloads, no
-cooperation from us required.
+cooperation from us.
 
 ```bash
 # ten real prompt shapes over the HTTP endpoint — the number of record
 podman run --rm --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
   -v /path/to/models:/models:ro -v /path/to/tokenizer:/tokenizer:ro \
-  ghcr.io/peonist-ai/superfast:0.1.3 bench dflash2 256 low 3
+  ghcr.io/peonist-ai/halogen:0.1.3 bench dflash2 256 low 3
 
 # llama-bench-shaped pp/tg sweep, to put a number next to another engine
-podman run --rm ... ghcr.io/peonist-ai/superfast:0.1.3 \
+podman run --rm ... ghcr.io/peonist-ai/halogen:0.1.3 \
   sweep -p 512,2048,8192 -n 128,256 -d dflash2,mtp -r 3
 ```
 
-`sweep --json` emits machine-readable output.
+`sweep --json` produces machine-readable output.
 
-**Publishing the results is expressly permitted** — no approval, no notice,
-no prior review. We only ask that figures name the version and the prompt
-set, for the reason above. That request is not a licensing condition.
+**Publishing the results is expressly permitted** — no approval, no notice, no
+review. We only ask that figures name the version and the prompt set, for the
+reason given above. That request is not a licensing condition.
 
 ---
 
 ## What every profile inherits from the engine
 
-All profiles run on the same purpose-built engine layer, so every profile
-gets the properties below. Profiles differ in their checkpoint, not in these
-behaviors — and the numbers and capabilities are re-measured per profile;
+All profiles run on the same purpose-built engine layer, so every profile gets
+the properties below. Profiles differ in their checkpoint, not in these
+behaviors. The numbers and capabilities are re-measured for each profile, and
 `/health` reports what the running one supports.
 
-**Byte-identical speculative decoding.** Draft-then-verify only commits
-tokens the full model would have produced, so output is bit-for-bit identical
-to serial greedy decode. This is gated on every release across all three
-drafters — measured, not asserted. Speculation here is a pure speed
+**Byte-identical speculative decoding.** Draft-then-verify commits only the
+tokens the full model would have produced, so the output is bit-for-bit
+identical to serial greedy decode. This is checked on every release, for all
+three drafters — measured, not asserted. Speculation here is a pure speed
 optimization with no quality cost, and you can turn it off per request to
 check.
 
 **Native 262,144-token context**, with decode that barely degrades at depth.
-Gated DeltaNet carries O(1) state, so 48 of 64 layers have no KV cache at
-all.
+Gated DeltaNet carries O(1) state, so 48 of 64 layers have no KV cache at all.
 
-**Prompt cache** — a follow-up turn on a long conversation resumes instead of
+**Prompt cache** — a follow-up turn in a long conversation resumes instead of
 re-prefilling, worth roughly 20× on time-to-first-token at 32K. Warm answers
 are byte-identical to cold ones by construction.
 
 **Batched decode** — 8 concurrent sequences, 4.87× aggregate, each
 byte-identical to running alone. **Off by default**, and it trades away
-speculation when enabled; see [Configuration](#concurrency-and-the-one-trap)
-before turning it on.
+speculation when enabled; see
+[Configuration](#concurrency-and-the-one-trap) before turning it on.
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control.
 
 **Three selectable drafters** — `dflash2` (default), `mtp`, `serial`. Choose
-per request; output is identical, only speed changes.
+per request; the output is identical, only the speed changes.
 
 ---
 
 ## Configuration
 
-Everything is set by environment variable — there is no config file. The
-complete list of levers, with defaults and whether each one can change
-output, is in [`docs/FLAGS.md`](docs/FLAGS.md). These are the ones most
-people touch. The tables below describe the dense profile; every other
-profile image ships its own tuned defaults and reports them through
-`/health`.
+Everything is set by environment variable; there is no configuration file.
+The complete list, with defaults and whether each one can change the output,
+is in [`docs/FLAGS.md`](docs/FLAGS.md). These are the ones most people touch.
+The tables below describe the dense profile; every other profile image ships
+its own tuned defaults and reports them through `/health`.
 
 | variable | default | what it does |
 |---|---|---|
@@ -593,8 +665,8 @@ profile image ships its own tuned defaults and reports them through
 | `SUPERFAST_TOKENIZER` | `/tokenizer` | flat tokenizer directory |
 | `SUPERFAST_API_PORT` | `8731` | the published port |
 | `SUPERFAST_DRAFTER` | `2` (DFlash2) | default drafter: `0` serial, `1` MTP, `2` DFlash2 |
-| `SUPERFAST_CACHE_MB` | *auto* | prompt cache budget; `0` disables |
-| `SUPERFAST_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — over it is a **400**, never a silent truncation |
+| `SUPERFAST_CACHE_MB` | *auto* | prompt-cache budget; `0` disables it |
+| `SUPERFAST_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — above it is a **400**, never a silent truncation |
 | `SUPERFAST_QUEUE_TIMEOUT` | `7200` | seconds a queued request will wait — **coupled to the cap**, see below |
 | `SUPERFAST_KV_SLOTS` | `1` | concurrent resident sequences — see below |
 | `SUPERFAST_SLOT_CTX` | `262144` | context each slot holds — see below |
@@ -602,45 +674,45 @@ profile image ships its own tuned defaults and reports them through
 Per-request settings — drafter, temperature, top_p, seed, reasoning effort,
 tools — go in the JSON body and override the server defaults.
 
-### The token budget covers thinking, not just the answer
+### The token budget covers thinking, not only the answer
 
 This model reasons before it replies, and those tokens count against the
-budget. If a budget runs out mid-thought, it does not shorten the answer — it
-removes it: the reply comes back with `finish_reason: "length"`, an empty
-`content`, and the partial reasoning in `reasoning_content`, which most
-OpenAI clients do not display. The per-request default is **8192**, which
-finished every ordinary prompt we measured with room to spare. The ceiling is
-`SUPERFAST_MAX_TOKENS_CAP`.
+budget. If the budget runs out in the middle of the reasoning, it does not
+shorten the answer: it removes it. The reply comes back with
+`finish_reason: "length"`, an empty `content`, and the partial reasoning in
+`reasoning_content`, which most OpenAI clients do not display. The
+per-request default is **8192**, which finished every ordinary prompt we
+measured with room to spare. The ceiling is `SUPERFAST_MAX_TOKENS_CAP`.
 
-Any of three field names works, and they mean the same thing here:
+Three field names work, and they mean the same thing here:
 `max_completion_tokens` (current OpenAI Chat Completions),
 `max_output_tokens` (OpenAI Responses), or `max_tokens` (deprecated upstream,
-still widely sent). Send one, or send several as long as they agree; two
-different values is a 400 rather than a guess about which you meant. `/health`
-lists all three under `token_budget_aliases` and reports the default as
-`max_tokens_default`.
+but still widely sent). Send one, or send several as long as they agree; two
+different values return a 400 instead of a guess about which one you meant.
+`/health` lists all three under `token_budget_aliases` and reports the
+default as `max_tokens_default`.
 
-If a reply looks empty or cut off, read `finish_reason` first: `"stop"` means
-you have the whole answer, `"length"` means you ran out of budget. Pass a
-larger budget, or use `"reasoning_effort": "low"` to make the model think
+If a reply looks empty or cut short, read `finish_reason` first: `"stop"`
+means you have the whole answer, `"length"` means you ran out of budget. Pass
+a larger budget, or use `"reasoning_effort": "low"` to make the model think
 less.
 
 ### Concurrency, and the one trap
 
-**By default SUPERFAST serves one request at a time with speculative decoding
-on.** That is the right setting for a single user: you get about 31 t/s.
+**By default SUPERFAST serves one request at a time, with speculative
+decoding on.** That is the right setting for a single user: about 31 t/s.
 
-Raising `SUPERFAST_KV_SLOTS` lets several sequences stay resident at once and
+Raising `SUPERFAST_KV_SLOTS` keeps several sequences resident at once and
 raises *aggregate* throughput to about 49 t/s at 8 concurrent requests. But
 **speculation and batching are currently mutually exclusive.** With more than
 one slot the drafter is off, so each individual stream runs at serial speed
 (~6 t/s at 8 slots). One user is much better off with the default; a shared
 server with steady concurrent load is better off with slots.
 
-**The trap:** the KV pool costs `slots × slot_ctx × 64 KiB`, so raising slots
-without lowering the per-slot context multiplies the allocation. Eight slots
-at the native 262,144 context asks for **137 GB** and will not fit. Keep the
-product at or below the native context:
+**The trap:** the KV pool costs `slots × slot_ctx × 64 KiB`, so raising the
+slots without lowering the per-slot context multiplies the allocation. Eight
+slots at the native 262,144 context asks for **137 GB** and will not fit.
+Keep the product at or below the native context:
 
 | `KV_SLOTS` | `SLOT_CTX` | pool |
 |---|---|---|
@@ -661,7 +733,7 @@ hold the GPU; the timeout bounds how long the next client waits for it. **If
 a full-length request can outlast the timeout, everyone queued behind it gets
 a 503.**
 
-At high reasoning effort decode runs around 10 t/s, so:
+At high reasoning effort decode runs at around 10 t/s, so:
 
 | cap | worst-case request | needs a timeout above |
 |---|---|---|
@@ -674,7 +746,7 @@ The cap is a ceiling on what a client may ask for, not a promise about
 throughput. Almost nothing reaches it: the model stops on its own when the
 answer is done. It is set high so that a long reasoning problem is not cut
 off by server policy, and the timeout is set above it so that a client who
-does ask for a full-length reply does not 503 the next one in the queue.
+does ask for a full-length reply does not 503 the next request in the queue.
 Lower both together if you would rather bound how long one request can hold
 the GPU.
 
@@ -685,9 +757,10 @@ cannot tell them apart.
 
 ### Prompt cache
 
-`SUPERFAST_CACHE_MB` is empty by default, meaning **auto**: the engine sizes
-the cache from available memory at startup. That suits a machine dedicated to
-serving. Set an explicit value in MB to pin it, or `0` to disable.
+`SUPERFAST_CACHE_MB` is empty by default, which means **auto**: the engine
+sizes the cache from the available memory at startup. That suits a machine
+dedicated to serving. Set an explicit value in MB to pin it, or `0` to
+disable it.
 
 One caveat if you pin it: a single full-context entry is about 18.4 GB at
 262K, so a small explicit budget produces a cache that reports itself enabled
@@ -695,26 +768,30 @@ and never actually hits. The engine warns at startup when this happens.
 
 Warm answers are byte-identical to cold ones by construction.
 
+---
+
 ## Requirements
 
 - **AMD Strix Halo (gfx1151)** — Ryzen AI Max+ 395 or equivalent. The build
-  hard-rejects every other architecture; this will not run on your discrete
-  GPU, and that is deliberate.
+  refuses every other architecture; this will not run on a discrete GPU, and
+  that is deliberate.
 - **128 GB unified memory** recommended. The checkpoint is 35.9 GB and is
   mapped, not copied.
-- **ROCm-capable kernel** with `/dev/kfd` and `/dev/dri` accessible.
+- **A ROCm-capable kernel** with `/dev/kfd` and `/dev/dri` accessible, plus
+  the two kernel parameters described in
+  [step 3](#3-configure-the-machine-for-superfast) for the largest models.
 - **A checkpoint and a tokenizer**, mounted at `/models` and `/tokenizer` —
   see [Get the weights](#get-the-weights). The tokenizer directory must be
-  flat. The published model repository is already flat, so this only bites if
+  flat. The published model repository is already flat; this only matters if
   you point at a HuggingFace *cache* snapshot, whose entries are symlinks into
-  a sibling `blobs/` and dangle inside a container.
+  a sibling `blobs/` directory and dangle inside a container.
 
-In practice the memory is comfortable: with the Gemma profile loaded the host
-reported about 18 GB in use and 106 GB available, and with the much larger
-Flash-Next checkpoint resident it reported 45 GB in use and 78 GB available,
-both measured. The switch still
-runs one profile at a time by design, so the big models never compete; the
-orchestrator is the one auxiliary that is allowed to share.
+In practice the memory is comfortable: with the Gemma profile loaded, the host
+reported about 18 GB in use and 106 GB available; with the much larger
+Flash-Next checkpoint resident, 45 GB in use and 78 GB available. Both were
+measured. The switch still runs one profile at a time by design, so the big
+models never compete. The orchestrator is the one auxiliary that is allowed
+to share.
 
 ### Modes
 
@@ -736,16 +813,17 @@ responsibility.
 
 - **One GPU target.** gfx1151 only, by construction.
 - **Text only.** The model has a vision encoder; SUPERFAST does not use it.
-- **Unassisted decode is not our strong suit** — see the comparison above.
+- **Unassisted decode is not our strong point** — see the comparison above.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
   turn fast; it cannot make the first one fast.
 - **One default is not byte-identical to the engine's built-in one.** The
   image ships full W4A4 promotion, worth +9% prefill, against about −0.45 pt
   top-1 aggregate (better at deep context, worse in the first ~12%). It does
-  not affect the guarantees above — speculation is still exact against serial
+  not affect the guarantees above: speculation is still exact against serial
   greedy, warm cache still matches cold, batched still matches solo. Roll it
-  back with one environment variable; see [`docs/FLAGS.md`](docs/FLAGS.md).
+  back with one environment variable; see
+  [`docs/FLAGS.md`](docs/FLAGS.md).
 - **The comparison table is cross-published, not head-to-head.** We have not
   run the other engines ourselves on our box under matched settings. When we
   do, we will publish whatever it says.
@@ -755,8 +833,8 @@ responsibility.
 ## How good are the models: benchmarks and community
 
 The machine can run different model families, and choosing well means
-comparing quality, not just speed. The numbers below come from the official
-model cards of the two families this machine targets — the dense Qwen3.8-27B
+comparing quality, not only speed. The numbers below come from the official
+model cards of the two families this machine targets: the dense Qwen3.8-27B
 and the Gemma-4-26B-A4B MoE (the variant behind the Gemma ROCmFP4 files).
 They are the vendors' own measurements on the instruction-tuned versions.
 
@@ -773,114 +851,107 @@ They are the vendors' own measurements on the instruction-tuned versions.
 | context | 262,144 tokens | 256,000 tokens |
 | license | Apache-2.0 | Apache-2.0 |
 
-On the shared benchmarks, Qwen3.8-27B leads comfortably on coding and
-reasoning. Gemma-4-26B-A4B is an Apache-2.0 MoE built for speed: it activates
-only a few billion parameters per token, which is why its publishers report
-it running "almost as fast as a 4B model" while carrying far more knowledge.
-It also reads images. These two roles are complementary: Qwen is the
-quality-first brain, Gemma the fast, permissive, multimodal option.
+On the shared benchmarks, Qwen3.8-27B leads on coding and reasoning. Gemma-4-26B-A4B
+is an Apache-2.0 MoE built for speed: it activates only a few billion
+parameters per token, which is why its publishers report it running "almost
+as fast as a 4B model" while carrying far more knowledge. It also reads
+images. The two roles are complementary: Qwen is the quality-first brain,
+Gemma the fast, permissive, multimodal option.
 
 What the community says follows the same pattern. Third-party write-ups and
-developer tests consistently report that Qwen coders win on formal
-benchmarks, but that the gap narrows noticeably in real local usage on
-constrained hardware, and Reddit threads sometimes rank models differently
-from leaderboards — so treat any single leaderboard as orientation, not
-truth. All figures above are vendor-reported, and no benchmark answers the
-question that matters most for your own use: how the model behaves on your
-documents and your language. The "-it" Gemma repository names Italian, but
-neither vendor publishes Italian-specific quality numbers, so that claim
-stays unverified until measured here.
+developer tests consistently report that Qwen models win on formal benchmarks,
+but that the gap narrows in real local usage on constrained hardware, and
+Reddit threads sometimes rank models differently from leaderboards. So treat
+any single leaderboard as orientation, not as truth. All figures above are
+vendor-reported, and no benchmark answers the question that matters most for
+your own use: how the model behaves on your documents and in your language.
+The "-it" Gemma repository names Italian, but neither vendor publishes
+Italian-specific quality numbers, so that claim stays unverified until it is
+measured here.
 
 The community reputation of Qwen3.8-27B matches those numbers. Reviews and
 headlines describe it as a "frontier-level model that runs on home PC
 hardware", with agentic and coding results that rival paid frontier models on
-key benchmarks while staying small enough for a single consumer GPU or an
-APU like the one this machine is built on. The same sources add the
-qualifiers we already stated: the numbers are the vendor's own, cloud models
-still win where raw knowledge or very long reasoning matter, and the model
-takes its time to think. What is genuinely remarkable is the combination:
-capabilities that a few years ago needed a paid cloud API now run locally on
-consumer hardware, privately, with no subscription.
+key benchmarks, while staying small enough for a single consumer GPU or an
+APU like this one. The same sources add the qualifiers we already stated: the
+numbers are the vendor's own, cloud models still win where raw knowledge or
+very long reasoning matter, and the model takes its time to think. What is
+remarkable is the combination: capabilities that a few years ago needed a
+paid cloud API now run locally, privately, with no subscription.
 
-What this means for the machine: the dense and Flash-Next Qwen profiles stay
+What this means for the machine: the dense and Flash-Next Qwen profiles are
 the quality-first defaults, running on the purpose-built engine at high
-precision. Gemma-4 is downloaded as a candidate profile for speed and vision,
-but it is not in the switch yet: it needs its own ROCmFPX runtime, and its
-4-bit quality on this exact box must be benchmarked before it can be
-recommended. That measurement will be published here, exactly like the ones
-above.
+precision. Gemma-4 and DeepSeek-V4-Flash are the speed-oriented profiles;
+their measured numbers are in the table above.
 
 ---
 
 ### Defaults we ship, and why (in plain words)
 
 Thinking is not free, and more of it is not automatically better. A model
-that reasons a long time can spend its whole budget "thinking" and never get
-around to answering. That is not hypothetical: Qwen3.8-27B, when a request
-does not say otherwise, uses the vendor's highest reasoning setting, and that
-default is the documented cause of long thinking loops and empty replies
-(upstream issue QwenLM/Qwen3.8#216; in one measured case the model burned over
-twenty-two thousand thinking tokens to produce three thousand tokens of
-answer, roughly seven times the useful work).
+that reasons for a long time can spend its whole budget "thinking" and never
+get around to answering. That is not a hypothetical case: Qwen3.8-27B, when a
+request does not say otherwise, uses the vendor's highest reasoning setting,
+and that default is the documented cause of long thinking loops and empty
+replies (upstream issue QwenLM/Qwen3.8#216; in one measured case the model
+spent over twenty-two thousand thinking tokens to produce three thousand
+tokens of answer, roughly seven times the useful work).
 
 The defaults shipped here are therefore deliberate:
 
 - **Chat and coding on Qwen3.8-27B:** reasoning effort `low` (the setting used
   for the measurements in this README). Use `medium` for genuinely hard
-  problems and turn thinking off for trivial requests, but always leave an
+  problems, and turn thinking off for trivial requests, but always leave an
   answer budget large enough that thinking cannot eat it.
 - **DeepSeek-V4-Flash:** the vendor's recommendation for code agents is
   `temperature 1.0`, `top_p 0.95` and maximum reasoning effort, which is what
   the profile ships. Its thinking phase ignores sampling settings, so lowering
-  the temperature does not calm the reasoning loop.
-- **Gemma-4:** it thinks a lot, so give it a generous token budget — with a
+  the temperature does not calm the reasoning loop. It also needs a large
+  answer budget: with 192 and with 512 tokens, every request we measured spent
+  the whole budget on reasoning.
+- **Gemma-4:** it thinks a lot, so give it a generous token budget. With a
   two-hundred-token limit its answers came back empty in our tests, which is
   why its measured row uses 512 tokens.
 - **The orchestrator:** short answers only. It exists to make a fast decision
-  (a 24-token routing answer took about 130 ms), so do not hand it a long
+  (a 24-token routing answer took about 130 ms), so do not give it a long
   thinking budget.
 - **Context windows** follow each profile's own design (262,144 tokens for
   Qwen dense, 256,000 for Gemma-4, and what the flash families document). A
   bigger window is not free: the KV cache grows with it and shares the same
   memory pool as the model.
 
-The rule of thumb in one sentence: give a model just enough thinking for the
-task, an answer budget large enough that thinking cannot consume it, and the
-sampling values its own vendor recommends — then measure, as we did.
+The rule in one sentence: give a model just enough thinking for the task, an
+answer budget large enough that thinking cannot consume it, and the sampling
+values its own vendor recommends — then measure, as we did.
 
-## The orchestrator: a small, fast model that gives the work to the right specialist
+## The orchestrator: a small, fast model that hands work to the right specialist
 
-This profile deliberately does not appear in the comparison table, because it
-is not a competitor to the big models. It plays a different role.
+This profile does not appear in the comparison table, because it does not
+compete with the big models. It has a different job.
 
-An orchestrator is the component that decides what must be done and who
-should do it: it reads a request, breaks it into pieces, sends each piece to
-the right specialist model or tool, and assembles the answers. In the AI
-literature the same idea appears under several names, and they are used
-almost interchangeably: orchestrator, router, dispatcher, supervisor,
-planner, controller, and Anthropic's "lead agent" in its orchestrator-worker
-design. A related, lighter variant is the "semantic router", which makes the
-decision with vector similarity instead of a full model call.
+An orchestrator decides what has to be done and who should do it: it reads a
+request, splits it into parts, sends each part to the right specialist model
+or tool, and assembles the answers. In the literature the same idea appears
+under several names, used almost interchangeably: orchestrator, router,
+dispatcher, supervisor, planner, controller, and Anthropic's "lead agent" in
+its orchestrator-worker design. A lighter variant is the "semantic router",
+which decides with vector similarity instead of a full model call.
 
 The point of giving this job to a *small* model is efficiency, not
-intelligence. Routing, classifying, choosing a tool, planning a short
-sequence of steps — these are simple tasks that a 350M-to-1.5B model handles
-in milliseconds, and doing them with a big model means paying the big model's
-memory bandwidth for work that does not need it. On this machine the numbers
-make it stark: the dense 27B profile reads about 23.5 GB for every token it
+intelligence. Routing, classifying, choosing a tool and planning a short
+sequence of steps are simple tasks. A 350M-to-1.5B model does them in
+milliseconds. Doing them with a big model means paying the big model's memory
+bandwidth for work that does not need it. The numbers on this machine make
+that clear: the dense 27B profile reads about 23.5 GB for every token it
 generates, while a 1.2B model at 4-bit reads under 1 GB. The orchestrator can
-therefore run continuously, answer instantly, and cost the specialist model
-barely 1-2% of its bandwidth when both are resident.
+therefore run all the time, answer immediately, and cost the specialist model
+barely 1–2% of its bandwidth when both are resident.
 
-Two everyday pictures make the idea clear. The first is the conductor of an
-orchestra: the conductor does not play the violin or the trumpet better than
-the musicians; the craft is knowing who plays when, and keeping the whole
-piece coherent. The second is the office boss who looks like the hardest
-worker in the building but actually produces the least — the skill is handing
-each task to the person who is competent at it, then checking the result. A
-famous real-world version of the same pattern is Elon Musk: the media credit
-him personally with rockets and electric cars, but the engineering is done by
-thousands of specialists whose work he directs and integrates.
+The pattern is old and familiar: a conductor does not play the violin better
+than the musicians; the craft is knowing who plays when, and keeping the
+piece coherent. The same shape appears in offices, where the person
+coordinating the work produces less than the specialists but decides who does
+what.
 
 A second job for the orchestrator is reactive control: home automation, IoT
 devices and voice front-ends. In these settings almost nothing needs
@@ -890,123 +961,120 @@ series of steps. Most of those procedures are semi-deterministic — a flow
 diagram with a few branches, not a problem to solve from scratch — and what
 matters is latency and availability, not depth. A small model does the mapping
 in milliseconds, is always resident, and never competes with a specialist
-model that is busy thinking somewhere else. Using a large model for this kind
-of work is like using a missile as a hammer to hang a picture: it can drive
-the nail, but slowly, expensively and with a great deal of unnecessary
-damage. The orchestrator is the hammer.
+model that is busy thinking elsewhere. Using a large model here is like using
+a missile as a hammer: it can drive the nail, but slowly, expensively and
+with a lot of unnecessary damage.
 
-Two boundaries are worth stating, because they keep the design honest. First,
-where a procedure is fully deterministic, ordinary code is cheaper and faster
-than any model: the orchestrator earns its place at the fuzzy edge —
-understanding what the user meant, filling in a missing detail, choosing
-between a few known flows — and the moment the flow is known, plain logic
-should run it. The strongest designs put rules first and the model behind
-them, so a keyword table can answer most commands in well under a
-millisecond and the model only handles the rest. Second, actions that matter —
-locks, alarms, appliances — need guardrails: the model should choose from an
-allowed list of commands instead of emitting free-form text, anything
-irreversible asks for confirmation, and a deterministic fallback keeps working
-when the model is unavailable. The orchestrator is a hammer for the right
-nail, not a safety mechanism.
+Two boundaries keep the design honest. First, where a procedure is fully
+deterministic, ordinary code is cheaper and faster than any model: the
+orchestrator earns its place at the fuzzy edge — understanding what the user
+meant, filling in a missing detail, choosing between a few known flows — and
+as soon as the flow is known, plain logic should run it. The strongest designs
+put rules first and the model behind them: a keyword table answers most
+commands in well under a millisecond, and the model handles the rest. Second,
+actions that matter — locks, alarms, appliances — need guardrails: the model
+should choose from a list of allowed commands instead of producing free text,
+anything irreversible should ask for confirmation, and a deterministic
+fallback should keep working when the model is unavailable.
 
-Beyond routing and reactive control, the same role covers several adjacent
-jobs: picking the model tier for a request; rewriting or expanding a search
-query before retrieval; summarizing a long conversation before handing it to
-the specialist; running cheap guardrails such as moderation, personal-data
-checks or prompt-injection detection in front of the expensive model; making a
-first-pass judgement of the specialist's answer; and spawning or coordinating
-subagents. All of them are short, cheap decisions where a large model's
+Beyond routing and reactive control, the same role covers adjacent jobs:
+choosing the model tier for a request; rewriting or expanding a search query
+before retrieval; summarizing a long conversation before handing it to the
+specialist; running cheap guardrails such as moderation, personal-data checks
+or prompt-injection detection in front of the expensive model; making a
+first-pass judgement of the specialist's answer; and starting or coordinating
+subagents. All of them are short, cheap decisions, where a large model's
 latency is pure waste.
 
-This philosophy is not invented here; it is how production systems are
-built. Anthropic describes an orchestrator-worker design in which a lead
-agent plans, spawns three to five specialized subagents in parallel, and
-synthesizes their findings, reporting roughly four times the tokens of a
-chat interaction for agents and about fifteen times for multi-agent runs —
-token spend that only makes sense if the expensive work is handed out
-deliberately. Framework and infrastructure projects encode the same split:
-LangGraph's supervisor pattern (a supervisor coordinates specialist agents),
-vLLM's semantic router (a programmable routing layer over a mixture of
-models), the aurelio-labs semantic router (fast vector-space decisions
-instead of slow generations), and the model-router and cascade ideas
-(RouteLLM, FrugalGPT) that send each request to the cheapest model that can
-handle it. Vendors of commercial routers claim 70-90% cost reductions and
-2-3x faster median responses from exactly this split, and while those are
-marketing numbers, the mechanism is real and it is the reason the pattern is
-everywhere in agentic stacks.
+This is how production systems are built, not an invention of this project.
+Anthropic describes an orchestrator-worker design in which a lead agent plans,
+starts three to five specialized subagents in parallel, and combines their
+findings. Frameworks encode the same split: LangGraph's supervisor pattern,
+vLLM's semantic router, the aurelio-labs semantic router, and the
+model-router/cascade ideas (RouteLLM, FrugalGPT) that send each request to
+the cheapest model that can handle it. Vendors of commercial routers claim
+70–90% cost reductions and 2–3× faster median responses from this split;
+those are marketing numbers, but the mechanism is real, and it is why the
+pattern is everywhere in agentic stacks.
 
-On this machine the plan is concrete, and it is now measured. A small Liquid
-LFM2.5 model becomes a resident orchestrator on its own port, while the
-dense, Flash-Next or DeepSeek profile stays on the main endpoint for the work
-that actually needs a big model. Clients keep talking to the same address; the
-orchestrator quietly decides whether the request is simple enough to answer
-itself or worth waking the specialist.
+On this machine the plan is concrete, and it is measured. A small Liquid
+LFM2.5 model becomes a resident orchestrator on its own port, while the dense,
+Flash-Next or DeepSeek profile stays on the main endpoint for the work that
+needs a big model. Clients keep talking to the same address; the orchestrator
+decides whether the request is simple enough to answer itself or worth waking
+the specialist.
 
 | small model | decode (llama-bench tg128) | end-to-end generation | prefill (pp512) | short routing answer |
 |---|---|---|---|---|
 | LFM2.5-350M Q4_K_M | **465 t/s** | — | 21,280 t/s | — |
 | LFM2.5-1.2B Thinking Q4_K_M | **216 t/s** | **204 t/s** | 8,182 t/s | **0.130 s** for 24 tokens |
 
-Those numbers answer the question the section opened with: yes, a small local
-model comfortably exceeds two hundred tokens per second on this machine, and a
+Those numbers answer the question the section opened with: a small local model
+comfortably exceeds two hundred tokens per second on this machine, and a
 routing decision comes back in about a tenth of a second, which is the
 latency a voice or home-automation front-end needs. Tuning was checked rather
 than assumed: on the 1.2B model, thread counts of 8 and 16 and alternative
 batch sizes all landed within 0.2% of the defaults, so the defaults are what
 is shipped. Both files were verified byte-for-byte against the official
-Hugging Face SHA-256 sums before being used.
+Hugging Face SHA-256 sums before use.
 
-Co-residency was measured rather than assumed. With the small model
-resident but idle, the large model's throughput did not change beyond noise
-(prose 56.5 vs 55.6 t/s, code 57.6 vs 57.6). While the orchestrator was
-actively generating in parallel, prose dipped at most about three percent
-(53.9 t/s) and code was unaffected. That is the real price of keeping a
-dispatcher ready: essentially nothing while it waits, a few percent while it
-works.
+Co-residency was measured, not assumed. With the small model resident but
+idle, the large model's throughput did not change beyond noise (prose 56.5
+against 55.6 t/s, code 57.6 against 57.6). While the orchestrator was actively
+generating in parallel, prose dipped by at most about three percent (53.9
+t/s) and code was unaffected. That is the real price of keeping a dispatcher
+ready: almost nothing while it waits, a few percent while it works.
 
-The orchestrator has its own systemd unit and is toggled independently with
+The orchestrator has its own systemd unit and is toggled with
 `superfast-switch orchestrator on|off`, so enabling it never disturbs the
-active profile. Its measured numbers stay out of the comparison table above,
-which is about the specialist models.
+active profile. Its numbers stay out of the comparison table, which is about
+the specialist models.
 
 ---
 
 ## Choose a model profile
 
-The machine runs **one model profile at a time**, and every profile serves
-the same OpenAI-compatible endpoint on port 8731. Clients — scripts, apps,
-AgentBridge — never change their configuration when you switch: the model
-behind the endpoint is the only thing that changes. Stopping one profile
-releases its memory before the next one loads, so dense 27B, the Flash-Next
-MoE and any future profile do not compete for resources.
+The machine runs **one model profile at a time**, and every profile serves the
+same OpenAI-compatible endpoint on port 8731. Clients — scripts, apps,
+AgentBridge — never change their configuration when you switch: only the
+model behind the endpoint changes. Stopping one profile releases its memory
+before the next one loads, so the dense 27B, the Flash-Next MoE and any future
+profile do not compete for resources.
 
 The setup script ([`deploy/setup-fedora.sh`](deploy/setup-fedora.sh), phases
-8-9) installs everything: the dense profile unit, the Flash-Next profile
-unit and the switch itself into `~/.local/bin/superfast-switch`. If you only
-want the switch on an already-configured machine:
+8–10) installs everything: the dense profile unit, the Flash-Next profile
+unit, the switch itself into `~/.local/bin/superfast-switch`, the TUI, the
+API-key gateway and the GNOME panel. If you only want the switch on a machine
+that is already configured:
 
 ```bash
 cp tools/superfast-switch.sh ~/.local/bin/superfast-switch
 chmod +x ~/.local/bin/superfast-switch
 ```
 
-Use the switch tool on the machine:
+Use the switch on the machine:
 
 ```bash
 superfast-switch status          # what is running now
+superfast-switch list            # available profiles
 superfast-switch use dense       # Qwen3.8-27B (halogen engine)
-superfast-switch use flash       # Qwen3.8-Flash-Next MoE (needs its weights)
+superfast-switch use flash       # Qwen3.8-Flash-Next MoE
+superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
+superfast-switch use deepseek    # DeepSeek-V4-Flash ROCmFPX
 superfast-switch stop            # stop everything
 ```
 
 The tool stops the current profile, starts the requested one and waits until
-`/health` answers, so after `use` the endpoint is ready. The `flash` profile
-refuses to start until its checkpoint has finished downloading. The measured
-numbers behind each profile live in the Performance section and are updated
-as new models are validated on this machine.
+`/health` answers, so when `use` returns, the endpoint is ready. A profile
+refuses to start until its weights are complete. The `deepseek` profile also
+needs the kernel parameters described in
+[step 3](#3-configure-the-machine-for-superfast); until you apply them, the
+switch refuses to start it and says so. The measured numbers behind each
+profile live in [Performance](#performance) and are updated as new models are
+validated on this machine.
 
 The auxiliary orchestrator is toggled separately, because it runs *alongside*
-whichever profile is active rather than replacing it:
+the active profile instead of replacing it:
 
 ```bash
 superfast-switch orchestrator on      # start the small router model (:8732)
@@ -1014,15 +1082,14 @@ superfast-switch orchestrator off     # stop it
 superfast-switch orchestrator status  # is it running?
 ```
 
-It is off by default and costs the specialist model only one to two percent
-of memory bandwidth when enabled. The setup script installs its unit once the
-small model has been chosen and measured.
+It is off by default and costs the specialist model one to two percent of
+memory bandwidth when enabled.
 
-The same controls exist in two friendlier forms. On the desktop there is a
-small GNOME panel menu (`gnome-shell-extension/`) that shows what is serving
-and lets you switch model or toggle the orchestrator with a click. In a
-terminal — including over SSH — `superfast-tui` offers a minimal menu plus
-simple commands (`status`, `use`, `orchestrator`, `api-key`, `help`).
+The same controls exist in two friendlier forms. On the desktop, a small GNOME
+panel menu (`gnome-shell-extension/`) shows what is serving and lets you switch
+model or toggle the orchestrator with a click. In a terminal — including over
+SSH — `superfast-tui` offers a minimal menu plus simple commands (`status`,
+`use`, `orchestrator`, `api-key`, `help`).
 
 ### Locking it down (API key)
 
@@ -1042,42 +1109,39 @@ send the key, and requests without it are refused with 401:
 Authorization: Bearer <your key>
 ```
 
-The loopback endpoint stays key-less, so local tools are unaffected; the
+The loopback endpoint stays key-less, so local tools are unaffected. The
 firewall decides whether 8741 is reachable from outside, and it should be
 opened deliberately, not by default.
 
-**Roadmap: other model families.** A second runtime is planned for the
-machine — llama.cpp with the ROCmFPX fork, which serves GGUF models with
-AMD's FP4 tensor types. One such runtime can host several profiles, because a
-profile is just a weight folder plus a systemd unit. The candidate profiles
-for it are Gemma-4-26B-A4B (weights already downloaded) and
-DeepSeek-V4-Flash, the two most promising recent families for this APU.
-Nothing from this runtime enters the switch before it is measured on this
-exact machine and its numbers are published here; the Qwen profiles remain
-the validated defaults.
+**Roadmap: other model families.** A second runtime is already in use —
+llama.cpp with the ROCmFPX fork, which serves GGUF models with AMD's FP4
+tensor types. One such runtime can host several profiles, because a profile
+is only a weight folder plus a systemd unit. Gemma-4-26B-A4B and
+DeepSeek-V4-Flash are the two families validated on it so far. Nothing enters
+the switch before it is measured on this exact machine and its numbers are
+published here.
 
 ---
 
 ## Make it your personal assistant with AgentBridge
 
-The machine you built is a fast and private LLM server. The last step turns
-it into a personal assistant you can actually talk to.
+The machine you built is a fast, private LLM server. The last step turns it
+into a personal assistant you can talk to.
 
 **What AgentBridge is, in plain words.** AgentBridge is a program that runs
-your own AI agents on a normal computer. You chat with it in a terminal and
+your own AI agents on a normal computer. You chat with it in a terminal, and
 it can do real work for you: reading and summarizing your documents, drafting
 files, working with spreadsheets, browsing the web, sending email. Everything
 runs on your own hardware and stays private. AgentBridge is self-hosted and
 open source, and it follows a "bring your own model" approach: it uses
-whatever LLM you point it at — and that is exactly what the SUPERFAST server
-on this machine provides.
+whatever LLM you point it at — which is what the SUPERFAST server provides.
 
 **Where it runs.** AgentBridge does not have to run on the Fedora machine.
-The Fedora machine is the brain: an OpenAI-compatible API on port 8731.
-Install AgentBridge on your everyday computer (Windows, Linux or macOS), add
-the SUPERFAST server as its model provider, and the assistant works locally
-on your computer while asking the server for intelligence. The API needs no
-key on a private network.
+The Fedora machine is the brain: an OpenAI-compatible API on port 8731. Install
+AgentBridge on your everyday computer (Windows, Linux or macOS), add the
+SUPERFAST server as its model provider, and the assistant works locally on
+your computer while asking the server for intelligence. The API needs no key
+on a private network.
 
 **How to install it.** AgentBridge ships self-contained binaries, so no .NET
 runtime is needed. On Windows, open PowerShell and run:
@@ -1108,16 +1172,16 @@ curl -s localhost:8731/health         # -> "model":"gemma-4-26b-a4b"
 ```
 
 From any computer on the network, the OpenAI-compatible endpoint is
-`http://<machine-ip>:8731` and the model name is whatever `/health` reports —
+`http://<machine-ip>:8731`, and the model name is whatever `/health` reports —
 `gemma-4-26b-a4b`, `deepseek-v4-flash` or the Qwen name, depending on the
-profile that is active. One caution learned the hard way: give the model a
-generous `max_tokens`. In our own test, a 256-token budget was consumed
-entirely by Gemma's reasoning phase and the answer came back empty; 1,024
-tokens produced a normal reply. If you enabled the API-key gateway, point the
-client at `http://<machine-ip>:8741` instead and send
-`Authorization: Bearer <key>`.
+active profile. One caution learned the hard way: give the model a generous
+`max_tokens`. In our own test, a 256-token budget was consumed entirely by
+Gemma's reasoning phase and the answer came back empty; 1,024 tokens produced
+a normal reply. If you enabled the API-key gateway, point the client at
+`http://<machine-ip>:8741` instead and send `Authorization: Bearer <key>`.
 
-The official repository is [github.com/Graphene-Lab/AgentBridge](https://github.com/Graphene-Lab/AgentBridge/):
+The official repository is
+[github.com/Graphene-Lab/AgentBridge](https://github.com/Graphene-Lab/AgentBridge/):
 there you will find the releases, the full manual and the tools the agents can
 use.
 
@@ -1129,10 +1193,10 @@ A few years ago, this level of quality required a paid API and sent your
 questions to someone else's datacenter. A model that rivals paid frontier
 services while running entirely on a machine you own changes the economics:
 no subscription, no usage caps, and nothing leaves your home. That is the
-deeper point of this project — models this good are what make independence
-possible. It is also why this space moves so quickly: every user who stops
-renting intelligence and runs it locally is a cost that the giant datacenter
-build-outs find harder and harder to justify.
+deeper point of this project: models this good are what make independence
+possible. It is also why this field moves so quickly — every user who stops
+renting intelligence and runs it locally is a cost that the large datacenter
+build-outs find harder to justify.
 
 ---
 
@@ -1144,4 +1208,4 @@ Benchmark publication expressly permitted. See [`LICENSE`](LICENSE.md) and
 inside the image.
 
 **Model weights are not included and are not covered** by that license. They
-are obtained separately and licensed by their original authors.
+are obtained separately and are licensed by their original authors.

@@ -69,7 +69,7 @@ documented as such.
 
 | flag | default | meaning |
 |---|---|---|
-| `SUPERFAST_DOWNLOAD` | *(unset = off)* | HuggingFace repo id to fetch weights from at startup, e.g. `peonist-ai/superfast-qwen3.8-27b`. **Off by default**: with it unset the container makes no outbound connections at all. It fires only when the checkpoint is genuinely missing, so restarts never re-download, and interrupted transfers resume. The models volume must be mounted read-**write** for this, not `:ro`. |
+| `SUPERFAST_DOWNLOAD` | *(unset = off)* | HuggingFace repo id to fetch weights from at startup, e.g. `peonist-ai/halogen-qwen3.8-27b`. **Off by default**: with it unset the container makes no outbound connections at all. It fires only when the checkpoint is genuinely missing, so restarts never re-download, and interrupted transfers resume. The models volume must be mounted read-**write** for this, not `:ro`. |
 
 ## Benchmark tooling
 

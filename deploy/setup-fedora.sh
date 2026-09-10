@@ -12,23 +12,28 @@
 #   bash deploy/setup-fedora.sh
 #
 # Env overrides:
-#   SUPERFAST_IMAGE   ghcr.io/peonist-ai/superfast:0.1.3 once published
-#                     (default: halogen tag, the currently published image)
+#   SUPERFAST_IMAGE   image to run (default: the published halogen tag).
+#                     A `superfast` tag does not exist yet; when it is
+#                     published it will be the same content.
 #   MODELS_DIR        where the checkpoint lives (default: ~/superfast-models)
 #   SKIP_UPDATE=1     skip `dnf upgrade`
 #   SMOKE=1           also run the small container device test
 #
-# The reference host uses LUKS disk encryption: headless reboots stop at the
-# passphrase prompt (console unlock required; TPM2/clevis unlock is a future
-# option, not part of this script).
+# Disk encryption: the reference host does NOT use it, so reboots are fully
+# headless (verified 2026-09-10). If you enable encryption in the installer,
+# every reboot then stops at the passphrase prompt and needs a console;
+# TPM2/clevis auto-unlock would be required for headless operation.
 #
 # Memory layout: the reference host BIOS has the UMA frame buffer set to its
 # minimum (1 GB), so the full unified memory is one pool. This is required for
 # large checkpoints (e.g. the ~115 GB Flash-Next MoE); it is harmless for the
-# dense 27B checkpoint. Phase 5 also raises the TTM/GTT shared-memory limit.
+# dense 27B checkpoint. Phase 5 also raises the shared-memory limits the GPU
+# may allocate from (amdgpu.gttsize + ttm.pages_limit, both on the kernel
+# command line), which the largest checkpoints need.
 set -euo pipefail
 
 IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
+REBOOT_NEEDED=0
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
 CKPT="$MODELS_DIR/qwen3.8-27b-p1w4d-d2.hgn"
 PART="$CKPT.part"
@@ -82,11 +87,28 @@ phase_suspend_mask() {
     # Required for unattended big downloads: GNOME suspended the reference
     # host mid-download once (see runbook).
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
-    # TTM/GTT shared-memory limit, raised to ~120 GiB and persisted across
-    # reboots. Runtime write also works:
-    #   echo 31457280 | sudo tee /sys/module/ttm/parameters/pages_limit
-    echo 'options ttm pages_limit=31457280' | sudo tee /etc/modprobe.d/ttm.conf
-    log "sleep/suspend/hibernate masked; ttm.conf written (applies on next boot)"
+    # The shared memory the GPU may allocate is the SMALLER of these two
+    # limits, and both sit at their defaults until raised:
+    #   amdgpu.gttsize    -> GTT aperture, in MiB
+    #   ttm.pages_limit   -> TTM limit, in 4 KiB pages
+    # Measured on the reference host: 16309919 pages * 4096 B = 63710 MiB, and
+    # the GPU runtime reported exactly 63710 MiB of device memory. Raising
+    # only one of the two changes nothing, and a runtime sysfs write is too
+    # late because amdgpu fixes the pool size when it loads. Both therefore go
+    # on the kernel command line, which needs a reboot. Without this the large
+    # checkpoints fail with "cudaMalloc failed: out of memory".
+    cmdline_args="amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+    if grep -q -- "amdgpu.gttsize=" /etc/kernel/cmdline 2>/dev/null; then
+        log "shared-memory parameters already present in /etc/kernel/cmdline"
+    else
+        sudo grubby --update-kernel=ALL --args="$cmdline_args"
+        log "added to the kernel command line: $cmdline_args (REBOOT REQUIRED)"
+        REBOOT_NEEDED=1
+    fi
+    # Kept as well for module loads that happen outside the kernel command
+    # line; on Fedora it is NOT enough on its own (not in the initramfs).
+    echo 'options ttm pages_limit=31457280' | sudo tee /etc/modprobe.d/ttm.conf >/dev/null
+    log "sleep/suspend/hibernate masked; shared-memory limit set"
 }
 
 phase_weights() {
@@ -349,6 +371,11 @@ main() {
     phase_ui_auth
     log "setup complete — dense profile serving on http://<host>:8731"
     log "control: superfast-tui (terminal) or the GNOME extension; switch with superfast-switch"
+    if [ "$REBOOT_NEEDED" = "1" ]; then
+        log "REBOOT REQUIRED: the shared-memory kernel parameters take effect only after a reboot."
+        log "After rebooting, the large profiles (flash, deepseek) can load; check with:"
+        log "  cat /proc/cmdline   # must show amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+    fi
 }
 
 main

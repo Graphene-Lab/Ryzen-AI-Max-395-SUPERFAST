@@ -10,10 +10,13 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
 - `Dockerfile` — the reproducible build of `llama-server` for gfx1151.
 - `NOTICE.md` — credits and licenses of every upstream component
   (everything is MIT lineage except AMD's ROCm libraries; see the notice).
-- The **prebuilt image**, published to GHCR under this project once the
-  validated build is measured. Pull it instead of building:
+- The **prebuilt image**. It is not published on GHCR yet: publishing needs a
+  token with `write:packages`, and the one available to us does not have it.
+  Until then, build the image locally (one command, below). The intended
+  location, for when it is published:
 
   ```bash
+  # not available yet — build it locally instead
   podman pull ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1
   ```
 
