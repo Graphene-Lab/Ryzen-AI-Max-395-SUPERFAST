@@ -752,6 +752,69 @@ above.
 
 ---
 
+## The orchestrator: a small, fast model that gives the work to the right specialist
+
+This profile deliberately does not appear in the comparison table, because it
+is not a competitor to the big models. It plays a different role.
+
+An orchestrator is the component that decides what must be done and who
+should do it: it reads a request, breaks it into pieces, sends each piece to
+the right specialist model or tool, and assembles the answers. In the AI
+literature the same idea appears under several names, and they are used
+almost interchangeably: orchestrator, router, dispatcher, supervisor,
+planner, controller, and Anthropic's "lead agent" in its orchestrator-worker
+design. A related, lighter variant is the "semantic router", which makes the
+decision with vector similarity instead of a full model call.
+
+The point of giving this job to a *small* model is efficiency, not
+intelligence. Routing, classifying, choosing a tool, planning a short
+sequence of steps — these are simple tasks that a 350M-to-1.5B model handles
+in milliseconds, and doing them with a big model means paying the big model's
+memory bandwidth for work that does not need it. On this machine the numbers
+make it stark: the dense 27B profile reads about 23.5 GB for every token it
+generates, while a 1.2B model at 4-bit reads under 1 GB. The orchestrator can
+therefore run continuously, answer instantly, and cost the specialist model
+barely 1-2% of its bandwidth when both are resident.
+
+Two everyday pictures make the idea clear. The first is the conductor of an
+orchestra: the conductor does not play the violin or the trumpet better than
+the musicians; the craft is knowing who plays when, and keeping the whole
+piece coherent. The second is the office boss who looks like the hardest
+worker in the building but actually produces the least — the skill is handing
+each task to the person who is competent at it, then checking the result. A
+famous real-world version of the same pattern is Elon Musk: the media credit
+him personally with rockets and electric cars, but the engineering is done by
+thousands of specialists whose work he directs and integrates.
+
+This philosophy is not invented here; it is how production systems are
+built. Anthropic describes an orchestrator-worker design in which a lead
+agent plans, spawns three to five specialized subagents in parallel, and
+synthesizes their findings, reporting roughly four times the tokens of a
+chat interaction for agents and about fifteen times for multi-agent runs —
+token spend that only makes sense if the expensive work is handed out
+deliberately. Framework and infrastructure projects encode the same split:
+LangGraph's supervisor pattern (a supervisor coordinates specialist agents),
+vLLM's semantic router (a programmable routing layer over a mixture of
+models), the aurelio-labs semantic router (fast vector-space decisions
+instead of slow generations), and the model-router and cascade ideas
+(RouteLLM, FrugalGPT) that send each request to the cheapest model that can
+handle it. Vendors of commercial routers claim 70-90% cost reductions and
+2-3x faster median responses from exactly this split, and while those are
+marketing numbers, the mechanism is real and it is the reason the pattern is
+everywhere in agentic stacks.
+
+On this machine the plan is concrete. A small Liquid LFM2.5 model (350M and a
+1.2B "Thinking" variant are being measured as this is written) becomes a
+resident orchestrator on its own port, while the dense, Flash-Next or
+DeepSeek profile stays on the main endpoint for the work that actually needs
+a big model. Clients keep talking to the same address; the orchestrator
+quietly decides whether the request is simple enough to answer itself or
+worth waking the specialist. Measured numbers for the small models will be
+added here as soon as they are benchmarked, and they intentionally stay out
+of the comparison table above, which is about the specialist models.
+
+---
+
 ## Choose a model profile
 
 The machine runs **one model profile at a time**, and every profile serves
