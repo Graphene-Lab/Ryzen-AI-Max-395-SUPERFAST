@@ -47,7 +47,11 @@ ORCH_PORT="${SUPERFAST_ORCH_PORT:-8732}"
 ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 
 http_ok() {
-    curl -s -o /dev/null --max-time 5 "$HEALTH" 2>/dev/null
+    # A reply is not enough: a llama.cpp profile binds its port immediately and
+    # answers 503 "Loading model" until the weights are in memory, so require
+    # HTTP 200. Without this the switch announces a profile that is not ready
+    # yet (measured: gemma reported "serving" after 10 s and answered 503).
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH" 2>/dev/null)" = "200" ]
 }
 
 model_name() {
@@ -121,7 +125,9 @@ cmd_orchestrator() {
             fi
             systemctl --user start "$ORCH_UNIT"
             for i in $(seq 1 60); do
-                if curl -s -o /dev/null --max-time 3 "$ORCH_HEALTH"; then
+                # Same as http_ok: the small model also serves llama.cpp, which
+                # answers 503 while loading.
+                if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$ORCH_HEALTH" 2>/dev/null)" = "200" ]; then
                     echo "orchestrator active on :${ORCH_PORT} (after ~$((i * 5))s)"
                     return 0
                 fi

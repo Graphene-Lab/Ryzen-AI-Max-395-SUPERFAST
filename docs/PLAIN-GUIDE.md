@@ -30,12 +30,15 @@ Think of it as owning a very good assistant instead of renting one:
 Several "models" live on the machine, and you pick one at a time:
 
 - **Qwen3.8-27B (dense)** — the careful, high-quality model. Best answers,
-  slower (about 24 words per second).
+  slower (about 21 words per second).
 - **Qwen3.8-Flash-Next (MoE)** — a bigger, newer model that works differently
   and is much faster.
 - **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second) and can
   also look at images.
-- **DeepSeek-V4-Flash** — a fast coding-oriented model.
+- **DeepSeek-V4-Flash** — a very large model (284 billion parameters) for
+  coding and hard problems. It is the **slowest** of the four (about 11 words
+  per second), it needs a large answer budget, and it requires two kernel
+  settings on the machine, which the setup script applies.
 - **The orchestrator** — a tiny, very fast model that acts like a dispatcher:
   it reads simple requests and answers or routes them immediately, so the big
   model is not woken up for trivial work. It is a bit like the conductor of an
@@ -69,5 +72,6 @@ when you switch.
   for too long and loop. The main README explains the defaults we ship and
   why, in the same plain style.
 - The first time you load a very large model can take a minute or two.
-- Numbers quoted anywhere in this project are measured on our own machine,
-  not copied from advertising.
+- Numbers that describe this machine are measured on it. Where the document
+  quotes figures from somebody else (a model vendor, or another project), it
+  says so next to the table.

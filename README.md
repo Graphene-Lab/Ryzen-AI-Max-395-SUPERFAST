@@ -25,8 +25,8 @@ The project turns that machine into a repeatable recipe:
 - models running in containers that carry their own ROCm,
 - a small switch that selects which model is active.
 
-Every speed and quality number in this document was measured on the reference
-machine. Nothing is here because it looks good in theory.
+Numbers that describe this machine were measured on it. Where a table in this
+document quotes somebody else's figures, it says so next to the table.
 
 ### A note on names
 
@@ -230,10 +230,25 @@ Things we learned on the reference machine:
 ## Get the weights
 
 Images contain the engine, not the weights: the dense image is 3.5 GB of
-engine, and its checkpoint is 35.9 GB. The setup script and the switch know
-where each profile keeps its weights — the dense profile in
-`~/superfast-models`, the Flash-Next profile in `~/superfast-flash`, and so
-on. For the dense profile, download the checkpoint once and mount it:
+engine, and its checkpoint is 35.9 GB. Each profile keeps its weights in its
+own directory, and the setup script and the switch know those paths.
+
+| profile | weights directory | files (size in bytes) | source |
+|---|---|---|---|
+| dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
+| flash | `~/superfast-flash` | `qwen38-flash-next-w4b.hgn` (124,068,083,904), `…overlay.hgn` (2,477,677,120), `…overlay-speed.hgn` (2,383,306,048) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-flash-next` |
+| gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
+| deepseek | `~/deepseek-models` | `…ROCMFPx-Strix-Lean-2.58bpw.gguf` (91,547,243,200), `…DSpark-draft-4.25bpw.gguf` (10,897,111,840) | HF `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` |
+| orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
+
+Two things the table does not show. The `gemma` and `deepseek` profiles need a
+second runtime, the GGUF server image built from [`runtime/`](runtime/README.md)
+(`llama-rocmfpx:7.2.4`); that image is not published on GHCR yet, so build it
+locally with one command — see `runtime/README.md`. And the MTP drafter of the
+Gemma profile is shipped but **not used**: the runtime build rejects the
+draft-context flag it needs, so the measured Gemma numbers are without it.
+
+For the dense profile, download the checkpoint once and mount it:
 
 ```bash
 pip install -U "huggingface_hub[cli]"
@@ -390,7 +405,9 @@ on the text, so it can quote a single number. This engine cannot.
 Measured profiles on the reference host (2026-09-10, Fedora 44, the same
 memory layout for every row: BIOS UMA 1 GB, unified pool,
 [`tools/quick-bench.py`](tools/quick-bench.py), greedy, `reasoning_effort:
-low`, `max_tokens: 192`, 3 reps, stable within ±1%):
+low`, `max_tokens: 192`, 3 reps; repeatable within about ±2% when nothing else
+is running on the machine; the Gemma-4 row uses a 512-token budget — see its
+note):
 
 | profile | runtime | prose | code | context probe (~2.2K) |
 |---|---|---|---|---|
@@ -550,6 +567,13 @@ profile in the same memory layout — about **1.8 times faster** — while using
 45 GB of memory instead of 36, and holding a 262,144-token context. Its cold
 load from disk to a healthy endpoint took about forty seconds.
 
+One open item on this profile. Its model card says speculative decoding with
+the MTP head is on by default when the head is present, and the optional
+speed overlay is the file that carries it. On our host, `/health` for this
+profile reports `drafter_weights_loaded: false`, so we publish the numbers
+above as they are: measured without the speed arm. We have not yet found why
+the unit does not load it, and we will not claim a speedup we have not seen.
+
 ---
 
 ## How it compares
@@ -557,7 +581,7 @@ load from disk to a healthy endpoint took about forty seconds.
 Published numbers from other projects running **the same model on the same
 silicon**. These are *their* figures on *their* configurations, not a
 head-to-head run by us. Quantization, KV-cache settings and context differ,
-so read this as orientation, not as a controlled benchmark.
+so use the table as a rough guide, not as a controlled comparison.
 
 | | SUPERFAST | [q38rocm](https://github.com/julianmb/q38rocm) | [KyaniteLabs](https://github.com/KyaniteLabs/qwen38-27b-strix-halo) |
 |---|---|---|---|
@@ -571,13 +595,14 @@ so read this as orientation, not as a controlled benchmark.
 with real context. That is what the engine was built for.
 
 **Where SUPERFAST loses:** unassisted decode — and that row is a diagnostic,
-not a product configuration. Nobody ships serial decode; every project in
-this table runs speculation by default. The gap is also not a kernel-quality
-issue: decode is bandwidth-limited. q38rocm streams about 17 GB per token
-against our 23.5, and fewer bits is simply faster. SUPERFAST spends those
-bits deliberately (see [`docs/QUANT.md`](docs/QUANT.md)): the only 4-bit
-tensors in our trunk are ones calibrated by somebody else, and the aggressive
-technique is fenced to prefill, where it never touches token generation.
+not a product configuration. No project in this table uses serial decode in
+production; every one of them runs speculation by default. The gap is also
+not a kernel-quality issue: decode is bandwidth-limited. q38rocm streams
+about 17 GB per token against our 23.5, and fewer bits is simply faster.
+SUPERFAST spends those bits deliberately (see
+[`docs/QUANT.md`](docs/QUANT.md)): the only 4-bit tensors in our trunk are
+ones calibrated by somebody else, and the aggressive technique is fenced to
+prefill, where it never touches token generation.
 
 **Batch-1 decode is at the hardware wall.** 10.58 t/s × 23.51 GB per token =
 249 GB/s against a measured ceiling of 240 GB/s. No kernel win is left there
@@ -586,7 +611,7 @@ batching.
 
 **About the 148–163 t/s figure** that circulates for llama.cpp on this
 hardware: it is an artifact of n-gram repetition on back-to-back identical
-runs, and KyaniteLabs — whose benchmark it is — says so and warns against
+runs, and KyaniteLabs — whose benchmark it is — says so, and warns against
 quoting it. We think that is the right way to publish, and we have tried to
 match it.
 
@@ -594,11 +619,11 @@ match it.
 
 ## Benchmark it yourself
 
-The image ships both benchmarks. No fixtures, no extra downloads, no
-cooperation from us.
+The image ships both benchmarks. There are no fixtures to prepare, no extra
+download, and nothing you have to ask us for.
 
 ```bash
-# ten real prompt shapes over the HTTP endpoint — the number of record
+# ten real prompt shapes over the HTTP endpoint — the reference number
 podman run --rm --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
   -v /path/to/models:/models:ro -v /path/to/tokenizer:/tokenizer:ro \
@@ -948,8 +973,8 @@ therefore run all the time, answer immediately, and cost the specialist model
 barely 1–2% of its bandwidth when both are resident.
 
 The pattern is old and familiar: a conductor does not play the violin better
-than the musicians; the craft is knowing who plays when, and keeping the
-piece coherent. The same shape appears in offices, where the person
+than the musicians; the work is deciding who plays when, and keeping the
+piece together. The same shape appears in offices, where the person
 coordinating the work produces less than the specialists but decides who does
 what.
 
@@ -961,13 +986,13 @@ series of steps. Most of those procedures are semi-deterministic — a flow
 diagram with a few branches, not a problem to solve from scratch — and what
 matters is latency and availability, not depth. A small model does the mapping
 in milliseconds, is always resident, and never competes with a specialist
-model that is busy thinking elsewhere. Using a large model here is like using
-a missile as a hammer: it can drive the nail, but slowly, expensively and
-with a lot of unnecessary damage.
+model that is busy thinking elsewhere. Using a large model for this work is
+slow and expensive, like using a missile to drive a nail: it works, but with
+far more power than the job needs.
 
 Two boundaries keep the design honest. First, where a procedure is fully
 deterministic, ordinary code is cheaper and faster than any model: the
-orchestrator earns its place at the fuzzy edge — understanding what the user
+orchestrator is useful in the unclear cases — understanding what the user
 meant, filling in a missing detail, choosing between a few known flows — and
 as soon as the flow is known, plain logic should run it. The strongest designs
 put rules first and the model behind them: a keyword table answers most
@@ -1065,10 +1090,13 @@ superfast-switch stop            # stop everything
 ```
 
 The tool stops the current profile, starts the requested one and waits until
-`/health` answers, so when `use` returns, the endpoint is ready. A profile
-refuses to start until its weights are complete. The `deepseek` profile also
-needs the kernel parameters described in
-[step 3](#3-configure-the-machine-for-superfast); until you apply them, the
+`/health` answers with **200**, so when `use` returns, the endpoint is ready.
+This matters for the GGUF profiles: a llama.cpp server binds its port at once
+and answers 503 while it loads, so the switch waits for the load to finish (a
+minute or two for the large checkpoints) instead of reporting early. A profile
+also refuses to start until its weights are complete, and the `deepseek`
+profile additionally needs the kernel parameters described in
+[step 3](#3-configure-the-machine-for-superfast): until you apply them, the
 switch refuses to start it and says so. The measured numbers behind each
 profile live in [Performance](#performance) and are updated as new models are
 validated on this machine.
@@ -1083,7 +1111,10 @@ superfast-switch orchestrator status  # is it running?
 ```
 
 It is off by default and costs the specialist model one to two percent of
-memory bandwidth when enabled.
+memory bandwidth when enabled. Its two model files live in `~/small-models`
+(see the table in [Get the weights](#get-the-weights)); the setup script
+installs its systemd unit when those files are present, and the unit stays
+stopped until you switch it on.
 
 The same controls exist in two friendlier forms. On the desktop, a small GNOME
 panel menu (`gnome-shell-extension/`) shows what is serving and lets you switch
