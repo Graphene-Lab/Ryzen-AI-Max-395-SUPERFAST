@@ -132,7 +132,8 @@ is the path we used on a Ryzen AI Max+ 395.
 3. Run the setup script: it downloads the model and starts the engine — [step 3](#3-configure-the-machine-for-superfast).
 4. Download the weights and learn the API — [Get the weights](#get-the-weights).
 5. Measure and compare the speed — [Performance](#performance).
-6. Turn the machine into your personal assistant — [AgentBridge](#make-it-your-personal-assistant-with-agentbridge).
+6. Point your coding agent at the machine — [Recommended client configuration](#recommended-client-configuration-qwen-code-or-any-agentic-client).
+7. Turn the machine into your personal assistant — [AgentBridge](#make-it-your-personal-assistant-with-agentbridge).
 
 ### 1. Install Fedora Workstation 44 (recommended)
 
@@ -1467,48 +1468,70 @@ uses ~102 GB, keeps ~21 GB free, and a 1024-token generation finishes in 101
 seconds at 10.1 t/s. If this machine is to run nothing else, `-c 1048576` in
 `~/.config/systemd/user/deepseek.service` restores the full window.
 
-### Point a client at it
+### Recommended client configuration (Qwen Code, or any agentic client)
 
-Any OpenAI-compatible client works: the base URL is
-`http://<machine-ip>:8731/v1`, and on a machine reachable from your network
-you can instead use the key-protected gateway on port 8741 (open that port in
-the firewall first: `sudo firewall-cmd --add-port=8741/tcp --permanent &&
+A coding agent sends a large system prompt, the tool definitions and the files
+it is working on, and then asks for long answers. Any OpenAI-compatible client
+works, and the settings that matter are these — they come from the
+measurements above, not from taste. The base URL is
+`http://<machine-ip>:8731/v1`; on a machine reachable from your network you can
+use the key-protected gateway on port 8741 instead (open that port in the
+firewall first: `sudo firewall-cmd --add-port=8741/tcp --permanent &&
 sudo firewall-cmd --reload`).
-
-Four rules, and they come from the measurements above:
 
 | setting | what to do |
 |---|---|
 | model name | read it from `/health` (`"model"`). It changes with the active profile: `halogen-qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
 | context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
-| answer budget | always send a large `max_tokens` (8,192 is a good default). It covers the reasoning tokens too, and with a small budget the thinking models return an empty answer |
-| reasoning, temperature | send `reasoning_effort` when you want to change how much the model thinks (`low` for chat and code, `medium` for hard problems). Leave temperature and top_p alone: the machine already applies the values its model vendor recommends |
+| answer budget | **16,384 to 32,768 for coding**, not 8,192. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file |
+| sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
+| reasoning effort | on the Qwen profiles send `reasoning_effort` per request (`low` for chat and code, `medium` for hard problems): the vendor default over-thinks and that is the documented cause of long thinking loops. The GGUF profiles ignore the field |
 
-A worked example, the one used on the Windows PC that drives this machine — a
-model provider entry in Qwen Code's `~/.qwen/settings.json`:
+Two limits that only show up in long agentic sessions:
+
+- **The client caps a streamed answer at 15 minutes by default** (Qwen Code:
+  `QWEN_STREAM_MAX_LIFETIME_MS`). Converted to tokens on this hardware, 15
+  minutes is about 19,000 tokens on dense, 41,000 on flash and 10,000 on
+  DeepSeek. Either keep the answer budget inside those numbers or raise that
+  limit, otherwise a long turn is cut mid-answer even though the server is
+  fine.
+- **Keep the prefix stable.** Every turn re-sends the conversation, but the
+  server reuses what it computed before — the engine has a prompt cache, and
+  the GGUF servers reuse the KV of the sequence. That only works while the
+  beginning of the prompt does not change: keep the system prompt and the tool
+  definitions identical across turns, and put volatile content (the time,
+  command output) at the end. Qwen Code shows the cache work in `/stats`.
+
+A working entry for Qwen Code (`~/.qwen/settings.json`), the flash profile,
+tuned for coding:
 
 ```json
 {
   "id": "halogen-qwen3.8-flash-next",
-  "name": "[SUPERFAST] flash profile (Wi-Fi)",
+  "name": "[SUPERFAST] flash profile (MoE 125B) - coding",
   "baseUrl": "http://<machine-ip>:8731/v1",
   "envKey": "SUPERFAST_API_KEY",
   "generationConfig": {
-    "timeout": 600000,
+    "timeout": 900000,
+    "streamIdleTimeoutMs": 600000,
     "maxRetries": 1,
     "contextWindowSize": 262144,
-    "samplingParams": { "max_tokens": 8192 }
+    "extra_body": { "reasoning_effort": "low" },
+    "samplingParams": { "max_tokens": 32768 }
   }
 }
 ```
 
-`envKey` names an environment variable (the server needs no key on 8731, so
-the value can be the placeholder `local`). Add one entry per profile, with the
-profile's own model name and its own context window, and switch profiles on
-the machine with `superfast-switch use …`. Keep the system prompt and the tool
-definitions stable across turns: that is what lets the server reuse the
-cached prefix instead of re-reading the whole conversation (see
-[the prompt cache](#prompt-cache)).
+Repeat it once per profile, changing `id`, `name` and `contextWindowSize`
+(524,288 for DeepSeek), and dropping `extra_body` on Gemma and DeepSeek, which
+ignore it. `envKey` names an environment variable, not the key itself: the
+server needs no key on 8731, so the value can be the placeholder `local`.
+Qwen Code re-reads `modelProviders` edits without a restart.
+
+For another client the rules are the same: point it at
+`http://<machine-ip>:8731/v1`, use the model name from `/health`, send tools
+enabled and a large output budget, keep the context at what the server
+allocates, and do not send sampling parameters the server already applies.
 
 The auxiliary orchestrator is toggled separately, because it runs *alongside*
 the active profile instead of replacing it:
