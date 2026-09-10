@@ -33,6 +33,19 @@ case "$PROFILE" in
 esac
 
 LOG="$DIR/.download.log"
+
+# This file is a TEMPLATE: the directories arrive as __..._DIR__ placeholders
+# that deploy/setup-fedora.sh substitutes while installing it. Running the
+# template itself would create a directory literally named __DENSE_DIR__ in the
+# current working directory, so refuse instead of leaving that behind.
+case "$DIR" in
+    *__*DIR__*)
+        echo "this is the template copy of the downloader, not the installed one." >&2
+        echo "Install it first (bash deploy/setup-fedora.sh), then run" >&2
+        echo "~/.local/bin/superfast-downloads/download-weights.sh <profile>." >&2
+        exit 2 ;;
+esac
+
 mkdir -p "$DIR"
 exec 9>"$DIR/.download.lock"
 flock -n 9 || { echo "$PROFILE: another downloader is already running"; exit 0; }

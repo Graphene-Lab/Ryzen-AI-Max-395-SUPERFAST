@@ -139,7 +139,7 @@ phase_os_check() {
     [ -f /etc/os-release ] || { echo "not a Fedora system (no /etc/os-release)"; exit 1; }
     . /etc/os-release
     [ "$ID" = "fedora" ] || { echo "not Fedora (ID=$ID); this script targets Fedora Workstation 44"; exit 1; }
-    log "Fedora $VERSION_ID ($VARIANT) on $(uname -m)"
+    log "Fedora $VERSION_ID (${VARIANT:-unknown variant}) on $(uname -m)"
     # gfx1151 enablement lives in the kernel: refuse anything older than 44.
     if [ "${VERSION_ID%%.*}" -lt 44 ]; then
         echo "Fedora >= 44 required (found $VERSION_ID) for gfx1151 support"; exit 1
@@ -229,6 +229,9 @@ phase_weights() {
     # offset if it is interrupted, keeps one writer per file, and checks the
     # SHA-256 published by Hugging Face before the final rename.
     log "dense: downloading into $MODELS_DIR (log: $MODELS_DIR/.download.log)"
+    log "dense: the checkpoint is 35.9 GB, so on a slow link this phase takes hours."
+    log "dense: stopping it is safe - the transfer resumes at the byte it reached,"
+    log "dense: and re-running this script continues from there."
     bash "$HOME/.local/bin/superfast-downloads/download-weights.sh" dense
     log "dense: checkpoint ready"
 }
@@ -241,13 +244,25 @@ phase_image() {
     fi
     if podman image exists "$IMAGE"; then
         log "image already present: $IMAGE"
-    else
-        until podman pull "$IMAGE"; do
-            log "image pull failed; retrying in 60s"
-            sleep 60
-        done
-        log "image pulled: $IMAGE"
+        return 0
     fi
+    # Bounded retries: an unbounded loop would spin forever on a tag that no
+    # longer exists (upstream renamed it, or a typo in SUPERFAST_IMAGE).
+    pulled=""
+    for attempt in 1 2 3 4 5; do
+        if podman pull "$IMAGE"; then
+            pulled=1
+            break
+        fi
+        log "image pull failed (attempt $attempt/5); retrying in 60s"
+        sleep 60
+    done
+    if [ -z "$pulled" ]; then
+        log "could not pull $IMAGE after 5 attempts."
+        log "Check that the tag still exists, or point SUPERFAST_IMAGE at another reference."
+        return 1
+    fi
+    log "image pulled: $IMAGE"
 }
 
 phase_smoke() {
@@ -261,6 +276,19 @@ phase_engine() {
     if ! in_profiles dense; then
         log "dense is not in PROFILES ($PROFILES); skipping its unit"
         return 0
+    fi
+    # The container reaches /dev/kfd and /dev/dri through the video and render
+    # groups, and a user added to them in phase 4 only gets them in a NEW
+    # session. Without this check the first run on a fresh machine would start
+    # the engine, wait ten minutes for a health check that cannot succeed, and
+    # blame the engine. A clear instruction instead.
+    if ! id -nG | grep -qw video || ! id -nG | grep -qw render; then
+        log "this session does not have the video and render groups yet."
+        log "They are added in phase 4 and take effect on a new login."
+        log "Log out, log back in, then run this script again (it is resumable:"
+        log "phases 1-7 are skipped or quick the second time):"
+        log "  PROFILES=\"$PROFILES\" bash deploy/setup-fedora.sh"
+        return 1
     fi
     # OpenAI-compatible API port, reachable from the LAN. The engine's token
     # protocol stays unpublished inside the container.
@@ -310,8 +338,13 @@ WantedBy=default.target
 EOF
 
     XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user daemon-reload
-    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable --now superfast.service
-    log "superfast.service enabled; waiting for /health on :8731"
+    # enable, then restart: `enable --now` does nothing to a unit that is
+    # already running, so re-running this script after changing anything in
+    # this phase would keep the old unit file loaded. restart also starts a
+    # unit that is not running.
+    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable superfast.service
+    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user restart superfast.service
+    log "superfast.service enabled and started; waiting for /health on :8731"
     for i in $(seq 1 40); do
         # Require 200: the port can be open while the engine is still loading.
         if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8731/health)" = "200" ]; then

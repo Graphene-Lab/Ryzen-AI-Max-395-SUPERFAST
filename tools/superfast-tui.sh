@@ -13,6 +13,10 @@
 # With no arguments it opens a minimal menu.
 set -euo pipefail
 
+# systemctl --user needs the session runtime directory; over SSH it is not
+# always set, and the gateway commands below talk to the user manager.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
 SW="${SUPERFAST_SWITCH:-$HOME/.local/bin/superfast-switch}"
 CONF_DIR="${SUPERFAST_CONF_DIR:-$HOME/.config/superfast}"
 CONF="$CONF_DIR/superfast.conf"
@@ -55,9 +59,23 @@ api_key() {
                 echo "generated a new key"
             fi
             printf '%s' "$k" > "$KEY_FILE"; chmod 600 "$KEY_FILE"
-            echo "saved to $KEY_FILE (clients must send: Authorization: Bearer <key>)" ;;
+            echo "saved to $KEY_FILE (clients must send: Authorization: Bearer <key>)"
+            # A gateway without a key forwards everything through, so it is only
+            # worth running once a key exists: turn it on here instead of
+            # asking the user for a second command.
+            if systemctl --user enable --now superfast-gateway.service >/dev/null 2>&1; then
+                echo "gateway enabled on :${GATEWAY_PORT:-8741} (it forwards to the profile on :8731)"
+            else
+                echo "gateway not installed here: deploy/setup-fedora.sh creates its unit"
+            fi ;;
         clear)
-            rm -f "$KEY_FILE"; echo "api key cleared" ;;
+            rm -f "$KEY_FILE"; echo "api key cleared"
+            # Stop it: with no key file the gateway forwards every request
+            # through, so leaving it running would expose the profile on :8741
+            # without authentication.
+            if systemctl --user disable --now superfast-gateway.service >/dev/null 2>&1; then
+                echo "gateway stopped (without a key it would not filter anything)"
+            fi ;;
         *) echo "usage: superfast-tui api-key show|set [key]|clear" ;;
     esac
 }
