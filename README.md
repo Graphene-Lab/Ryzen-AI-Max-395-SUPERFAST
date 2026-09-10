@@ -227,10 +227,14 @@ All of the above is validated on a Ryzen AI Max+ 395 running Fedora
 Workstation 44. There are two ways to get there:
 
 - **Automated:** `bash deploy/setup-fedora.sh` takes a fresh machine to a
-  running SUPERFAST service in one run: system update, SSH, GPU groups,
-  auto-suspend off, the kernel memory parameters, checkpoint download with
-  exact-offset resume, and the engine installed as `superfast.service`,
-  waiting for `/health`. Add more profiles with `PROFILES`:
+  running SUPERFAST service: system update, SSH, GPU groups, auto-suspend off,
+  the kernel memory parameters, checkpoint download with exact-offset resume,
+  and the engine installed as `superfast.service`, waiting for `/health`. On a
+  fresh machine the **first run stops on purpose** after adding your user to
+  the GPU groups: that change only applies to a new session, so it prints
+  "log out, log back in, then run this script again" instead of failing ten
+  minutes later with a container that cannot reach the GPU. The second run
+  finishes the job. Add more profiles with `PROFILES`:
 
   ```bash
   # dense (default) is prepared alone
@@ -1249,30 +1253,37 @@ tokens of answer, roughly seven times the useful work).
 
 The defaults shipped here are therefore deliberate:
 
-- **Chat and coding on Qwen3.8-27B:** reasoning effort `low` (the setting used
-  for the measurements in this README). Use `medium` for genuinely hard
-  problems, and turn thinking off for trivial requests, but always leave an
-  answer budget large enough that thinking cannot eat it.
-- **DeepSeek-V4-Flash:** the vendor's recommendation for code agents is
-  `temperature 1.0`, `top_p 0.95` and maximum reasoning effort, which is what
-  the profile ships. Its thinking phase ignores sampling settings, so lowering
-  the temperature does not calm the reasoning loop. It also needs a large
-  answer budget: with 192 and with 512 tokens, every request we measured spent
-  the whole budget on reasoning.
+- **Chat and coding on Qwen3.8-27B:** reasoning effort `low` — the setting this
+  project's measurements send per request, and what the recommended client
+  configuration sends too. Use `medium` for genuinely hard problems, and turn
+  thinking off for trivial requests, but always leave an answer budget large
+  enough that thinking cannot eat it.
+- **DeepSeek-V4-Flash:** the vendor recommends `temperature 1.0`,
+  `top_p 0.95` and maximum reasoning effort for code agents. Be aware of what
+  the machine does and does not do here: the profile passes no sampling flags,
+  so `/props` reports only `n_ctx` and the client decides (see
+  [Recommended client configuration](#recommended-client-configuration-qwen-code-or-any-agentic-client)).
+  Its thinking phase ignores sampling settings anyway, so lowering the
+  temperature does not calm the reasoning loop. It also needs a large answer
+  budget: with 192 and with 512 tokens, every request we measured spent the
+  whole budget on reasoning.
 - **Gemma-4:** it thinks a lot, so give it a generous token budget. With a
   two-hundred-token limit its answers came back empty in our tests, which is
   why its measured row uses 512 tokens.
 - **The orchestrator:** short answers only. It exists to make a fast decision
   (a 24-token routing answer took about 130 ms), so do not give it a long
   thinking budget.
-- **Context windows** follow each profile's own design (262,144 tokens for
-  Qwen dense, 256,000 for Gemma-4, and what the flash families document). A
+- **Context windows** are set to the largest value that stays stable on this
+  machine: 262,144 tokens for dense, flash and Gemma-4, and 524,288 for
+  DeepSeek — the measured table is in
+  [What each profile ships](#what-each-profile-ships-context-tokens-tools). A
   bigger window is not free: the KV cache grows with it and shares the same
   memory pool as the model.
 
 The rule in one sentence: give a model just enough thinking for the task, an
 answer budget large enough that thinking cannot consume it, and the sampling
-values its own vendor recommends — then measure, as we did.
+values its vendor recommends — sent by the client, since that is where they
+belong — then measure, as we did.
 
 ## The orchestrator: a small, fast model that hands work to the right specialist
 
@@ -1527,6 +1538,13 @@ Repeat it once per profile, changing `id`, `name` and `contextWindowSize`
 ignore it. `envKey` names an environment variable, not the key itself: the
 server needs no key on 8731, so the value can be the placeholder `local`.
 Qwen Code re-reads `modelProviders` edits without a restart.
+
+The stream limit is not a per-provider field, so it goes in the environment of
+whatever starts the client (on Windows, `setx`, then a new terminal):
+
+```bash
+export QWEN_STREAM_MAX_LIFETIME_MS=1800000    # 30 minutes
+```
 
 For another client the rules are the same: point it at
 `http://<machine-ip>:8731/v1`, use the model name from `/health`, send tools

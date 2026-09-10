@@ -54,6 +54,9 @@ when you switch.
 2. Connect to it once over SSH (a cable or your home network is fine).
 3. Run one script: it updates the system, downloads the models, sets up the
    services and installs a small desktop control panel (a GNOME extension).
+   On a fresh machine the first run stops after a few minutes and tells you to
+   log out and back in once: that is what gives your user access to the
+   graphical processor. Run the same script again and it finishes the job.
 4. Open the control panel (or the terminal menu) and choose which model to
    use.
 5. Point any OpenAI-compatible app at `http://<machine>:8731` and talk to it.
