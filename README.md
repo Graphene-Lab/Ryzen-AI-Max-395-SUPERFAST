@@ -976,13 +976,29 @@ the quality-first defaults, running on the purpose-built engine at high
 precision. Gemma-4 and DeepSeek-V4-Flash are the speed-oriented profiles;
 their measured numbers are in the table above.
 
-### How it compares with paid models (public numbers)
+### How they compare with paid models (public numbers)
 
-The numbers in this section are **not ours**. They were collected from public
-sources — Artificial Analysis indices, vendor reports and BrainBench — to
-answer one question a buyer asks: does a model that runs on a machine you own
-compete with the paid frontier? Keep the caveats that come with them, listed
-below the table.
+The four models this machine runs are open-weight models, and their vendors
+publish benchmark tables that include paid frontier models as columns. Those
+tables are the best available answer to the question this project cares
+about: how close is a model you run yourself to a model you rent. **The
+numbers in this section are not measured by us.** They come from the vendors'
+own model cards and from published comparisons, and they carry the caveats at
+the end of the section.
+
+**Read the model names carefully.** These families have similar names, and
+the numbers below are for the exact models this machine runs:
+
+| what we run here | what it is | what it is **not** |
+|---|---|---|
+| Qwen3.8-27B dense (~6.3 bpw) | Qwen3.8-27B, dense, 27B parameters, 262K context | not Qwen3.6-27B, not Qwen3.7-Plus |
+| Qwen3.8-Flash-Next w4b | Qwen3.8-Flash-Next MoE, 125B total / 6B active, 512 experts, 262K context | not Qwen3-Flash, not another "Flash" |
+| DeepSeek-V4-Flash 2.58 bpw | DeepSeek-V4-Flash, 284B total / 13B active, 1M context | not DeepSeek-V3.2, not DeepSeek-V4-Pro |
+| Gemma-4-26B-A4B ROCmFP4 | Gemma 4 26B A4B MoE, 25.2B total / 3.8B active, 128 experts (8 active), 256K context | not Gemma 3 27B, not Gemma 4 31B |
+
+#### Qwen3.8-27B (the dense profile)
+
+Collected from Artificial Analysis indices, vendor reports and BrainBench:
 
 | benchmark | Qwen3.8-27B (local) | paid model in the same range | note |
 |---|---|---|---|
@@ -993,23 +1009,140 @@ below the table.
 | AIME 2026 (mathematics) | **29/30 (96.7%)** | Claude Opus 4.6 (96.7%) | level; GPT-5.4 xhigh scores higher (99.2%) |
 | LiveCodeBench v6 | **90.3** | — | self-reported by Alibaba |
 
-**Where it is strong.** Agentic coding and reasoning: it is ahead of Claude
-Opus 4.6 Max on SWE-bench Pro, and it answers faster than the paid models
-compared here (about 190 ms to the first token, against about 1.4 s for
-GPT-5.6 Luna).
+Qwen's own model card puts the same model next to Claude Opus 4.6 Max, which
+is one of the paid frontier models, on the same harness:
 
-**Where to be careful.** Most of these figures are **self-reported by
-Alibaba**, and full independent evaluations are still missing. The model is
-also slower overall and more verbose: it generates many more reasoning tokens
-than the paid models here, which is visible in everyday use. On BrainBench it
-scores 80.0%, clearly above GPT-5.4 (74.0%) and GPT-4o (39.7%), but that is
-one benchmark, on one quantized build.
+| benchmark | Qwen3.8-27B | Claude Opus 4.6 Max |
+|---|---|---|
+| Terminal-Bench 2.1 | 73.0 | **78.2** |
+| SWE-bench Pro | **61.7** | 53.4 |
+| DeepSWE 1.1 | **42.2** | not published |
+| QwenSWEBench (in-house) | **79.0** | 63.8 |
+| CoWorkBench (long office work) | **70.7** | 68.2 |
+| IFBench (instruction following) | **79.5** | 62.5 |
+| GPQA Diamond | 89.2 | **91.3** |
+| HLE (hard multidisciplinary) | 30.8 | **40.0** |
+| LiveCodeBench v6 | **90.3** | 88.8 |
 
-**In one sentence:** the model is comparable to paid services such as GPT-5.6
-Luna and DeepSeek V4 Flash, and in coding it can beat Claude Opus 4.6 Max —
-with the caveats above, and with the note that the quality is the model's
-while the speed you get is the machine's (measure yours with
-[`tools/quick-bench.py`](tools/quick-bench.py)).
+**Where it is strong.** Agentic coding and instruction following: it is ahead
+of Claude Opus 4.6 Max on SWE-bench Pro, DeepSWE 1.1, CoWorkBench and
+IFBench, and it answers faster than the paid models compared here (about
+190 ms to the first token, against about 1.4 s for GPT-5.6 Luna).
+
+**Where it is weaker.** Terminal work and the hardest knowledge questions:
+Claude Opus 4.6 Max is ahead on Terminal-Bench 2.1, GPQA Diamond and HLE.
+Most of the figures are also **self-reported by Alibaba**, and full
+independent evaluations are still missing. The model is slower overall and
+more verbose: it generates many more reasoning tokens than the paid models
+here, which shows in everyday use. On BrainBench it scores 80.0%, clearly
+above GPT-5.4 (74.0%) and GPT-4o (39.7%), but that is one benchmark on one
+quantized build.
+
+#### Qwen3.8-Flash-Next (the fast, large profile)
+
+The same card compares the MoE profile against Claude Opus 4.6 Max. It is the
+fastest profile this machine has, and on several rows it is the strongest
+model in that table:
+
+| benchmark | Qwen3.8-Flash-Next | Claude Opus 4.6 Max |
+|---|---|---|
+| SWE-bench Pro (agentic coding) | **62.5** | 53.4 |
+| SWE-bench Multilingual | **81.0** | 77.5 |
+| DeepSWE 1.1 | **58.7** | not published |
+| NL2Repo-Bench (repo-level code) | **48.1** | 47.6 |
+| CoWorkBench (long office work) | **73.9** | 68.2 |
+| JobBench (professional tasks) | **55.7** | 36.6 |
+| Toolathlon Verified (tool use) | **73.5** | not published |
+| IFBench (instruction following) | **81.3** | 62.5 |
+| GPQA Diamond | **91.7** | 91.3 |
+| HLE (hard multidisciplinary) | 35.9 | **40.0** |
+| LiveCodeBench v6 | **91.9** | 88.8 |
+
+In short: on this card the fast profile beats the paid frontier model on
+almost every coding, agent and instruction row, and stays close on the
+hardest knowledge rows. Remember that this is the profile that runs at
+37.7–46.4 tokens per second on this machine, three times the speed of the
+dense profile.
+
+#### DeepSeek-V4-Flash (the 284B profile)
+
+DeepSeek's card reports the paid frontier models as comparison columns (their
+scores, as reported by DeepSeek). V4-Flash in its top reasoning mode:
+
+| benchmark | DeepSeek-V4-Flash (Max) | Claude Opus 4.6 Max | GPT-5.4 xHigh | Gemini-3.1-Pro High |
+|---|---|---|---|---|
+| MMLU-Pro | 86.2 | 89.1 | 87.5 | **91.0** |
+| GPQA Diamond | 88.1 | 91.3 | 93.0 | **94.3** |
+| HLE | 34.8 | 40.0 | 39.8 | **44.4** |
+| LiveCodeBench | 91.6 | 88.8 | — | **91.7** |
+| HMMT 2026 Feb (mathematics) | 94.8 | 96.2 | **97.7** | 94.7 |
+| IMOAnswerBench | 88.4 | 75.3 | **91.4** | 81.0 |
+| Terminal Bench 2.0 | 56.9 | 65.4 | **75.1** | 68.5 |
+| SWE Verified (resolved) | 79.0 | **80.8** | — | 80.6 |
+| SWE Pro (resolved) | 52.6 | 57.3 | **57.7** | 54.2 |
+| BrowseComp | 73.2 | 83.7 | 82.7 | **85.9** |
+| Toolathlon | 47.8 | 47.2 | **54.6** | 48.8 |
+| MRCR 1M (long context) | 78.7 | **92.9** | — | 76.3 |
+
+This is the profile to be honest about: it is a 284B-parameter model that
+does not reach the paid frontier on knowledge, browsing or terminal work, and
+on this machine it is also the slowest of the four (11.2 t/s). It is worth
+running for what it is good at — long context, mathematics, and a 1M-token
+window — and it is remarkable that a model of this size fits and runs on an
+APU at all.
+
+#### Gemma-4-26B-A4B (the small fast profile)
+
+Google publishes no comparison with paid models for this one, so the paid
+values below come from the other tables in this section (same benchmarks,
+their published scores). Gemma 4 26B A4B, from Google's card:
+
+| benchmark | Gemma 4 26B A4B | Claude Opus 4.6 Max | GPT-5.4 xHigh | Gemini-3.1-Pro High |
+|---|---|---|---|---|
+| MMLU-Pro | 82.6 | 89.1 | 87.5 | **91.0** |
+| GPQA Diamond | 82.3 | 91.3 | 93.0 | **94.3** |
+| LiveCodeBench v6 | 77.1 | 88.8 | — | **91.7** |
+| AIME 2026 (no tools) | 88.3 | *these tables report HMMT 2026 instead: 96.2* | *97.7* | *94.7* |
+| HLE (no tools) | 8.7 | 40.0 | 39.8 | **44.4** |
+| MRCR v2, 8 needles, 128K | 44.1 | not published | not published | not published |
+
+The AIME row is not a like-for-like comparison: Gemma's card reports AIME
+2026, the paid columns in the other tables report HMMT 2026. Both are
+competition mathematics, not the same exam, so read that row as an
+indication only.
+
+It is the smallest and fastest profile (57 t/s here), and it is clearly a
+step below the paid frontier on the hardest benchmarks, while staying useful
+for everyday work. It is also the only profile of the four whose model family
+reads images; the vision part is not enabled in our profile.
+
+#### What to keep in mind
+
+1. **These are vendor-reported numbers**, and each vendor evaluates its own
+   model. The paid-model columns in the Qwen tables were produced by Qwen;
+   the paid-model columns in the DeepSeek table are DeepSeek's report of
+   other vendors' published scores. Independent evaluation is thinner than
+   the tables suggest.
+2. **Harnesses differ.** Qwen states that all rows were measured with the
+   Claude Code harness, except the Claude Opus 4.6 Max row, where the vendor's
+   own officially published score is used. Small differences between two
+   models mean little; the pattern across many rows means more.
+3. **Our builds are quantized; the benchmarks are not.** These cards measure
+   the full-precision models (FP8 or BF16). This machine runs 4-bit-class
+   quantizations (dense ~6.3 bpw, Flash-Next w4b, DeepSeek 2.58 bpw, Gemma
+   ROCmFP4 Q4_0), so the quality here is close to the tables, not identical.
+   The measured effect on our own machine: the Flash-Next quality overlay is
+   worth several percent of perplexity and we always mount it.
+4. **Quality is the model's; the speed is the machine's.** A 27B dense model
+   at 21 tokens per second and a 125B MoE at 38–46 tokens per second are the
+   numbers this project contributes. Measure yours with
+   [`tools/quick-bench.py`](tools/quick-bench.py).
+5. **One sentence:** two of the four profiles match or beat the paid frontier
+   model on most coding and agent tasks in these tables (the dense 27B and
+   the Flash-Next MoE), one is strong in long context and mathematics
+   (DeepSeek-V4-Flash), and one is a fast, small and useful model (Gemma 4)
+   — all of them running locally, with no subscription and no data leaving
+   the machine.
 
 ---
 
