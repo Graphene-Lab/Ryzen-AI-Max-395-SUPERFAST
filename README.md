@@ -852,7 +852,7 @@ so they are connected to this repository and appear in its Packages section.
 
 | artifact | registry | what it is |
 |---|---|---|
-| `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
+| `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
 | `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
 | `ghcr.io/peonist-ai/halogen-flash-server:0.5.2` | GHCR (upstream) | the engine that serves the Flash-Next MoE profile |
 | `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
@@ -864,13 +864,18 @@ so they are connected to this repository and appear in its Packages section.
 Pull the runtime image the way the profile units expect it:
 
 ```bash
-podman pull ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1
-podman tag  ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1 \
+podman pull ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1
+podman tag  ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1 \
             llama-rocmfpx:7.2.4
 ```
 
 `deploy/setup-fedora.sh` does this by itself, and falls back to building from
-[`runtime/`](runtime/README.md) when the pull fails.
+[`runtime/`](runtime/README.md) when the pull fails. Why the package is not
+named after the repository: a package pushed by hand is not connected to the
+repository, GitHub refuses to change its visibility through the API in that
+state, and the workflow's own token cannot push to it either — a package
+created by the workflow is connected from the start. [`runtime/README.md`](runtime/README.md)
+has the full explanation.
 
 The weights are **not** in the images. They are fetched from Hugging Face by
 the downloader in [`deploy/profiles/`](deploy/profiles/README.md), which
@@ -1379,6 +1384,42 @@ profile additionally needs the kernel parameters described in
 switch refuses to start it and says so. The measured numbers behind each
 profile live in [Performance](#performance) and are updated as new models are
 validated on this machine.
+
+### What each profile ships: context, tokens, tools
+
+The context window is the reason this machine runs one model at a time (see
+[Why one model at a time](#a-note-on-names)), so every profile is configured
+at the largest window its model supports on this hardware. Measured on the
+reference machine:
+
+| profile | context | memory in use while serving | notes |
+|---|---|---|---|
+| Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
+| Qwen3.8-Flash-Next | 262,144 | ~45 GB | native maximum, and the fastest of the large profiles |
+| Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
+| DeepSeek-V4-Flash | 1,048,576 | ~116 GB | the model's native 1M; the machine has about 8 GB left |
+
+Three properties that matter when a program uses this machine as its model:
+
+- **The KV cache is shared by the four server slots** (`kv_unified`), so one
+  session can use the whole window; four sessions share the same window
+  instead of getting one each.
+- **Tool calling works on every profile.** The GGUF profiles run with
+  `--jinja`, so the model's own chat template handles tools. Verified on
+  Gemma-4: asked for a tool call, and the answer was a proper `tool_calls`
+  reply with the right arguments (`get_time({"city":"Rome"})`). On
+  DeepSeek-V4-Flash the flag is accepted and the template loads; a
+  1024-token tool request was spent entirely on reasoning, which is the trap
+  described in the next point, so give it a large budget.
+- **Give the thinking profiles room.** Gemma-4 and DeepSeek-V4-Flash spend
+  their whole budget on reasoning when the budget is small — measured at 192,
+  512 and 1024 tokens — so a client should send a large `max_tokens` with
+  them, or the answer comes back empty with `finish_reason: "length"`.
+
+DeepSeek at the full 1M window leaves about 8 GB of free memory: that is the
+price of using the whole context. On a machine that also runs a desktop and
+other services, 512K is the safer setting — change `-c 1048576` to `-c 524288`
+in `~/.config/systemd/user/deepseek.service` and restart that profile.
 
 The auxiliary orchestrator is toggled separately, because it runs *alongside*
 the active profile instead of replacing it:

@@ -14,15 +14,19 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
   ([`.github/workflows/publish-runtime.yml`](../.github/workflows/publish-runtime.yml)):
 
   ```bash
-  podman pull ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1
-  podman tag  ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1 \
+  podman pull ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1
+  podman tag  ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1 \
               llama-rocmfpx:7.2.4     # the name the profile units use
   ```
 
-  Publishing it from a workflow of this repository is deliberate: a package
-  pushed by hand from a local machine is not connected to the repository, and
-  GitHub then refuses to change its visibility through the API. `deploy/setup-fedora.sh`
-  does the pull-and-tag above, and builds the image locally if the pull fails.
+  The package is called `superfast-runtime` and not the repository's own name
+  for a reason worth knowing: a package pushed by hand from a local machine is
+  not connected to the repository, GitHub then refuses to change its
+  visibility through the API, and the workflow's own token cannot push to it
+  either (`denied: permission_denied: read_package`). A package created by a
+  workflow of this repository is connected from the start.
+  `deploy/setup-fedora.sh` does the pull-and-tag above, and builds the image
+  locally if no published copy can be pulled.
 
 ## Build it yourself (one time)
 

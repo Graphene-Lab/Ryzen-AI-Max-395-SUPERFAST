@@ -13,7 +13,8 @@ ExecStart=/usr/bin/podman run --name gemma-server --rm -p 8731:8731 \
   -v __GEMMA_DIR__:/models:ro \
   llama-rocmfpx:7.2.4 \
   -m /models/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf \
-  --host 0.0.0.0 --port 8731 -c 16384 --alias gemma-4-26b-a4b
+  --host 0.0.0.0 --port 8731 \
+  -c 262144 --alias gemma-4-26b-a4b --jinja
 ExecStop=/usr/bin/podman stop -t 30 gemma-server
 # podman run exits 143/137 when the container is stopped: accept those, so a
 # profile switch does not leave the unit in the "failed" state.

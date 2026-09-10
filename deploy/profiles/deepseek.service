@@ -13,7 +13,8 @@ ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 8731:8731 \
   -v __DEEPSEEK_DIR__:/models:ro \
   llama-rocmfpx:7.2.4 \
   -m /models/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf \
-  --host 0.0.0.0 --port 8731 -c 32768 --alias deepseek-v4-flash
+  --host 0.0.0.0 --port 8731 \
+  -c 1048576 --alias deepseek-v4-flash --jinja
 ExecStop=/usr/bin/podman stop -t 30 deepseek-server
 # podman run exits 143/137 when the container is stopped: accept those, so a
 # profile switch does not leave the unit in the "failed" state.
