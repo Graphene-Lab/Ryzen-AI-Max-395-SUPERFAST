@@ -5,6 +5,9 @@
 **Turn an AMD Ryzen AI Max into a fast, high-quality and private LLM
 machine.**
 
+New to this? There is a **[plain-language guide](docs/PLAIN-GUIDE.md)**
+written for readers who are not engineers.
+
 SUPERFAST is a goal, not a fixed architecture: take an AMD Strix Halo APU
 (gfx1151 — for example the Ryzen AI Max+ 395) and make it run excellent open
 LLMs as fast as the hardware allows, without trading away quality. What makes
@@ -394,6 +397,14 @@ advice from specialists (`ppfeaturemask`/`pp_od_clk_voltage`, or UXTU on
 Windows) targets clock-limited paths — it does not apply to a
 bandwidth-bound decode workload and would require a kernel parameter +
 reboot.
+
+Context depth and the KV cache were measured too, on Gemma-4: decode ran at
+56.1 tokens per second on a 442-token prompt, 50.0 on 1,325 tokens and 46.0 on
+1,761 tokens with the default f16 KV cache; switching to a quantized q8_0 KV
+cache was four to six percent *slower* at those depths, so the default is
+kept. The fork's FP4/TURBO cache types were not accepted by this runtime
+build (the server refused to start), which makes them a candidate for a future
+runtime revision rather than a shipped setting.
 
 **Conclusion:** the stock Fedora 44 configuration already performs at the
 practical ceiling for this machine; measured gains come from choosing the
