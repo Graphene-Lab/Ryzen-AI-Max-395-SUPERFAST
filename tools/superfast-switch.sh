@@ -38,6 +38,14 @@ declare -A LABEL=(
 )
 PROFILES=(dense flash gemma deepseek)
 
+# The orchestrator is a small, fast model that runs ALONGSIDE a profile (it is
+# not a profile itself): clients may ask it to decide what to do, and it wakes
+# the big model only when needed. Toggle it with `orchestrator on|off`.
+ORCH_UNIT="${SUPERFAST_ORCH_UNIT:-orchestrator.service}"
+ORCH_DIR="${SUPERFAST_ORCH_DIR:-$HOME/small-models}"
+ORCH_PORT="${SUPERFAST_ORCH_PORT:-8732}"
+ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
+
 http_ok() {
     curl -s -o /dev/null --max-time 5 "$HEALTH" 2>/dev/null
 }
@@ -53,8 +61,14 @@ model_name() {
     echo "$m"
 }
 
+unit_state() {
+    local s
+    s="$(systemctl --user is-active "$1" 2>/dev/null | head -n 1)"
+    echo "${s:-inactive}"
+}
+
 unit_active() {
-    [ "$(systemctl --user is-active "$1" 2>/dev/null)" = "active" ]
+    [ "$(unit_state "$1")" = "active" ]
 }
 
 weights_ready() {
@@ -73,16 +87,60 @@ weights_ready() {
 cmd_status() {
     echo "profiles (API on 127.0.0.1:${PORT}, one at a time):"
     for p in "${PROFILES[@]}"; do
-        st="$(systemctl --user is-active "${UNIT[$p]}" 2>/dev/null || echo inactive)"
+        st="$(unit_state "${UNIT[$p]}")"
         mark=""; [ "$st" = "active" ] && mark="   <== ACTIVE"
         printf '  %-9s %-28s %s%s\n' "$p" "${UNIT[$p]}" "$st" "$mark"
     done
+    ost="$(unit_state "$ORCH_UNIT")"
+    printf '  %-9s %-28s %s (port %s)\n' "orchestr." "$ORCH_UNIT" "$ost" "$ORCH_PORT"
     m="$(model_name)"
     if [ -n "$m" ]; then
         echo "serving now: $m"
     else
         echo "no model responding on :${PORT}"
     fi
+}
+
+orch_ready() {
+    [ -f "$ORCH_DIR/.download-complete" ] || [ -f "$ORCH_DIR"/*.gguf ]
+}
+
+cmd_orchestrator() {
+    local action="${1:-status}"
+    case "$action" in
+        on)
+            if systemctl --user list-unit-files "$ORCH_UNIT" >/dev/null 2>&1 && \
+               ! systemctl --user cat "$ORCH_UNIT" >/dev/null 2>&1; then
+                echo "orchestrator unit '$ORCH_UNIT' not installed yet" >&2
+                return 1
+            fi
+            if ! orch_ready; then
+                echo "orchestrator weights not present in $ORCH_DIR yet" >&2
+                return 3
+            fi
+            systemctl --user start "$ORCH_UNIT"
+            for i in $(seq 1 60); do
+                if curl -s -o /dev/null --max-time 3 "$ORCH_HEALTH"; then
+                    echo "orchestrator active on :${ORCH_PORT} (after ~$((i * 5))s)"
+                    return 0
+                fi
+                sleep 5
+            done
+            echo "orchestrator started but /health not answering on :${ORCH_PORT}" >&2
+            return 1
+            ;;
+        off)
+            systemctl --user stop "$ORCH_UNIT" 2>/dev/null || true
+            echo "orchestrator off"
+            ;;
+        status)
+            echo "orchestrator: $(unit_state "$ORCH_UNIT") (unit $ORCH_UNIT, port $ORCH_PORT, weights $ORCH_DIR)"
+            ;;
+        *)
+            echo "usage: $0 orchestrator on|off|status" >&2
+            exit 2
+            ;;
+    esac
 }
 
 cmd_use() {
@@ -128,8 +186,9 @@ cmd_stop() {
 
 case "${1:-}" in
     status) cmd_status ;;
-    list)   echo "profiles: ${PROFILES[*]}" ;;
+    list)   echo "profiles: ${PROFILES[*]}"; echo "auxiliary: orchestrator (on|off|status)" ;;
     use)    [ $# -ge 2 ] && cmd_use "$2" || { echo "usage: $0 use <${PROFILES[*]}>" >&2; exit 2; } ;;
+    orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|stop}" >&2; exit 2 ;;
 esac

@@ -786,6 +786,19 @@ famous real-world version of the same pattern is Elon Musk: the media credit
 him personally with rockets and electric cars, but the engineering is done by
 thousands of specialists whose work he directs and integrates.
 
+A second job for the orchestrator is reactive control: home automation, IoT
+devices and voice front-ends. In these settings almost nothing needs
+reasoning. A speech-to-text program turns "turn on the kitchen light" into
+text, and something has to map that text to a switch, a scene or a short
+series of steps. Most of those procedures are semi-deterministic — a flow
+diagram with a few branches, not a problem to solve from scratch — and what
+matters is latency and availability, not depth. A small model does the mapping
+in milliseconds, is always resident, and never competes with a specialist
+model that is busy thinking somewhere else. Using a large model for this kind
+of work is like using a missile as a hammer to hang a picture: it can drive
+the nail, but slowly, expensively and with a great deal of unnecessary
+damage. The orchestrator is the hammer.
+
 This philosophy is not invented here; it is how production systems are
 built. Anthropic describes an orchestrator-worker design in which a lead
 agent plans, spawns three to five specialized subagents in parallel, and
@@ -848,6 +861,19 @@ The tool stops the current profile, starts the requested one and waits until
 refuses to start until its checkpoint has finished downloading. The measured
 numbers behind each profile live in the Performance section and are updated
 as new models are validated on this machine.
+
+The auxiliary orchestrator is toggled separately, because it runs *alongside*
+whichever profile is active rather than replacing it:
+
+```bash
+superfast-switch orchestrator on      # start the small router model (:8732)
+superfast-switch orchestrator off     # stop it
+superfast-switch orchestrator status  # is it running?
+```
+
+It is off by default and costs the specialist model only one to two percent
+of memory bandwidth when enabled. The setup script installs its unit once the
+small model has been chosen and measured.
 
 **Roadmap: other model families.** A second runtime is planned for the
 machine — llama.cpp with the ROCmFPX fork, which serves GGUF models with
