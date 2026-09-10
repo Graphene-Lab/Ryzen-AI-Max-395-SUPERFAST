@@ -3,12 +3,10 @@
 # (AMD Strix Halo, gfx1151 — Ryzen AI Max+ 395) to the state validated for
 # running the SUPERFAST engine container.
 #
-# STATUS (2026-09-09):
-#   Phases 1-9  VALIDATED on the reference host — every command below was run
-#               and verified there; see docs/fedora-44-setup.md for the log.
-#               Phase 8 installs superfast.service (dense, systemd user unit)
-#               and waits for /health. Phase 9 installs the model switch and
-#               the optional Flash-Next profile unit.
+# STATUS (2026-09-10):
+#   Phases 1-10 VALIDATED on the reference host (phase 10 added 2026-09-10:
+#   control panel + API-key gateway). Every command below was run and verified
+#   there; see docs/fedora-44-setup.md for the log.
 #
 # Run as the admin user (sudo is used internally where needed):
 #   bash deploy/setup-fedora.sh
@@ -248,6 +246,95 @@ EOF
     log "superfast-flash.service ready (disabled until 'superfast-switch use flash')"
 }
 
+phase_ui_auth() {
+    log "== phase 10/10: control panel (TUI + GNOME extension) and API-key gateway =="
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    UID_NUM="$(id -u)"
+    CONF_DIR="$HOME/.config/superfast"
+    mkdir -p "$CONF_DIR" "$HOME/.local/bin"
+    if [ ! -f "$CONF_DIR/superfast.conf" ]; then
+        cat > "$CONF_DIR/superfast.conf" <<'EOF'
+# SUPERFAST settings
+# THINKING_EFFORT=low     # low | medium | high (Qwen default 'xhigh' over-thinks)
+# GATEWAY_PORT=8741
+EOF
+    fi
+    for f in superfast-tui.sh superfast-gateway.py; do
+        if [ -f "$SCRIPT_DIR/../tools/$f" ]; then
+            cp "$SCRIPT_DIR/../tools/$f" "$HOME/.local/bin/"
+            chmod +x "$HOME/.local/bin/$f"
+        fi
+    done
+
+    # Orchestrator unit, only if its small model is already present.
+    if [ -f "$HOME/small-models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ]; then
+        cat > "$HOME/.config/systemd/user/orchestrator.service" <<EOF
+[Unit]
+Description=LFM2.5-1.2B orchestrator (small fast router, port 8732)
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
+ExecStartPre=-/usr/bin/podman rm -f orchestrator
+ExecStart=/usr/bin/podman run --name orchestrator --rm -p 8732:8731 \\
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \\
+  --security-opt seccomp=unconfined --ipc=host \\
+  -v $HOME/small-models:/models:ro \\
+  llama-rocmfpx:7.2.4 \\
+  -m /models/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf \\
+  --host 0.0.0.0 --port 8731 -c 8192 --alias lfm25-1.2b
+ExecStop=/usr/bin/podman stop -t 20 orchestrator
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+        log "orchestrator.service created (stopped; toggle with superfast-switch orchestrator on)"
+    else
+        log "orchestrator model not present in ~/small-models; skipping its unit"
+    fi
+
+    # API-key gateway in front of the main endpoint (needs a key file).
+    cat > "$HOME/.config/systemd/user/superfast-gateway.service" <<EOF
+[Unit]
+Description=SUPERFAST API-key gateway (LAN -> loopback LLM)
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
+ExecStart=/usr/bin/python3 $HOME/.local/bin/superfast-gateway.py \\
+  --listen 0.0.0.0:\${GATEWAY_PORT:-8741} --upstream 127.0.0.1:8731 \\
+  --key-file $CONF_DIR/api.key
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+    if [ -s "$CONF_DIR/api.key" ]; then
+        XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable --now superfast-gateway.service
+        log "gateway enabled on :8741 (key from $CONF_DIR/api.key)"
+    else
+        log "gateway installed but disabled: create a key with 'superfast-tui api-key set' first"
+    fi
+
+    # GNOME Shell extension (control panel), if a GNOME session is present.
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        EXT_DIR="$HOME/.local/share/gnome-shell/extensions/superfast@graphene-lab"
+        mkdir -p "$EXT_DIR"
+        cp -r "$SCRIPT_DIR/../gnome-shell-extension/." "$EXT_DIR/"
+        log "GNOME extension installed; run: gnome-extensions enable superfast@graphene-lab (then log out/in once)"
+    else
+        log "gnome-extensions not found; skipping the desktop control panel"
+    fi
+
+    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user daemon-reload
+    log "console tools: superfast-tui (menu), superfast-switch (CLI)"
+}
+
 main() {
     phase_os_check
     phase_update
@@ -259,8 +346,9 @@ main() {
     [ "${SMOKE:-0}" = "1" ] && phase_smoke
     phase_engine
     phase_flash_profile
-    log "setup complete — dense profile serving on http://<host>:8731;"
-    log "use 'superfast-switch use flash' for the Flash-Next MoE profile"
+    phase_ui_auth
+    log "setup complete — dense profile serving on http://<host>:8731"
+    log "control: superfast-tui (terminal) or the GNOME extension; switch with superfast-switch"
 }
 
 main

@@ -768,6 +768,42 @@ above.
 
 ---
 
+### Defaults we ship, and why (in plain words)
+
+Thinking is not free, and more of it is not automatically better. A model
+that reasons a long time can spend its whole budget "thinking" and never get
+around to answering. That is not hypothetical: Qwen3.8-27B, when a request
+does not say otherwise, uses the vendor's highest reasoning setting, and that
+default is the documented cause of long thinking loops and empty replies
+(upstream issue QwenLM/Qwen3.8#216; in one measured case the model burned over
+twenty-two thousand thinking tokens to produce three thousand tokens of
+answer, roughly seven times the useful work).
+
+The defaults shipped here are therefore deliberate:
+
+- **Chat and coding on Qwen3.8-27B:** reasoning effort `low` (the setting used
+  for the measurements in this README). Use `medium` for genuinely hard
+  problems and turn thinking off for trivial requests, but always leave an
+  answer budget large enough that thinking cannot eat it.
+- **DeepSeek-V4-Flash:** the vendor's recommendation for code agents is
+  `temperature 1.0`, `top_p 0.95` and maximum reasoning effort, which is what
+  the profile ships. Its thinking phase ignores sampling settings, so lowering
+  the temperature does not calm the reasoning loop.
+- **Gemma-4:** it thinks a lot, so give it a generous token budget — with a
+  two-hundred-token limit its answers came back empty in our tests, which is
+  why its measured row uses 512 tokens.
+- **The orchestrator:** short answers only. It exists to make a fast decision
+  (a 24-token routing answer took about 130 ms), so do not hand it a long
+  thinking budget.
+- **Context windows** follow each profile's own design (262,144 tokens for
+  Qwen dense, 256,000 for Gemma-4, and what the flash families document). A
+  bigger window is not free: the KV cache grows with it and shares the same
+  memory pool as the model.
+
+The rule of thumb in one sentence: give a model just enough thinking for the
+task, an answer budget large enough that thinking cannot consume it, and the
+sampling values its own vendor recommends — then measure, as we did.
+
 ## The orchestrator: a small, fast model that gives the work to the right specialist
 
 This profile deliberately does not appear in the comparison table, because it

@@ -43,10 +43,12 @@ ENV ROCM_PATH=/opt/rocm \
   PATH=/opt/rocm/bin:/opt/rocm/llvm/bin:$PATH
 
 # ROCmFPX fork (llama.cpp with ROCmFP3/FP4/FP6/FP8 weight formats)
+# Pinned to a known-good commit for reproducibility and supply-chain safety.
 WORKDIR /opt/llama.cpp
 ARG REPO=https://github.com/charlie12345/ROCmFPX.git
-ARG BRANCH=main
-RUN git clone -b ${BRANCH} --single-branch ${REPO} .
+ARG COMMIT=c49ebdbd5c9f01ec242369f9e7f7967855f80cba
+RUN git init -q && git remote add origin ${REPO} \
+  && git fetch -q --depth 1 origin ${COMMIT} && git checkout -q FETCH_HEAD
 
 # GGML_HIP_FORCE_MMQ=ON is required for the ROCmFP4 MMQ kernels.
 # (the upstream Dockerfile also applied a grammar patch that is not present in
