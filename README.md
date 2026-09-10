@@ -278,15 +278,15 @@ own directory, and the setup script and the switch know those paths.
 
 Two things the table does not show. The `gemma` and `deepseek` profiles need a
 second runtime, the GGUF server image built from
-[`runtime/`](runtime/README.md). It is published on GHCR as
-`ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1`, and the
-setup script pulls it and tags it as `llama-rocmfpx:7.2.4`; if the pull fails
-(the package is private by default on GHCR, and you can make it public in the
-package settings on GitHub) the script builds it from `runtime/` instead. And
-neither speculative head in the table works in our stack today: the Gemma MTP
-file needs a draft-context flag this runtime build rejects, and the DeepSeek
-DSpark file is built for another runtime (`unknown model architecture`). The
-measured Gemma and DeepSeek numbers are therefore without speculation.
+[`runtime/`](runtime/README.md). It is published by this repository's workflow
+as `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1`, and the setup
+script pulls it and tags it as `llama-rocmfpx:7.2.4`; if the pull fails a
+login is needed while the package is private, and the script builds it from
+`runtime/` instead. And neither speculative head in the table works in our
+stack today: the Gemma MTP file needs a draft-context flag this runtime build
+rejects, and the DeepSeek DSpark file is built for another runtime (`unknown
+model architecture`). The measured Gemma and DeepSeek numbers are therefore
+without speculation.
 
 For the dense profile, download the checkpoint once and mount it:
 
