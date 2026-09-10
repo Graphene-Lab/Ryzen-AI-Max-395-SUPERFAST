@@ -683,6 +683,11 @@ Warm answers are byte-identical to cold ones by construction.
   you point at a HuggingFace *cache* snapshot, whose entries are symlinks into
   a sibling `blobs/` and dangle inside a container.
 
+In practice the memory is comfortable: with the Gemma profile loaded the host
+reported about 18 GB in use and 106 GB available, measured. The switch still
+runs one profile at a time by design, so the big models never compete; the
+orchestrator is the one auxiliary that is allowed to share.
+
 ### Modes
 
 | command | what it does |
@@ -1064,6 +1069,25 @@ Alternatively, download the archive for your operating system from the
 type `/setup`, open the LLM and Providers tab, add the SUPERFAST server as a
 provider pointing at `http://<your-fedora-host>:8731`, and leave the API key
 empty.
+
+A worked example, measured from the desktop PC to the machine over the direct
+cable (the health check answered in about six milliseconds):
+
+```bash
+# on the machine: choose a profile and read the model name it reports
+superfast-switch use gemma
+curl -s localhost:8731/health         # -> "model":"gemma-4-26b-a4b"
+```
+
+From any computer on the network, the OpenAI-compatible endpoint is
+`http://<machine-ip>:8731` and the model name is whatever `/health` reports —
+`gemma-4-26b-a4b`, `deepseek-v4-flash` or the Qwen name, depending on the
+profile that is active. One caution learned the hard way: give the model a
+generous `max_tokens`. In our own test, a 256-token budget was consumed
+entirely by Gemma's reasoning phase and the answer came back empty; 1,024
+tokens produced a normal reply. If you enabled the API-key gateway, point the
+client at `http://<machine-ip>:8741` instead and send
+`Authorization: Bearer <key>`.
 
 The official repository is [github.com/Graphene-Lab/AgentBridge](https://github.com/Graphene-Lab/AgentBridge/):
 there you will find the releases, the full manual and the tools the agents can
