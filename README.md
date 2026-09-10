@@ -253,7 +253,11 @@ profile as a managed service. On Docker instead of Podman, replace
 > are the values that were observed to match Hugging Face exactly:
 > `qwen38-flash-next-w4b.hgn` → `9c116bbc01f77b7a15464c1a124eb3325b286089b8a2a6f2856c9b246a235bd6`,
 > `qwen38-flash-next-w4b.overlay.hgn` → `737d6bdaef274d3cc22de5bc265b390b89db5fb1e709f58db75287fdc35bb276`,
-> `qwen38-flash-next-w4b.overlay-speed.hgn` → `113d77358107549fa22e06643ae3a524908aa7ea011afaebec69fc5f1991c370`.
+> `qwen38-flash-next-w4b.overlay-speed.hgn` → `113d77358107549fa22e06643ae3a524908aa7ea011afaebec69fc5f1991c370`,
+> `DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf` → `a936e0a514385c8ae964c0f42263a4314a34fbc6efea9d9aced5320f320a3d54`.
+> The DeepSeek checkpoint verified correctly; its speculative drafter was
+> re-downloaded after a corrupted copy (two downloads had written the same
+> file) and is checked against its own published sum before use.
 
 ### Or let SUPERFAST fetch the weights for you
 
@@ -352,7 +356,23 @@ low`, `max_tokens: 192`, 3 reps, stable within ±1%):
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Qwen3.8-Flash-Next MoE w4b | halogen-flash | **37.7 t/s** | **46.4 t/s** | ~709 t/s |
-| DeepSeek-V4-Flash ROCmFPX | llama-rocmfpx | *weights loading, numbers land here* | | |
+| DeepSeek-V4-Flash ROCmFPX (~2.6 bpw) | llama-rocmfpx | *does not fit yet — see the note below* | | |
+
+DeepSeek-V4-Flash deserves its own note. The weights are downloaded and their
+checksum matches Hugging Face exactly, but the model does not run on the
+machine as configured, and the reason is worth stating plainly: it needs one
+single GPU allocation of roughly 75 GiB, while the GPU side of this machine
+can currently claim only about 62 GiB. The memory is physically there — the
+box has 124 GB in one pool — but the kernel limits how much of it the GPU
+path may take, by default about half of RAM. Raising the TTM page limit does
+not move that ceiling; the knob that does is the kernel parameter
+`amdgpu.gttsize` (for example `amdgpu.gttsize=118784` for about 116 GiB),
+applied with a reboot — and on this machine a reboot needs the disk passphrase
+at the console. We also tried keeping part of the model's experts on the CPU
+so it would fit under the current ceiling, and those attempts failed under
+memory pressure even for sub-gigabyte buffers, so that is not a workaround
+here. Until the kernel parameter is applied, the deepseek profile stays
+disabled and the switch refuses to start it.
 
 Two notes on the dense row. Its numbers were **23.9/29.5 t/s under the old
 BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (needed for the big MoE

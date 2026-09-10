@@ -80,7 +80,8 @@ weights_ready() {
         gemma)
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
         deepseek)
-            [ -f "$DEEPSEEK_DIR/.download-complete" ] ;;
+            [ -f "$DEEPSEEK_DIR/.download-complete" ] \
+                && [ -f "$DEEPSEEK_DIR/.deepseek-enabled" ] ;;
     esac
 }
 
@@ -147,7 +148,7 @@ cmd_use() {
     local p="$1"
     [ -n "${UNIT[$p]:-}" ] || { echo "unknown profile '$p'" >&2; exit 2; }
     if ! weights_ready "$p"; then
-        echo "profile '$p': weights not complete yet. Aborting." >&2
+        echo "profile '$p': not ready on this machine yet (weights missing or the profile is disabled)." >&2
         exit 3
     fi
     for q in "${PROFILES[@]}"; do
