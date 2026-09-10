@@ -4,6 +4,21 @@
 
 **Run a high-quality open LLM on an AMD Ryzen AI Max machine: fast, and in private.**
 
+What it runs — four open-weight models, everything below measured on this
+machine:
+
+| profile | model | speed here (prose / code) | best for |
+|---|---|---|---|
+| `dense` | **Qwen3.8-27B**, dense, 27B parameters | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
+| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, twice the speed |
+| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; it is also the only family here that reads images |
+| `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
+
+One model at a time, on one OpenAI-compatible endpoint (`:8731`, or `:8741`
+behind an API key). Switch with one click in the GNOME panel, or with one
+command over SSH. No subscription, nothing leaves the machine. The full
+comparison with paid models, and the measured numbers, are further down.
+
 New to this? Read the **[plain-language guide](docs/PLAIN-GUIDE.md)** first.
 It is written for readers who are not engineers.
 
