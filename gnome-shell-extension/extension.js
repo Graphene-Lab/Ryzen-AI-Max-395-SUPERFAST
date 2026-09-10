@@ -98,8 +98,13 @@ class SuperfastMenu extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._orchItem);
 
-        this.menu.addMenuItem(new PopupMenu.PopupMenuItem('Refresh')).connect('activate',
-            () => this.refresh());
+        // Note: since GNOME 45, `menu.addMenuItem()` returns nothing, so the
+        // item has to be created, connected and then added — chaining
+        // `.connect()` on the return value throws and the whole extension goes
+        // to State: ERROR (found on the reference machine's live session).
+        const refreshItem = new PopupMenu.PopupMenuItem('Refresh');
+        refreshItem.connect('activate', () => this.refresh());
+        this.menu.addMenuItem(refreshItem);
 
         this._termItem = new PopupMenu.PopupMenuItem('Open terminal menu');
         this._termItem.connect('activate', () => {
@@ -123,12 +128,25 @@ class SuperfastMenu extends PanelMenu.Button {
     // A profile takes from a few seconds to a minute and a half to load, so the
     // menu refreshes itself for a while instead of once.
     poll(rounds = 14) {
+        this.stopPolling();
         this._pollLeft = rounds;
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+        this._pollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
             this.refresh();
             this._pollLeft -= 1;
-            return this._pollLeft > 0 ? GLib.SOURCE_CONTINUE : GLib.SOURCE_REMOVE;
+            if (this._pollLeft > 0)
+                return GLib.SOURCE_CONTINUE;
+            this._pollId = null;
+            return GLib.SOURCE_REMOVE;
         });
+    }
+
+    // Called from disable(): a timer left running would call refresh() on a
+    // destroyed menu, which the shell reports as a JS error.
+    stopPolling() {
+        if (this._pollId) {
+            GLib.source_remove(this._pollId);
+            this._pollId = null;
+        }
     }
 
     refresh() {
@@ -158,6 +176,7 @@ export default class SuperfastExtension extends Extension {
     }
 
     disable() {
+        this._menu?.stopPolling();
         this._menu?.destroy();
         this._menu = null;
     }
