@@ -799,6 +799,29 @@ of work is like using a missile as a hammer to hang a picture: it can drive
 the nail, but slowly, expensively and with a great deal of unnecessary
 damage. The orchestrator is the hammer.
 
+Two boundaries are worth stating, because they keep the design honest. First,
+where a procedure is fully deterministic, ordinary code is cheaper and faster
+than any model: the orchestrator earns its place at the fuzzy edge —
+understanding what the user meant, filling in a missing detail, choosing
+between a few known flows — and the moment the flow is known, plain logic
+should run it. The strongest designs put rules first and the model behind
+them, so a keyword table can answer most commands in well under a
+millisecond and the model only handles the rest. Second, actions that matter —
+locks, alarms, appliances — need guardrails: the model should choose from an
+allowed list of commands instead of emitting free-form text, anything
+irreversible asks for confirmation, and a deterministic fallback keeps working
+when the model is unavailable. The orchestrator is a hammer for the right
+nail, not a safety mechanism.
+
+Beyond routing and reactive control, the same role covers several adjacent
+jobs: picking the model tier for a request; rewriting or expanding a search
+query before retrieval; summarizing a long conversation before handing it to
+the specialist; running cheap guardrails such as moderation, personal-data
+checks or prompt-injection detection in front of the expensive model; making a
+first-pass judgement of the specialist's answer; and spawning or coordinating
+subagents. All of them are short, cheap decisions where a large model's
+latency is pure waste.
+
 This philosophy is not invented here; it is how production systems are
 built. Anthropic describes an orchestrator-worker design in which a lead
 agent plans, spawns three to five specialized subagents in parallel, and
