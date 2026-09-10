@@ -38,8 +38,11 @@ exists today.
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
-machine runs the dense Qwen3.8-27B, the Qwen3.8-Flash-Next MoE, Gemma-4 and
-DeepSeek-V4-Flash. Other models can be added the same way. See
+machine runs four profiles, in order of size: the dense Qwen3.8-27B (27B
+parameters), the Qwen3.8-Flash-Next mixture-of-experts (125B in total, 6B
+active per token), Gemma-4 (25.2B) and DeepSeek-V4-Flash (284B in total) —
+that is, up to a 284-billion-parameter model running entirely on the machine.
+Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
 
 ### A measured starting point
@@ -986,6 +989,20 @@ numbers in this section are not measured by us.** They come from the vendors'
 own model cards and from published comparisons, and they carry the caveats at
 the end of the section.
 
+First, the sizes, because these profiles are not the same class of model:
+
+| profile | total parameters | active per token | context | speed here | role |
+|---|---|---|---|---|---|
+| DeepSeek-V4-Flash | **284B** | 13B | 1M | 11.2 t/s | the largest model the machine runs |
+| Qwen3.8-Flash-Next | **125B** (+51B n-gram table) | 6B | 262K | 37.7–46.4 t/s | the largest Qwen profile, and the fastest of the large ones |
+| Qwen3.8-27B dense | **27B** | 27B (all) | 262K | 21.0–26.1 t/s | the precision-first profile |
+| Gemma-4-26B-A4B | 25.2B | 3.8B | 256K | 57.3–57.6 t/s | the small, fast profile |
+
+So the Qwen model compared most often, the dense 27B, is the **smaller** of
+the two Qwen profiles this machine runs: beside it there is Flash-Next, a
+125B-parameter mixture-of-experts that is both larger and, on Qwen's own
+card, ahead on most rows. Both are compared below.
+
 **Read the model names carefully.** These families have similar names, and
 the numbers below are for the exact models this machine runs:
 
@@ -996,9 +1013,9 @@ the numbers below are for the exact models this machine runs:
 | DeepSeek-V4-Flash 2.58 bpw | DeepSeek-V4-Flash, 284B total / 13B active, 1M context | not DeepSeek-V3.2, not DeepSeek-V4-Pro |
 | Gemma-4-26B-A4B ROCmFP4 | Gemma 4 26B A4B MoE, 25.2B total / 3.8B active, 128 experts (8 active), 256K context | not Gemma 3 27B, not Gemma 4 31B |
 
-#### Qwen3.8-27B (the dense profile)
+#### Qwen3.8-27B (the dense profile, the smaller of the two Qwen models)
 
-Collected from Artificial Analysis indices, vendor reports and BrainBench:
+Collected from Artificial Analysis indices, vendor reports and BrainBench.
 
 | benchmark | Qwen3.8-27B (local) | paid model in the same range | note |
 |---|---|---|---|
@@ -1024,6 +1041,10 @@ is one of the paid frontier models, on the same harness:
 | HLE (hard multidisciplinary) | 30.8 | **40.0** |
 | LiveCodeBench v6 | **90.3** | 88.8 |
 
+The same card also lists the larger Qwen profile this machine runs (Flash-Next,
+125B total), and there Flash-Next is ahead of the 27B on most rows. The next
+subsection covers it.
+
 **Where it is strong.** Agentic coding and instruction following: it is ahead
 of Claude Opus 4.6 Max on SWE-bench Pro, DeepSWE 1.1, CoWorkBench and
 IFBench, and it answers faster than the paid models compared here (about
@@ -1038,11 +1059,14 @@ here, which shows in everyday use. On BrainBench it scores 80.0%, clearly
 above GPT-5.4 (74.0%) and GPT-4o (39.7%), but that is one benchmark on one
 quantized build.
 
-#### Qwen3.8-Flash-Next (the fast, large profile)
+#### Qwen3.8-Flash-Next (the largest Qwen profile, and the fastest of the large ones)
 
-The same card compares the MoE profile against Claude Opus 4.6 Max. It is the
-fastest profile this machine has, and on several rows it is the strongest
-model in that table:
+This is the **larger** of the two Qwen models this machine runs: 125B
+parameters in total against 27B for the dense profile, with 6B active per
+token thanks to the mixture-of-experts design, which is also why it is much
+faster here (37.7–46.4 t/s against 21.0–26.1). The same vendor card compares
+it against Claude Opus 4.6 Max, and on several rows it is the strongest model
+in that table:
 
 | benchmark | Qwen3.8-Flash-Next | Claude Opus 4.6 Max |
 |---|---|---|
