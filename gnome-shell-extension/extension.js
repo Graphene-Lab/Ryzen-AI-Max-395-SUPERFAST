@@ -17,16 +17,43 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const PROFILES = ['dense', 'flash', 'gemma', 'deepseek'];
 
-function resolveSwitch() {
-    const home = GLib.get_home_dir();
-    const candidate = `${home}/.local/bin/superfast-switch`;
-    return GLib.file_test(candidate, GLib.FileTest.EXISTS) ? candidate : 'superfast-switch';
+// How to start a terminal that runs a command. The first two use the
+// `program -- command args` form, the last two the older `-e` form. Ptyxis is
+// the terminal Fedora ships now; gnome-terminal is NOT installed on Fedora 44,
+// which is why this list is resolved at runtime instead of being hardcoded.
+const TERMINALS = [
+    ['ptyxis', '--'],
+    ['gnome-terminal', '--'],
+    ['kgx', '--'],
+    ['xterm', '-e'],
+    ['konsole', '-e'],
+];
+
+// The argv for the switch CLI: the installed absolute path when there is one,
+// otherwise /usr/bin/env so that the PATH is searched explicitly.
+function switchArgv(args) {
+    const installed = `${GLib.get_home_dir()}/.local/bin/superfast-switch`;
+    if (GLib.file_test(installed, GLib.FileTest.EXISTS))
+        return [installed, ...args];
+    return ['/usr/bin/env', 'superfast-switch', ...args];
+}
+
+// The argv that opens the TUI in a terminal, or null when no terminal exists.
+function tuiTerminalArgv() {
+    const installed = `${GLib.get_home_dir()}/.local/bin/superfast-tui`;
+    const tui = GLib.file_test(installed, GLib.FileTest.EXISTS) ? installed : 'superfast-tui';
+    for (const [program, style] of TERMINALS) {
+        const path = GLib.find_program_in_path(program);
+        if (path)
+            return [path, style, tui];
+    }
+    return null;
 }
 
 function runCli(args, onDone) {
     try {
         const proc = Gio.Subprocess.new(
-            [resolveSwitch(), ...args],
+            switchArgv(args),
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
         proc.communicate_utf8_async(null, null, (p, res) => {
             let out = '';
@@ -40,6 +67,7 @@ function runCli(args, onDone) {
                 onDone(out);
         });
     } catch (e) {
+        logError(e, 'SUPERFAST: could not run superfast-switch');
         if (onDone)
             onDone('');
     }
@@ -49,6 +77,7 @@ const SuperfastMenu = GObject.registerClass(
 class SuperfastMenu extends PanelMenu.Button {
     _init() {
         super._init(0.0, 'SUPERFAST');
+        this._pollLeft = 0;
         this.add_child(new St.Icon({
             icon_name: 'utilities-system-monitor-symbolic',
             style_class: 'system-status-icon',
@@ -65,7 +94,7 @@ class SuperfastMenu extends PanelMenu.Button {
         this._orchItem = new PopupMenu.PopupMenuItem('Orchestrator: …');
         this._orchItem.connect('activate', () => {
             const on = this._orchestratorActive;
-            runCli(['orchestrator', on ? 'off' : 'on'], () => this.refresh());
+            runCli(['orchestrator', on ? 'off' : 'on'], () => this.poll());
         });
         this.menu.addMenuItem(this._orchItem);
 
@@ -74,13 +103,32 @@ class SuperfastMenu extends PanelMenu.Button {
 
         this._termItem = new PopupMenu.PopupMenuItem('Open terminal menu');
         this._termItem.connect('activate', () => {
-            const tui = `${GLib.get_home_dir()}/.local/bin/superfast-tui`;
-            const cmd = GLib.file_test(tui, GLib.FileTest.EXISTS) ? tui : 'superfast-tui';
-            GLib.spawn_command_line_async(`gnome-terminal -- ${cmd}`);
+            const argv = tuiTerminalArgv();
+            if (!argv) {
+                this._statusItem.label.text = 'No terminal emulator found';
+                return;
+            }
+            try {
+                Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+            } catch (e) {
+                logError(e, 'SUPERFAST: could not open a terminal');
+                this._statusItem.label.text = 'Could not open a terminal';
+            }
         });
         this.menu.addMenuItem(this._termItem);
 
         this.refresh();
+    }
+
+    // A profile takes from a few seconds to a minute and a half to load, so the
+    // menu refreshes itself for a while instead of once.
+    poll(rounds = 14) {
+        this._pollLeft = rounds;
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+            this.refresh();
+            this._pollLeft -= 1;
+            return this._pollLeft > 0 ? GLib.SOURCE_CONTINUE : GLib.SOURCE_REMOVE;
+        });
     }
 
     refresh() {
@@ -96,12 +144,7 @@ class SuperfastMenu extends PanelMenu.Button {
             for (const p of PROFILES) {
                 const label = `${p === active ? '● ' : '○ '}${p}`;
                 const item = new PopupMenu.PopupMenuItem(label);
-                item.connect('activate', () => runCli(['use', p], () => {
-                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-                        this.refresh();
-                        return GLib.SOURCE_REMOVE;
-                    });
-                }));
+                item.connect('activate', () => runCli(['use', p], () => this.poll()));
                 this._modelSection.addMenuItem(item);
             }
         });

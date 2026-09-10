@@ -45,12 +45,13 @@ set -euo pipefail
 
 IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
 RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
-# Published candidates, in order. The first is built by this repository's
-# workflow; the second is an older hand-pushed package under the repository's
-# name (not connected to the repository, so it may stay private and need a
-# login). If neither can be pulled, the image is built from runtime/.
+# Published candidates, in order. The first is built and published by this
+# repository's workflow and is public, so no login is needed. If you mirror the
+# image somewhere else, list those references in RUNTIME_PUBLISHED_EXTRA
+# (space separated) and they are tried after it. When no candidate can be
+# pulled, the image is built from runtime/ instead.
 RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
-RUNTIME_PUBLISHED_LEGACY="${SUPERFAST_RUNTIME_PUBLISHED_LEGACY:-ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1}"
+RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
 FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.2}"
 REBOOT_NEEDED=0
 PROFILES="${PROFILES:-dense}"
@@ -354,7 +355,8 @@ phase_profiles() {
             log "GGUF runtime already present: $RUNTIME_IMAGE"
         else
             pulled=""
-            for cand in "$RUNTIME_PUBLISHED" "$RUNTIME_PUBLISHED_LEGACY"; do
+            # $RUNTIME_PUBLISHED_EXTRA is deliberately unquoted: it is a list.
+            for cand in "$RUNTIME_PUBLISHED" $RUNTIME_PUBLISHED_EXTRA; do
                 [ -n "$cand" ] || continue
                 if podman pull "$cand" && podman tag "$cand" "$RUNTIME_IMAGE"; then
                     log "runtime pulled from $cand and tagged as $RUNTIME_IMAGE"

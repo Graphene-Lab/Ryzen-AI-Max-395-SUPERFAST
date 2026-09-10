@@ -30,7 +30,14 @@ For development, copy the folder to
 - **Serving:** which model currently answers on port 8731.
 - **Model:** activate `dense`, `flash`, `gemma` or `deepseek` (one at a time).
 - **Orchestrator:** on/off for the small fast router on port 8732.
-- **Open terminal menu:** launches the text interface (`superfast-tui`).
+- **Open terminal menu:** launches the text interface (`superfast-tui`) in the
+  first terminal emulator found on the machine, in this order: `ptyxis`,
+  `gnome-terminal`, `kgx`, `xterm`, `konsole`. The order matters: Fedora 44
+  ships **Ptyxis** and does not install `gnome-terminal` at all, so a
+  hardcoded `gnome-terminal` would simply fail on the reference machine — which
+  is how this was found.
 
 It performs no network calls of its own: every action goes through the local
-CLI, and the menu re-reads the real state on each refresh.
+CLI, and the menu re-reads the real state on each refresh. After a profile
+change it refreshes itself for about a minute, because a profile takes from a
+few seconds (dense) to a minute and a half (deepseek) to load.
