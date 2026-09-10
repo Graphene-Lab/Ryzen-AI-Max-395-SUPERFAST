@@ -708,8 +708,12 @@ check.
 Gated DeltaNet carries O(1) state, so 48 of 64 layers have no KV cache at all.
 
 **Prompt cache** — a follow-up turn in a long conversation resumes instead of
-re-prefilling, worth roughly 20× on time-to-first-token at 32K. Warm answers
-are byte-identical to cold ones by construction.
+re-prefilling, worth roughly 20× on time-to-first-token at 32K. Byte-identity
+of a warm answer depends on the profile, and the engine says which: the dense
+profile aligns its snapshots and its log states "warm decode is BITWISE
+identical to cold", while the Flash-Next profile keeps the KV in place and
+reports the opposite on purpose ("a warm answer is NOT bitwise the cold one").
+Both resume the conversation; only the dense profile promises byte-identity.
 
 **Batched decode** — 8 concurrent sequences, 4.87× aggregate, each
 byte-identical to running alone. **Off by default**, and it trades away
@@ -839,7 +843,12 @@ One caveat if you pin it: a single full-context entry is about 18.4 GB at
 262K, so a small explicit budget produces a cache that reports itself enabled
 and never actually hits. The engine warns at startup when this happens.
 
-Warm answers are byte-identical to cold ones by construction.
+Warm answers are byte-identical to cold ones **on the dense profile**, where
+the snapshots are aligned to 2048 and the engine's log says so. The Flash-Next
+profile reports the opposite in `/health` (`bitwise_identical_to_cold:
+false`), because it keeps the KV in place and snapshots every request: a
+follow-up prefills only its new tokens, which is equivalent in the normal
+sense but not byte-identical.
 
 ---
 
@@ -1397,7 +1406,7 @@ reference machine:
 | Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
 | Qwen3.8-Flash-Next | 262,144 | ~45 GB | native maximum, and the fastest of the large profiles |
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
-| DeepSeek-V4-Flash | 1,048,576 | ~116 GB | the model's native 1M; the machine has about 8 GB left |
+| DeepSeek-V4-Flash | 524,288 | ~102 GB | half of the model's native 1M, and the largest window that stays stable here — see below |
 
 Three properties that matter when a program uses this machine as its model:
 
@@ -1416,10 +1425,56 @@ Three properties that matter when a program uses this machine as its model:
   512 and 1024 tokens — so a client should send a large `max_tokens` with
   them, or the answer comes back empty with `finish_reason: "length"`.
 
-DeepSeek at the full 1M window leaves about 8 GB of free memory: that is the
-price of using the whole context. On a machine that also runs a desktop and
-other services, 512K is the safer setting — change `-c 1048576` to `-c 524288`
-in `~/.config/systemd/user/deepseek.service` and restart that profile.
+Why DeepSeek ships 512K and not its full 1M: both were measured. At 1M the
+machine has about 7 GB of free memory left, and long generations then stall —
+an 8192-token request stopped after 5668 tokens and burned 14 CPU cores for 25
+minutes without producing anything, observed twice. At 512K the same profile
+uses ~102 GB, keeps ~21 GB free, and a 1024-token generation finishes in 101
+seconds at 10.1 t/s. If this machine is to run nothing else, `-c 1048576` in
+`~/.config/systemd/user/deepseek.service` restores the full window.
+
+### Point a client at it
+
+Any OpenAI-compatible client works: the base URL is
+`http://<machine-ip>:8731/v1`, and on a machine reachable from your network
+you can instead use the key-protected gateway on port 8741 (open that port in
+the firewall first: `sudo firewall-cmd --add-port=8741/tcp --permanent &&
+sudo firewall-cmd --reload`).
+
+Four rules, and they come from the measurements above:
+
+| setting | what to do |
+|---|---|
+| model name | read it from `/health` (`"model"`). It changes with the active profile: `halogen-qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
+| context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
+| answer budget | always send a large `max_tokens` (8,192 is a good default). It covers the reasoning tokens too, and with a small budget the thinking models return an empty answer |
+| reasoning, temperature | send `reasoning_effort` when you want to change how much the model thinks (`low` for chat and code, `medium` for hard problems). Leave temperature and top_p alone: the machine already applies the values its model vendor recommends |
+
+A worked example, the one used on the Windows PC that drives this machine — a
+model provider entry in Qwen Code's `~/.qwen/settings.json`:
+
+```json
+{
+  "id": "halogen-qwen3.8-flash-next",
+  "name": "[SUPERFAST] flash profile (Wi-Fi)",
+  "baseUrl": "http://192.168.43.253:8731/v1",
+  "envKey": "SUPERFAST_API_KEY",
+  "generationConfig": {
+    "timeout": 600000,
+    "maxRetries": 1,
+    "contextWindowSize": 262144,
+    "samplingParams": { "max_tokens": 8192 }
+  }
+}
+```
+
+`envKey` names an environment variable (the server needs no key on 8731, so
+the value can be the placeholder `local`). Add one entry per profile, with the
+profile's own model name and its own context window, and switch profiles on
+the machine with `superfast-switch use …`. Keep the system prompt and the tool
+definitions stable across turns: that is what lets the server reuse the
+cached prefix instead of re-reading the whole conversation (see
+[the prompt cache](#prompt-cache)).
 
 The auxiliary orchestrator is toggled separately, because it runs *alongside*
 the active profile instead of replacing it:

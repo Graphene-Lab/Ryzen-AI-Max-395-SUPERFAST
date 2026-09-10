@@ -14,7 +14,14 @@ ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 8731:8731 \
   llama-rocmfpx:7.2.4 \
   -m /models/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf \
   --host 0.0.0.0 --port 8731 \
-  -c 1048576 --alias deepseek-v4-flash --jinja
+  -c 524288 --alias deepseek-v4-flash --jinja
+# -c 524288 is a measured choice, not the model maximum. The model supports
+# 1M and 1M does load (n_ctx 1048576), but it leaves only ~7 GB of free memory
+# and long generations then stall: at 1M a 8192-token request stopped after
+# 5668 tokens and spun at 14 cores for 25 minutes without producing anything,
+# twice observed. At 524288 this profile uses ~102 GB, keeps ~21 GB free, and
+# a 1024-token generation completes (101 s, 10.1 t/s). Raise it to 1048576 by
+# hand if the machine is to run nothing else.
 ExecStop=/usr/bin/podman stop -t 30 deepseek-server
 # podman run exits 143/137 when the container is stopped: accept those, so a
 # profile switch does not leave the unit in the "failed" state.

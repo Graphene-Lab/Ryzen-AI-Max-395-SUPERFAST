@@ -26,7 +26,7 @@ the reference host:
 
 | flag | why |
 |---|---|
-| `-c 262144` (gemma), `-c 1048576` (deepseek) | the largest window each model supports. Gemma-4 in use: ~23 GB of memory. DeepSeek at 1M: ~116 GB, about 8 GB left — use `-c 524288` if the machine also runs a desktop and other services |
+| `-c 262144` (gemma), `-c 524288` (deepseek) | the largest window that still works well on this machine. Gemma-4 in use: ~23 GB of memory. DeepSeek at 512K: ~102 GB in use, ~21 GB left, and a 1024-token generation completes in 101 s. The model's own maximum is 1M and it does load, but with only ~7 GB left long generations then stall (a 8192-token request stopped after 5668 tokens and burned 14 cores for 25 minutes without producing anything) |
 | `--jinja` | tool calling. llama.cpp needs the model's chat template for tools; verified with a tool request on Gemma-4, which answered with a proper `tool_calls` reply |
 | *not* `--cache-reuse` | llama.cpp answers "cache_reuse is not supported by this context, it will be disabled" with the unified KV cache these servers use, so the flag would only add a warning |
 
