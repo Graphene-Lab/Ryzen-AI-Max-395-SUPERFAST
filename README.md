@@ -48,8 +48,11 @@ Other models can be added the same way. See
 **Why one model at a time.** This is a deliberate architecture choice, not a
 limitation. A single model gets the whole machine: all of the unified memory
 for its weights and its KV cache, and therefore the largest context window the
-model supports — 262,144 tokens for the Qwen profiles, 256K for Gemma-4, and
-the full 1M for DeepSeek-V4-Flash. Running two large models at once would mean
+machine can hold for it — 262,144 tokens for the Qwen and Gemma profiles, and
+512K for DeepSeek-V4-Flash, which is half of its 1M because the full 1M leaves
+too little memory to stay stable (see
+[What each profile ships](#what-each-profile-ships-context-tokens-tools)).
+Running two large models at once would mean
 splitting that memory, and the first thing to shrink would be the context
 window — which is exactly what an agent needs most: a long window that holds
 the conversation, the tool definitions, and the files being worked on. That is
@@ -280,9 +283,10 @@ Two things the table does not show. The `gemma` and `deepseek` profiles need a
 second runtime, the GGUF server image built from
 [`runtime/`](runtime/README.md). It is published by this repository's workflow
 as `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1`, and the setup
-script pulls it and tags it as `llama-rocmfpx:7.2.4`; if the pull fails a
-login is needed while the package is private, and the script builds it from
-`runtime/` instead. And neither speculative head in the table works in our
+script pulls it and tags it as `llama-rocmfpx:7.2.4`. It is public, so no login
+is needed; if the pull fails (no network, or you prefer to build it yourself)
+the script builds it from `runtime/` instead. And neither speculative head in
+the table works in our
 stack today: the Gemma MTP file needs a draft-context flag this runtime build
 rejects, and the DeepSeek DSpark file is built for another runtime (`unknown
 model architecture`). The measured Gemma and DeepSeek numbers are therefore
@@ -493,8 +497,11 @@ measured with a 512-token budget it is 10.9 t/s on prose and 11.0 on code, so
 the numbers agree within about two percent across three independent runs.
 Two things lower it in practice, both measured:
 
-- **Long generations decode more slowly.** A 1024-token request that ran
-  alone decoded at 7.2 t/s (~142 s), where a 512-token one runs at ~11 t/s.
+- **Long generations decode more slowly, but less than it first looked.** With
+  the profile at its full 1M context a 1024-token request ran at 7.2 t/s; at
+  the shipped 512K the same request finishes in 101 s, which is 10.1 t/s. That
+  earlier figure was measured while the machine was starved of memory, not as
+  a property of the model.
 - **Two requests at once are each slower** (one of two concurrent 512-token
   requests measured 6.4 t/s), because this profile serves four slots in
   parallel. One client at a time gets the fast number.
@@ -1030,6 +1037,11 @@ First, the sizes, because these profiles are not the same class of model:
 | Qwen3.8-27B dense | **27B** | 27B (all) | 262K | 21.0–26.1 t/s | the precision-first profile |
 | Gemma-4-26B-A4B | 25.2B | 3.8B | 256K | 57.3–57.6 t/s | the small, fast profile |
 
+*The context column is what the model supports. The window this project
+actually serves is in
+[What each profile ships](#what-each-profile-ships-context-tokens-tools) — for
+DeepSeek it is 512K rather than 1M, and the reason is measured.*
+
 So the Qwen model compared most often, the dense 27B, is the **smaller** of
 the two Qwen profiles this machine runs: beside it there is Flash-Next, a
 125B-parameter mixture-of-experts that is both larger and, on Qwen's own
@@ -1458,7 +1470,7 @@ model provider entry in Qwen Code's `~/.qwen/settings.json`:
 {
   "id": "halogen-qwen3.8-flash-next",
   "name": "[SUPERFAST] flash profile (Wi-Fi)",
-  "baseUrl": "http://192.168.43.253:8731/v1",
+  "baseUrl": "http://<machine-ip>:8731/v1",
   "envKey": "SUPERFAST_API_KEY",
   "generationConfig": {
     "timeout": 600000,

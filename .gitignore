@@ -6,3 +6,11 @@ __pycache__/
 
 # host-specific validation log (kept local, not published)
 docs/fedora-44-setup.md
+
+# never commit these, even by accident
+*.key
+.env
+*.env
+*.part
+*.tmp
+*.bak
