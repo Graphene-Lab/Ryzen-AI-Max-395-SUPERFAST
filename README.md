@@ -244,9 +244,11 @@ own directory, and the setup script and the switch know those paths.
 Two things the table does not show. The `gemma` and `deepseek` profiles need a
 second runtime, the GGUF server image built from [`runtime/`](runtime/README.md)
 (`llama-rocmfpx:7.2.4`); that image is not published on GHCR yet, so build it
-locally with one command — see `runtime/README.md`. And the MTP drafter of the
-Gemma profile is shipped but **not used**: the runtime build rejects the
-draft-context flag it needs, so the measured Gemma numbers are without it.
+locally with one command — see `runtime/README.md`. And neither speculative
+head in the table works in our stack today: the Gemma MTP file needs a
+draft-context flag this runtime build rejects, and the DeepSeek DSpark file is
+built for another runtime (`unknown model architecture`). The measured Gemma
+and DeepSeek numbers are therefore without speculation.
 
 For the dense profile, download the checkpoint once and mount it:
 
@@ -466,6 +468,14 @@ measured spent the **whole** budget on reasoning and returned an empty
 characters of reasoning). Give clients a large `max_tokens`, and read
 `finish_reason` before concluding that the model failed. If you want short
 answers, this is not the profile for that.
+
+This profile has **no speculative decoding** in our stack, and we tried. The
+model ships a DSpark drafter (the 10.9 GB file in the table above), we
+downloaded it and its SHA-256 verifies, but the file is built for the Ember
+runtime: when our llama.cpp build is given it, it stops with
+`unknown model architecture: 'deepseek4-dflash-draft'`. So the numbers above
+are what the profile gives without speculation, and there is no flag we can
+add today that changes that.
 
 Two notes on the dense row. Its numbers are **23.9/29.5 t/s under the old
 BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (which the large MoE
