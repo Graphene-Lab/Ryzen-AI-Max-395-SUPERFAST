@@ -823,6 +823,45 @@ Warm answers are byte-identical to cold ones by construction.
 
 ---
 
+## Published artifacts
+
+Everything this project publishes or uses, in one place. This repository is the
+entry point: the images it owns are built and pushed by
+[`.github/workflows/publish-runtime.yml`](.github/workflows/publish-runtime.yml),
+so they are connected to this repository and appear in its Packages section.
+
+| artifact | registry | what it is |
+|---|---|---|
+| `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
+| `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
+| `ghcr.io/peonist-ai/halogen-flash-server:0.5.2` | GHCR (upstream) | the engine that serves the Flash-Next MoE profile |
+| `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
+| `peonist-ai/halogen-qwen3.8-flash-next` | Hugging Face | the MoE checkpoint and both overlays |
+| `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` | Hugging Face | the Gemma-4 weights used by the `gemma` profile |
+| `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` | Hugging Face | the DeepSeek-V4-Flash weights used by the `deepseek` profile |
+| `LiquidAI/LFM2.5-350M-GGUF`, `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` | Hugging Face | the small models used by the orchestrator |
+
+Pull the runtime image the way the profile units expect it:
+
+```bash
+podman pull ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1
+podman tag  ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1 \
+            llama-rocmfpx:7.2.4
+```
+
+`deploy/setup-fedora.sh` does this by itself, and falls back to building from
+[`runtime/`](runtime/README.md) when the pull fails.
+
+The weights are **not** in the images. They are fetched from Hugging Face by
+the downloader in [`deploy/profiles/`](deploy/profiles/README.md), which
+checks each file against the SHA-256 published there before using it. The
+images contain the engines only.
+
+Nothing in this project is redistributed under a licence that forbids it; the
+credits and the licences of every upstream component are in
+[`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES.md) and inside the images at
+`/licenses`. Model weights keep their own licences, from their authors.
+
 ## Requirements
 
 - **AMD Strix Halo (gfx1151)** — Ryzen AI Max+ 395 or equivalent. The build

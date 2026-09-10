@@ -10,7 +10,8 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
 - `Dockerfile` — the reproducible build of `llama-server` for gfx1151.
 - `NOTICE.md` — credits and licenses of every upstream component
   (everything is MIT lineage except AMD's ROCm libraries; see the notice).
-- The **prebuilt image**, published to GHCR on 2026-09-10:
+- The **prebuilt image**, published to GHCR by this repository's workflow
+  ([`.github/workflows/publish-runtime.yml`](../.github/workflows/publish-runtime.yml)):
 
   ```bash
   podman pull ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:llama-rocmfpx-1
@@ -18,10 +19,10 @@ Max+ 395. It exists so that users of the guide do not have to repeat the
               llama-rocmfpx:7.2.4     # the name the profile units use
   ```
 
-  `deploy/setup-fedora.sh` does exactly this, and builds the image locally if
-  the pull fails (for example when the package is still private: GHCR makes a
-  new package private, and its visibility is changed in the package settings
-  on GitHub).
+  Publishing it from a workflow of this repository is deliberate: a package
+  pushed by hand from a local machine is not connected to the repository, and
+  GitHub then refuses to change its visibility through the API. `deploy/setup-fedora.sh`
+  does the pull-and-tag above, and builds the image locally if the pull fails.
 
 ## Build it yourself (one time)
 
