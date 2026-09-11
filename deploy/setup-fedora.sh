@@ -144,6 +144,27 @@ in_profiles() {
     is_in "$PROFILES" "$1"
 }
 
+# The shared-memory kernel parameters are what the large checkpoints need, and
+# whether they are ACTIVE can only be read from /proc/cmdline. A machine that
+# has them written but has not booted into them fails later with "cudaMalloc
+# failed: out of memory", which looks like a GPU problem rather than a missing
+# boot parameter, so every run ends by saying which of the two it is.
+kernel_args_state() {
+    local want="amdgpu.gttsize=118784"
+    if grep -qw -- "$want" /proc/cmdline 2>/dev/null; then
+        log "shared-memory kernel parameters: ACTIVE ($want)"
+        return 0
+    fi
+    if grep -q -- "amdgpu.gttsize=" /etc/kernel/cmdline 2>/dev/null; then
+        log "shared-memory kernel parameters: written, not active yet (the next boot applies them)"
+    else
+        log "shared-memory kernel parameters: MISSING."
+        log "  flash and deepseek will fail with 'cudaMalloc failed: out of memory'."
+        log "  Run phase 5 and reboot, or by hand:"
+        log "  sudo grubby --update-kernel=ALL --args=\"amdgpu.gttsize=118784 ttm.pages_limit=31457280\""
+    fi
+}
+
 # Weights directory of a profile.
 profile_dir() {
     case "$1" in
@@ -759,6 +780,9 @@ main() {
     log "setup complete — profiles prepared: $PROFILES"
     log "start one with: superfast-switch use dense|flash|gemma|deepseek"
     log "control: superfast-tui (terminal) or the GNOME extension"
+    # The one thing a re-run cannot tell by looking at the machine: whether the
+    # parameters are in the running kernel yet.
+    kernel_args_state
     if [ "$REBOOT_NEEDED" = "1" ]; then
         log "REBOOT REQUIRED: the shared-memory kernel parameters take effect only after a reboot."
         if [ "${UNATTENDED:-0}" = "1" ] || [ "${AUTO_REBOOT:-0}" = "1" ]; then

@@ -38,6 +38,14 @@
 
 ### Fixed
 
+- **A machine could look installed and then fail with `cudaMalloc failed: out of
+  memory`.** Phase 5 writes the shared-memory kernel parameters and cannot know
+  whether they are in the running kernel; nothing checked afterwards, and the
+  failure that follows looks like a GPU problem rather than a missing boot
+  parameter. Every run now ends with the state in one line: ACTIVE, "written,
+  not active yet (the next boot applies them)", or MISSING with the command to
+  fix it. Verified on both machines: ACTIVE on the reference host, and
+  "written, not active yet" on a kernel that never had them applied.
 - **The dense unit the installer wrote was corrupted by the installer itself.**
   The heredoc that writes `superfast.service` is unquoted, and one of its
   comment lines contained `` `superfast-switch status` `` — a command
