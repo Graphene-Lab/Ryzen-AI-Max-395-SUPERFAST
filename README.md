@@ -1662,7 +1662,7 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 |---|---|
 | model name | read it from `/health` (`"model"`). It changes with the active profile: `halogen-qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
 | context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
-| answer budget | **16,384 to 32,768 for coding**, not 8,192. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file |
+| answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
 | sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
 | reasoning effort | on the Qwen profiles send `reasoning_effort` per request (`low` for chat and code, `medium` for hard problems): the vendor default over-thinks and that is the documented cause of long thinking loops. The GGUF profiles ignore the field |
 
@@ -1707,10 +1707,31 @@ tuned for coding:
 }
 ```
 
-Repeat it once per profile, changing `id`, `name` and `contextWindowSize`
-(524,288 for DeepSeek), and dropping `extra_body` on Gemma and DeepSeek, which
-ignore it. `envKey` names an environment variable, not the key itself: point it
-at the gateway key, read with `superfast-switch api-key show`, and set it with
+Repeat the block once per profile with the values below. `id` is what the
+client sends as the model name, so it must match what `/health` reports, and
+`contextWindowSize` must match the window the profile allocates:
+
+| profile | `id` | context window | answer budget | `temperature` | `extra_body` |
+|---|---|---|---|---|---|
+| Flash-Next | `halogen-qwen3.8-flash-next` | 262,144 | 32,768 | leave unset | `{"reasoning_effort":"low"}` |
+| Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | leave unset | `{"reasoning_effort":"low"}` |
+| Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | **0** | none, the profile ignores it |
+| DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | **0** | none, the profile ignores it |
+
+The dense budget is smaller than the flash budget on purpose. Dense answers at
+about 31 tokens per second and flash at about 52, so the same number of tokens
+takes longer there and the client's 15-minute stream limit would cut the answer
+before the model finished. Gemma answers at about 57 and holds 32,768 inside
+the limit; DeepSeek answers at about 10, so a full 16,384-token answer takes 27
+minutes and needs the longer limit below.
+
+`temperature` is only set on Gemma and DeepSeek, because those two declare no
+sampling default of their own: without the field the client's own default
+applies, and the numbers in this README were measured greedy. The Qwen profiles
+are already greedy and say so in `/health`.
+
+`envKey` names an environment variable, not the key itself: point it at the
+gateway key, read with `superfast-switch api-key show`, and set it with
 `setx SUPERFAST_API_KEY <key>` on Windows or `export SUPERFAST_API_KEY=<key>`
 elsewhere. When the client runs on the machine itself, use
 `http://127.0.0.1:8731/v1` and any placeholder value, because loopback needs no

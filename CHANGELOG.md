@@ -66,6 +66,14 @@
   project's own `SUPERFAST_*` tooling variables, names which image honours
   each one, and documents the pool, its constraints (at least the context, a
   multiple of 256, at most 16777216) and the prompt-cache entries.
+- The client configuration section now gives the values **per profile** in one
+  table (`id`, context window, answer budget, `temperature`, `extra_body`)
+  instead of asking the reader to derive them. It also says why the dense
+  budget is smaller than the flash one: the budget and the client's 15-minute
+  stream limit interact, and 32,768 tokens at dense speed takes longer than
+  that limit allows. The Gemma and DeepSeek entries in a client need
+  `temperature: 0`, because those two profiles declare no sampling default of
+  their own.
 
 ## 0.1.3
 
