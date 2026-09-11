@@ -59,8 +59,19 @@ workflow as
 pulls it and tags it, and builds it from `runtime/` if the pull fails (it also
 tries an older hand-pushed package name, which may still be private).
 
-Two files in the download table are deliberately absent. The DeepSeek DSpark
-drafter is not downloaded: it is built for the Ember runtime and llama.cpp
-refuses it (`unknown model architecture: 'deepseek4-dflash-draft'`). The Gemma
-MTP head *is* downloaded, but the runtime build rejects the flag it needs, so
-it is unused today.
+Two drafter files cannot be used. Both were re-checked on the reference machine
+on 2026-09-11 with `llama-rocmfpx:7.2.4`:
+
+- **The Gemma-4 MTP head** (`mtp-gemma-4-26B-A4B-it-Q8_0.gguf`, which the
+  installer does download). The runtime now has the flags for it —
+  `--spec-draft-model /models/mtp-….gguf` with `--spec-type draft-mtp`, and
+  `--spec-type draft-simple` as well — but loading the head fails in both
+  cases with `llama_init_from_model: failed to initialize the context:
+  Gemma4Assistant requires ctx_other to be set`, then `failed to create draft
+  context`. The build has no flag for that assistant context (only
+  `--prefill-assistant` exists, which is a different thing), so the head stays
+  unused.
+- **The DeepSeek DSpark drafter** (`…DSpark-draft-4.25bpw.gguf`, 10.9 GB). It is
+  not in the download table — the file that is in `~/deepseek-models` came from
+  a manual fetch — and the current runtime still refuses its architecture:
+  `unknown model architecture: 'deepseek4-dflash-draft'`.

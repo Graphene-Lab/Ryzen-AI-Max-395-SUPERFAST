@@ -246,6 +246,19 @@ Workstation 44. There are two ways to get there:
   PROFILES="dense flash gemma deepseek small" bash deploy/setup-fedora.sh
   ```
 
+  If you installed before 2026-09-11, the flash profile on your machine still
+  carries the old engine settings, and parallel agents on it are slow. Re-run
+  the profiles phase to pick up the new ones (the KV pool, see
+  [Many agents at once](#many-agents-at-once)):
+
+  ```bash
+  PROFILES="dense flash gemma deepseek small" ONLY="profiles" bash deploy/setup-fedora.sh
+  ```
+
+  It rewrites the unit files and does not stop a profile that is already
+  running: the new settings apply the next time that profile starts, which
+  `superfast-switch use flash` does.
+
   The weights of the extra profiles are fetched by one systemd service per
   profile, so the script returns instead of waiting hours for them, the
   transfers resume after a reboot, and each file is checked against the
@@ -260,6 +273,11 @@ Workstation 44. There are two ways to get there:
 
 Things we learned on the reference machine:
 
+- **Copy the setup files with Unix line endings.** The scripts and the unit
+  templates are shell and systemd files. Copied from a Windows machine they
+  arrive with CRLF, and the installer stops on the first line with
+  `invalid option name ... set: pipefail`. Clone the repository on the machine
+  itself, or run `dos2unix` on the copy first.
 - **No ROCm on the host.** AMD's `amdgpu-install` does not target Fedora, and
   it is not needed: the image bundles ROCm (see `THIRD-PARTY-NOTICES`).
 - **Slow or unstable link?** Do not use `hf download` for the big files. Its
@@ -546,7 +564,8 @@ This profile has **no speculative decoding** in our stack, and we tried. The
 model ships a DSpark drafter (the 10.9 GB file in the table above), we
 downloaded it and its SHA-256 verifies, but the file is built for the Ember
 runtime: when our llama.cpp build is given it, it stops with
-`unknown model architecture: 'deepseek4-dflash-draft'`. So the numbers above
+`unknown model architecture: 'deepseek4-dflash-draft'` (re-checked with the
+current runtime on 2026-09-11: the same error). So the numbers above
 are what the profile gives without speculation, and there is no flag we can
 add today that changes that.
 
@@ -926,6 +945,17 @@ the prefix already is the name. The front-end's source says so in one line:
   snapshots at every request end instead of on an aligned boundary.
 
 ### Many agents at once
+
+**In plain words.** The engine remembers the start of every conversation it has
+already read, so the next turn does not read it again. That memory has a fixed
+size, and the size the engine chose for itself held about four conversations of
+131,072 tokens. Longer conversations went past it, so the engine had to forget
+one conversation in order to keep another, and the conversation that was
+forgotten read its whole history again. That is the pause of a minute or more.
+The flash profile now reserves room for four long conversations, so all of them
+stay remembered and a turn answers in about a second.
+
+The details, for anyone who wants to tune it:
 
 A coding agent that opens subagents runs several conversations at the same
 time, each with its own history. What the subagents share — the system prompt,

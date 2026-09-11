@@ -42,7 +42,18 @@
   behaves when several agents share the machine, why there is no cache key to
   send (`prompt_cache_key` is accepted and ignored, because the cache keys on
   the prefix), the measured before/after, and why the disk snapshot
-  (`HALOGEN_CACHE_FILE`) is not the lever on unified memory.
+  (`HALOGEN_CACHE_FILE`) is not the lever on unified memory. It opens with a
+  plain-words explanation of what the engine remembers and what the minute-long
+  pause was, and `docs/PLAIN-GUIDE.md` says the same in its own words under
+  "Several helpers working at once".
+- The README's setup steps now say how a machine installed before 2026-09-11
+  picks these engine settings up: re-run the profiles phase.
+- Two drafter files are documented with what was measured on 2026-09-11: the
+  Gemma-4 MTP head fails to initialize (`Gemma4Assistant requires ctx_other to
+  be set`) even though the runtime now has `--spec-draft-model` and
+  `--spec-type draft-mtp`, and the DeepSeek DSpark drafter is still refused
+  (`unknown model architecture`). The plain guide no longer says the Gemma
+  profile can read images: every profile is text only, as the README said.
 - `docs/FLAGS.md` now separates the engines' `HALOGEN_*` settings from this
   project's own `SUPERFAST_*` tooling variables, names which image honours
   each one, and documents the pool, its constraints (at least the context, a

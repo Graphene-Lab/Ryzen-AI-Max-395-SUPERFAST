@@ -33,8 +33,8 @@ Several "models" live on the machine, and you pick one at a time:
   slower (about 21 words per second).
 - **Qwen3.8-Flash-Next (MoE)** — a bigger, newer model that works differently
   and is much faster.
-- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second) and can
-  also look at images.
+- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second). Text
+  only, like the others.
 - **DeepSeek-V4-Flash** — a very large model (284 billion parameters) for
   coding and hard problems. It is the **slowest** of the four (about 11 words
   per second), it needs a large answer budget, and it requires two kernel
@@ -72,6 +72,30 @@ when you switch.
   machine itself.
 - You can do all of it over SSH as well; the terminal tool has a simple
   `help`.
+
+## Several helpers working at once
+
+A coding assistant can open **subagents**: several small helpers working on
+different tasks at the same time. The machine sees them as several
+conversations at once, and it keeps in memory the beginning of every
+conversation it has already read, so the next turn does not read it again.
+
+That memory has a fixed size. With the size the engine picked on its own, it
+held about four conversations of 131,000 tokens. When the conversations grew
+past that, the engine had to forget one conversation to keep another, and the
+helper whose conversation was forgotten read its whole history again. That is
+the pause of a minute or more.
+
+The flash profile now reserves room for four long conversations. Measured on
+this machine with four helpers working together, each with about 140,000
+tokens of history:
+
+- **before:** the second turn took 229 seconds, and two of the four helpers
+  read everything again (120 and 109 seconds each);
+- **after:** the second turn takes 2 seconds, and all four answer from memory.
+
+Short conversations were never a problem, and one helper alone is not affected
+either. The full numbers are in the main README, under "Many agents at once".
 
 ## Honest notes
 
