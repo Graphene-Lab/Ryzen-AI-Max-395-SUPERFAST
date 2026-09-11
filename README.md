@@ -856,14 +856,14 @@ The two Qwen profiles run different engines, and they handle concurrency
 differently.
 
 **The dense profile serves one request at a time, with speculative decoding
-on** — about 31 t/s, which is the right setting for a single user. Its engine
-does read `HALOGEN_KV_SLOTS` and `HALOGEN_SLOT_CTX` (the names are in the
-shipped binary; the entrypoint does not forward them, so pass them with `-e`),
-and each slot then owns a private KV cache. **The trap is the product:**
-`slots × slot_ctx × 64 KiB`, so raising the slots without lowering the
-per-slot context multiplies the allocation. Eight slots at the native 262,144
-context asks for **137 GB** and will not fit. Keep the product at or below the
-native context:
+on** — 21.0 t/s on prose and 26.1 on code, which is the right setting for a
+single user. Its engine does read `HALOGEN_KV_SLOTS` and `HALOGEN_SLOT_CTX` (the
+names are in the shipped binary; the entrypoint does not forward them, so pass
+them with `-e`), and each slot then owns a private KV cache. **The trap is the
+product:** `slots × slot_ctx × 64 KiB`, so raising the slots without lowering
+the per-slot context multiplies the allocation. Eight slots at the native
+262,144 context asks for **137 GB** and will not fit. Keep the product at or
+below the native context:
 
 | `HALOGEN_KV_SLOTS` | `HALOGEN_SLOT_CTX` | pool |
 |---|---|---|
@@ -1719,11 +1719,12 @@ client sends as the model name, so it must match what `/health` reports, and
 | DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | **0** | none, the profile ignores it |
 
 The dense budget is smaller than the flash budget on purpose. Dense answers at
-about 31 tokens per second and flash at about 52, so the same number of tokens
-takes longer there and the client's 15-minute stream limit would cut the answer
-before the model finished. Gemma answers at about 57 and holds 32,768 inside
-the limit; DeepSeek answers at about 10, so a full 16,384-token answer takes 27
-minutes and needs the longer limit below.
+21.0 tokens per second on prose and 26.1 on code, against 37.7 and 46.4 on
+flash, so the same number of tokens takes longer there and the client's
+15-minute stream limit would cut the answer before the model finished. Gemma
+answers at 57.3 and holds 32,768 inside the limit; DeepSeek answers at 11.2, so
+a full 16,384-token answer takes about 24 minutes and needs the longer limit
+below.
 
 `temperature` is only set on Gemma and DeepSeek, because those two declare no
 sampling default of their own: without the field the client's own default
