@@ -34,6 +34,16 @@ ExecStartPre=-/usr/bin/podman rm -f superfast-flash
 # re-prefill their whole history; with this pool all four are served from cache
 # and the whole turn takes 2.2 s. The numbers and the rollback are in the
 # README under "Many agents at once".
+#
+# The last two are the request policy, and they are explicit for the same
+# reason: they are what stops a long turn from being refused or cut, and the
+# image defaults are not ours to rely on. QUEUE_TIMEOUT 3600 s is the time a
+# request waits for room in the pool before the engine answers 503; the largest
+# wait four concurrent worst-case requests can produce here is 2,386 s, and a
+# 503 would waste all of it. MAX_TOKENS_CAP 65536 is the largest answer budget
+# a request may ask for, and it matches what the image ships; above it the
+# engine answers 400 rather than truncating. See "Timeouts, and why they are
+# what they are" in the README for the arithmetic.
 ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
@@ -43,6 +53,8 @@ ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731
   -e HALOGEN_KV_POOL_FIT=0 \
   -e HALOGEN_MAX_TOK=16384 \
   -e HALOGEN_CACHE_ENTRIES=32 \
+  -e HALOGEN_QUEUE_TIMEOUT=3600 \
+  -e HALOGEN_MAX_TOKENS_CAP=65536 \
   -v __FLASH_DIR__:/models:ro \
   -v __FLASH_DIR__/tokenizer:/tokenizer:ro \
   __FLASH_IMAGE__

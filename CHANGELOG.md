@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- **`UNATTENDED=1` (and `AUTO_REBOOT=1`) for `deploy/setup-fedora.sh`.** The
+  installer already had no prompts, but two steps needed a human: the sudo
+  password, and the reboot that the kernel memory parameters require — the
+  reboot is also what makes the GPU groups effective. Unattended mode refuses
+  to wait for anything: it requires passwordless sudo and says how to grant it,
+  requires the script to be a file on disk, and when the kernel parameters are
+  in place it installs a one-shot system unit
+  (`superfast-setup-resume.service`), reboots after 15 s and continues the
+  remaining phases at boot (weights, image, engine, profile units, tools),
+  disabling itself at the end. `AUTO_REBOOT=1` is the same reboot handling
+  without the rest of unattended mode. The script also enables the GNOME
+  extension itself when there is a session to talk to, and points at the
+  command to re-run when there is not.
+- A **Quick install** section and a badge row at the top of the README, so the
+  installer is the first thing a visitor sees.
+
 ### Fixed
 
 - **`superfast-switch use <profile>` did not enable the profile it started.**
@@ -26,6 +44,18 @@
 
 ### Changed
 
+- **Every timeout is now computed, not chosen.** The profile units carry
+  explicit request policy (`HALOGEN_QUEUE_TIMEOUT` 6000 s dense / 3600 s flash,
+  `HALOGEN_MAX_TOKENS_CAP` 65536), and the llama.cpp units raise their socket
+  timeout (`--timeout`, 600 s by default) to 1800 s for gemma and 3600 s for
+  deepseek, whose 507,904-token worst-case prompt is 3,116 s of prefill during
+  which the server sends nothing at all — measured. The README derives each
+  number from the measured prefill and decode rates, the largest prompt the
+  profile serves and the wait behind other requests, and the client entries use
+  the results: `streamIdleTimeoutMs` and `timeout` per profile, up to
+  8,400,000 ms and 10,800,000 ms on deepseek. Qwen Code's defaults are 4
+  minutes of silence and 2 minutes per request, which cut every long turn on
+  this machine.
 - **The Flash-Next unit now sizes the KV pool for parallel agents.** A coding
   agent that opens subagents runs several conversations at once, and the image
   defaults hold two full-length conversations and eight resumable ones. The

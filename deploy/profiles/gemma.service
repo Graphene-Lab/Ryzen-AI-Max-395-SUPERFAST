@@ -14,7 +14,15 @@ ExecStart=/usr/bin/podman run --name gemma-server --rm -p 127.0.0.1:8731:8731 \
   llama-rocmfpx:7.2.4 \
   -m /models/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf \
   --host 0.0.0.0 --port 8731 \
-  -c 262144 --alias gemma-4-26b-a4b --jinja
+  -c 262144 --alias gemma-4-26b-a4b --jinja \
+  --timeout 1800
+# --timeout is llama.cpp's socket read/write timeout, 600 s by default. The
+# server sends nothing at all while it prefills, so that default is a silent
+# cut waiting to happen: a 229,376-token prompt is 150 s of prefill here, but
+# llama.cpp also closes a connection that sits idle between turns. 1800 s
+# leaves room for the largest prompt this profile serves, plus a queued request
+# ahead of it. The client values that go with it are in the README under
+# "Timeouts, and why they are what they are".
 ExecStop=/usr/bin/podman stop -t 30 gemma-server
 # podman run exits 143/137 when the container is stopped: accept those, so a
 # profile switch does not leave the unit in the "failed" state.

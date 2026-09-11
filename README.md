@@ -1,8 +1,57 @@
 # SUPERFAST
 
+[![Install: one script, unattended](https://img.shields.io/badge/install-one%20script%2C%20unattended-2ea44f?logo=linux&logoColor=white)](#install-a-machine)
+[![Target: Fedora 44, Strix Halo gfx1151](https://img.shields.io/badge/target-Fedora%2044%20%C2%B7%20gfx1151-8957e5)](#install-a-machine)
+[![Engines: halogen dense + Flash-Next](https://img.shields.io/badge/engines-halogen%20dense%20%2B%20Flash--Next-1f6feb)](docs/FLAGS.md)
+[![Runtime image build](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml/badge.svg)](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml)
+[![License](https://img.shields.io/badge/license-see%20LICENSE.md-lightgrey)](LICENSE.md)
+
 ![SUPERFAST logo — a speedometer](assets/superfast.gif)
 
 **Run a high-quality open LLM on an AMD Ryzen AI Max machine: fast, and in private.**
+
+## Install a machine
+
+`deploy/setup-fedora.sh` is the installer: a fresh Fedora Workstation 44 host
+becomes this machine, with the same engines, profiles, units, tools and
+timeouts that are measured in this README. It is **one file, no dependencies to
+install by hand, and one command per mode**:
+
+```bash
+# on the machine, as the admin user (not root: rootless podman is the point)
+curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
+PROFILES="dense flash gemma deepseek small" bash setup-fedora.sh
+```
+
+Add `UNATTENDED=1` in front of `bash` for a run that is never interrupted: it
+requires passwordless sudo (and says how to get it), pushes the kernel
+parameters, reboots the machine by itself and continues through a one-shot
+system unit. Nothing needs typing, then or after:
+
+```bash
+PROFILES="dense flash gemma deepseek small" UNATTENDED=1 bash setup-fedora.sh
+journalctl -u superfast-setup-resume -f      # the part after the reboot
+```
+
+What it needs, and what it does:
+
+| | |
+|---|---|
+| a host | Fedora Workstation 44 on AMD Strix Halo (gfx1151). It refuses anything else, and it refuses to run as root |
+| disk | about 250 GB: the checkpoints are 35.9 GB (dense), ~115 GB (Flash-Next), ~28 GB (Gemma-4), ~96 GB (DeepSeek-V4-Flash) |
+| time | hours, not minutes: the dense checkpoint alone is 35.9 GB, and the extra profiles download in the background |
+| sudo | used for the packages, the firewall, the SSH service, the groups and the kernel parameters. Passwordless for `UNATTENDED=1` |
+| it sets up | the packages and the kernel parameters, SSH, the firewalld rules (8741 open, 8731 closed), the model downloads with SHA-256 verification, the container images, the systemd units per profile, the switch, the terminal menu, the GNOME panel, and the API-key gateway |
+
+Two things it cannot do for you: the BIOS must have the UMA frame buffer at its
+minimum, and the disk must not be encrypted (an encrypted disk stops at a
+passphrase prompt on every reboot, which is not headless). Both are in
+[step 1](#1-install-fedora-workstation-44-recommended) and
+[step 3](#3-configure-the-machine-for-superfast).
+
+The full walkthrough, phase by phase, with what each step verifies, is
+[Set up a new machine](#set-up-a-new-machine). The installer prints its own
+progress and, at the end, what is running and what to check.
 
 What it runs — four open-weight models, everything below measured on this
 machine:
@@ -246,6 +295,23 @@ Workstation 44. There are two ways to get there:
   PROFILES="dense flash gemma deepseek small" bash deploy/setup-fedora.sh
   ```
 
+  For a run that nobody has to watch, add `UNATTENDED=1`. It needs
+  passwordless sudo, then it handles both interruptions by itself: it pushes
+  the kernel parameters, reboots, and the reboot is also what makes the GPU
+  groups effective. A one-shot system unit
+  (`superfast-setup-resume.service`) re-runs the remaining phases at boot —
+  weights, image, engine, profile units, tools — and disables itself when it
+  is done. The log of the second half is
+  `journalctl -u superfast-setup-resume -f`.
+
+  ```bash
+  PROFILES="dense flash gemma deepseek small" UNATTENDED=1 bash setup-fedora.sh
+  ```
+
+  Get the script with `curl` rather than copying it from a Windows machine:
+  the shell and systemd files need Unix line endings (see
+  [Things we learned on the reference machine](#things-we-learned-on-the-reference-machine)).
+
   If you installed before 2026-09-11, the flash profile on your machine still
   carries the old engine settings, and parallel agents on it are slow. Re-run
   the profiles phase to pick up the new ones (the KV pool, see
@@ -279,8 +345,10 @@ Things we learned on the reference machine:
 - **Copy the setup files with Unix line endings.** The scripts and the unit
   templates are shell and systemd files. Copied from a Windows machine they
   arrive with CRLF, and the installer stops on the first line with
-  `invalid option name ... set: pipefail`. Clone the repository on the machine
-  itself, or run `dos2unix` on the copy first.
+  `invalid option name ... set: pipefail`. Downloading the script with `curl`
+  (as in [Install a machine](#install-a-machine)) or cloning the repository on
+  the machine itself avoids it; if you copied the files from Windows, run
+  `dos2unix` on them first.
 - **No ROCm on the host.** AMD's `amdgpu-install` does not target Fedora, and
   it is not needed: the image bundles ROCm (see `THIRD-PARTY-NOTICES`).
 - **Slow or unstable link?** Do not use `hf download` for the big files. Its
@@ -1668,12 +1736,15 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 
 Two limits that only show up in long agentic sessions:
 
-- **The client caps a streamed answer at 15 minutes by default** (Qwen Code:
-  `QWEN_STREAM_MAX_LIFETIME_MS`). Converted to tokens on this hardware, 15
-  minutes is about 19,000 tokens on dense, 41,000 on flash and 10,000 on
-  DeepSeek. Either keep the answer budget inside those numbers or raise that
-  limit, otherwise a long turn is cut mid-answer even though the server is
-  fine.
+- **A client's own timeouts are shorter than this machine needs.** Qwen Code has
+  two of them (verified in 0.21.1): `streamIdleTimeoutMs`, the longest silence
+  it tolerates between two chunks — **4 minutes by default** — and `timeout`,
+  the whole request — **2 minutes by default**. Both are far too small here.
+  The server sends nothing at all while it prefills (measured: 44.9 seconds of
+  silence for a 57,000-token prompt on flash), and a request can also wait in
+  the queue before its prefill starts. The values in the tables below are
+  computed for that, in
+  [Timeouts, and why they are what they are](#timeouts-and-why-they-are-what-they-are).
 - **Keep the prefix stable, especially with subagents.** Every turn re-sends
   the conversation, and the server reuses what it computed before: the prompt
   cache is keyed on the prompt itself, so there is no cache key to send. It
@@ -1697,8 +1768,8 @@ tuned for coding:
   "baseUrl": "http://<machine-ip>:8741/v1",
   "envKey": "SUPERFAST_API_KEY",
   "generationConfig": {
-    "timeout": 900000,
-    "streamIdleTimeoutMs": 600000,
+    "timeout": 6000000,
+    "streamIdleTimeoutMs": 4200000,
     "maxRetries": 1,
     "contextWindowSize": 262144,
     "extra_body": { "reasoning_effort": "low" },
@@ -1711,12 +1782,21 @@ Repeat the block once per profile with the values below. `id` is what the
 client sends as the model name, so it must match what `/health` reports, and
 `contextWindowSize` must match the window the profile allocates:
 
-| profile | `id` | context window | answer budget | `temperature` | `extra_body` |
-|---|---|---|---|---|---|
-| Flash-Next | `halogen-qwen3.8-flash-next` | 262,144 | 32,768 | leave unset | `{"reasoning_effort":"low"}` |
-| Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | leave unset | `{"reasoning_effort":"low"}` |
-| Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | **0** | none, the profile ignores it |
-| DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | **0** | none, the profile ignores it |
+| profile | `id` | context window | answer budget | `streamIdleTimeoutMs` | `timeout` | `temperature` | `extra_body` |
+|---|---|---|---|---|---|---|---|
+| Flash-Next | `halogen-qwen3.8-flash-next` | 262,144 | 32,768 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
+| Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | 7,200,000 | 9,000,000 | leave unset | `{"reasoning_effort":"low"}` |
+| Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | 3,600,000 | 4,800,000 | **0** | none, the profile ignores it |
+| DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | 8,400,000 | 10,800,000 | **0** | none, the profile ignores it |
+
+Both timeouts are milliseconds, and they are not round numbers by accident:
+they are the worst case of that profile — the largest prompt it serves, the
+longest answer its budget allows, and the wait for the requests ahead of it —
+rounded up to whole minutes. [Timeouts, and why they are what they
+are](#timeouts-and-why-they-are-what-they-are) shows each term. They are
+deliberately generous: a timeout that is too small cuts a turn that is still
+running, while a timeout that is too large only means a client takes longer to
+notice a server that has stopped answering.
 
 The dense budget is smaller than the flash budget on purpose. Dense answers at
 21.0 tokens per second on prose and 26.1 on code, against 37.7 and 46.4 on
@@ -1738,12 +1818,62 @@ elsewhere. When the client runs on the machine itself, use
 `http://127.0.0.1:8731/v1` and any placeholder value, because loopback needs no
 key. Qwen Code re-reads `modelProviders` edits without a restart.
 
-The stream limit is not a per-provider field, so it goes in the environment of
-whatever starts the client (on Windows, `setx`, then a new terminal):
+Both timeouts are per-provider fields, so they belong in each entry above.
+Qwen Code also reads `QWEN_STREAM_IDLE_TIMEOUT_MS` from the environment as a
+fallback for the idle limit (`0` disables that limit); the whole-request
+`timeout` has no environment fallback. Another client may have neither field:
+then set whatever it calls a timeout above the numbers in the table, or leave
+it unset where unset means no limit — an idle timeout is only a backstop, and
+one that is too small cuts a turn that is still running.
 
-```bash
-export QWEN_STREAM_MAX_LIFETIME_MS=1800000    # 30 minutes
+### Timeouts, and why they are what they are
+
+Every value in the two tables above comes from one formula, applied per
+profile:
+
 ```
+silence = wait_in_queue + largest_prompt / prefill_rate
+total   = silence + answer_budget / decode_rate
+```
+
+`wait_in_queue` is the longest a request can legitimately sit in silence while
+the machine serves others. Where the engine has a queue timeout of its own
+(`HALOGEN_QUEUE_TIMEOUT`, set below), that timeout is the bound: it is the
+point where the engine stops waiting and answers 503, so a client must be
+willing to wait longer than that or it gives up on a request the engine was
+still holding. The llama.cpp profiles have no queue timeout, so theirs is the
+estimate of the requests ahead of the last one.
+
+The inputs are the measurements in [Performance](#performance), each taken at
+its slowest value, and the largest prompt is the profile's context minus its
+answer budget:
+
+| profile | largest prompt | prefill | answer | wait in queue | silence | whole request |
+|---|---|---|---|---|---|---|
+| Flash-Next | 229,376 tok @ 709 t/s | 324 s | 869 s | 3,600 s (the engine's queue timeout) | 3,924 s → **4,200,000 ms** | 4,793 s → **6,000,000 ms** |
+| Dense 27B | 245,760 tok @ 528 t/s | 465 s | 780 s | 6,000 s (the engine's queue timeout) | 6,465 s → **7,200,000 ms** | 7,245 s → **9,000,000 ms** |
+| Gemma-4-26B | 229,376 tok @ 1,527 t/s | 150 s | 572 s | 2,888 s (four requests ahead) | 3,038 s → **3,600,000 ms** | 3,610 s → **4,800,000 ms** |
+| DeepSeek-V4-Flash | 507,904 tok @ 163 t/s | 3,116 s | 1,463 s | 4,579 s (one request ahead) | 7,695 s → **8,400,000 ms** | 9,158 s → **10,800,000 ms** |
+
+Read the deepseek row as the reason this table exists: 507,904 tokens is 52
+minutes of prefill at 163 tokens per second, and the server says nothing at all
+while it prefills. A client left at its defaults — 4 minutes of silence, 2
+minutes per request — cannot see that turn finish, and the answer is lost with
+the work.
+
+Three consequences worth knowing:
+
+- **The engine's own timeout is set to match.** `HALOGEN_QUEUE_TIMEOUT` is
+  6000 s on dense (four worst-case requests are 4,980 s) and 3600 s on flash.
+  It should never fire: a request that waits that long is one the machine
+  cannot serve, and a 503 wastes everything already queued.
+- **llama.cpp has a timeout of its own**, `--timeout`, 600 s by default, on the
+  *socket*. The gemma and deepseek units raise it (1800 s and 3600 s) because
+  their prefills are long enough to trip the default — see the comments in
+  those units.
+- **Nothing here is a substitute for watching.** A very large idle timeout
+  means a server that has stopped answering is noticed late; the terminal is
+  always faster than that.
 
 For another client the rules are the same: point it at
 `http://<machine-ip>:8741/v1` with the `Authorization: Bearer <key>` header

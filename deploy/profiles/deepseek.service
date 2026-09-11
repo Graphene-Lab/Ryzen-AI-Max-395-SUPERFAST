@@ -14,7 +14,16 @@ ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 127.0.0.1:8731:8731
   llama-rocmfpx:7.2.4 \
   -m /models/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf \
   --host 0.0.0.0 --port 8731 \
-  -c 524288 --alias deepseek-v4-flash --jinja
+  -c 524288 --alias deepseek-v4-flash --jinja \
+  --timeout 3600
+# --timeout is llama.cpp's socket read/write timeout, 600 s by default, and the
+# default is far too small here: this profile prefills at ~163 tokens per
+# second and sends nothing while it does, so a 140,000-token prompt is already
+# 859 s of silence and the largest prompt this profile serves (507,904 tokens)
+# is 3,116 s. 3600 s covers that with room for a queued request. Without it a
+# long prompt is cut mid-prefill and the answer never arrives. The client
+# values that go with it are in the README under "Timeouts, and why they are
+# what they are".
 # -c 524288 is a measured choice, not the model maximum. The model supports
 # 1M and 1M does load (n_ctx 1048576), but it leaves only ~7 GB of free memory
 # and long generations then stall: at 1M a 8192-token request stopped after

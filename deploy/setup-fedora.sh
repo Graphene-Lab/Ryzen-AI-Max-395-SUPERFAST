@@ -12,6 +12,17 @@
 # Run as the admin user (sudo is used internally where needed):
 #   bash deploy/setup-fedora.sh
 #
+# Fully unattended, including the reboot the kernel parameters need:
+#   curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
+#   PROFILES="dense flash gemma deepseek small" UNATTENDED=1 bash setup-fedora.sh
+# With UNATTENDED=1 the script refuses to wait for anything: sudo must be
+# passwordless (it says how), the script must be a file on disk (it re-runs
+# itself after the reboot), and when the kernel parameters are set it installs
+# a one-shot system unit, reboots after 15 s, and continues by itself. Follow
+# the second half with `journalctl -u superfast-setup-resume -f`. Expect the
+# whole thing to take hours: the dense checkpoint alone is 35.9 GB, and the
+# other profiles start their own downloads in the background.
+#
 # Env overrides:
 #   SUPERFAST_IMAGE   image to run (default: the published halogen tag).
 #                     A `superfast` tag does not exist yet; when it is
@@ -29,6 +40,14 @@
 #                     the profile units and downloaders again.
 #   SKIP_UPDATE=1     skip `dnf upgrade`
 #   SMOKE=1           also run the small container device test
+#   UNATTENDED=1      never wait for a human: passwordless sudo required, the
+#                     script must be on disk, and it reboots by itself once the
+#                     kernel parameters are in place (needs the profile units;
+#                     see above). The run continues after the reboot through
+#                     superfast-setup-resume.service.
+#   AUTO_REBOOT=1     same reboot-and-continue behaviour without the rest of
+#                     unattended mode (useful when sudo already asks no
+#                     password and you just want the reboot handled).
 #
 # Disk encryption: the reference host does NOT use it, so reboots are fully
 # headless (verified 2026-09-10). If you enable encryption in the installer,
@@ -165,6 +184,21 @@ phase_os_check() {
     else
         log "sudo: will ask for your password during this run (or configure NOPASSWD for $TARGET_USER)"
     fi
+    # Unattended runs must never wait for a human: no terminal to answer sudo,
+    # and no way to continue after the reboot unless the script is a file.
+    if [ "${UNATTENDED:-0}" = "1" ]; then
+        if ! sudo -n true 2>/dev/null; then
+            echo "UNATTENDED=1 needs sudo without a password. Run this once, then try again:" >&2
+            echo "  echo '$TARGET_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/superfast-unattended" >&2
+            exit 1
+        fi
+        if [ ! -f "$0" ]; then
+            echo "UNATTENDED=1 needs the script on disk (it re-runs itself after the reboot)." >&2
+            echo "Download it first: curl -fsSL <raw url> -o setup-fedora.sh && bash setup-fedora.sh" >&2
+            exit 1
+        fi
+        log "unattended mode: sudo is non-interactive and the script may reboot the machine"
+    fi
 }
 
 phase_update() {
@@ -284,6 +318,15 @@ phase_engine() {
     # the engine, wait ten minutes for a health check that cannot succeed, and
     # blame the engine. A clear instruction instead.
     if ! id -nG | grep -qw video || ! id -nG | grep -qw render; then
+        if [ "${UNATTENDED:-0}" = "1" ] || [ "${AUTO_REBOOT:-0}" = "1" ]; then
+            # Unattended runs reboot anyway, and the reboot is exactly what the
+            # groups need. The resumed run has them and starts the engine.
+            log "this session does not have the video and render groups yet;"
+            log "the reboot at the end of this run applies them, and the resumed"
+            log "run starts the engine. Skipping the engine in this pass."
+            REBOOT_NEEDED=1
+            return 0
+        fi
         log "this session does not have the video and render groups yet."
         log "They are added in phase 4 and take effect on a new login."
         log "Log out, log back in, then run this script again (it is resumable:"
@@ -326,9 +369,19 @@ ExecStartPre=-/usr/bin/podman rm -f superfast
 ExecStart=/usr/bin/podman run --name superfast --rm -p 127.0.0.1:8731:8731 \\
   --device /dev/kfd --device /dev/dri --group-add keep-groups \\
   --security-opt seccomp=unconfined --ipc=host \\
+  -e HALOGEN_QUEUE_TIMEOUT=6000 \\
+  -e HALOGEN_MAX_TOKENS_CAP=65536 \\
   -v $MODELS_DIR:/models:ro \\
   -v $MODELS_DIR/tokenizer:/tokenizer:ro \\
   $IMAGE
+# Request policy, set here rather than left to the image (the names are the
+# engine's: a SUPERFAST_ prefix is read by nobody). QUEUE_TIMEOUT 6000 s is the
+# time a request waits before the engine answers 503; with one slot the worst
+# wait four concurrent requests can produce is 4,980 s, so a shorter value
+# would throw away the work already queued. MAX_TOKENS_CAP 65536 is the largest
+# answer budget a request may ask for; above it the engine answers 400 rather
+# than truncating. The arithmetic, and the client-side values that go with it,
+# are in the README under "Timeouts, and why they are what they are".
 ExecStop=/usr/bin/podman stop -t 30 superfast
 # podman run in the foreground exits 143 (SIGTERM) or 137 (SIGKILL) when the
 # container is stopped. Without this line a profile switch leaves the unit in
@@ -538,7 +591,15 @@ EOF
         EXT_DIR="$HOME/.local/share/gnome-shell/extensions/superfast@graphene-lab"
         mkdir -p "$EXT_DIR"
         cp -r "$SCRIPT_DIR/../gnome-shell-extension/." "$EXT_DIR/"
-        log "GNOME extension installed; run: gnome-extensions enable superfast@graphene-lab (then log out/in once)"
+        # Enable it when there is a session to talk to; over SSH or on a
+        # headless run there is none, and the command would just fail.
+        if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] \
+           && gnome-extensions enable superfast@graphene-lab 2>/dev/null; then
+            log "GNOME extension installed and enabled"
+        else
+            log "GNOME extension installed; enable it once with:"
+            log "  gnome-extensions enable superfast@graphene-lab   (then log out and in once)"
+        fi
     else
         log "gnome-extensions or gnome-shell-extension/ not found; skipping the desktop control panel"
     fi
@@ -555,6 +616,46 @@ run_phase() {
         return 0
     fi
     "phase_$name"
+}
+
+# The kernel parameters only take effect after a reboot, and an unattended run
+# has nobody to type it. This installs a one-shot system unit that re-runs the
+# remaining phases at boot and then removes itself. The phases it runs need no
+# sudo: the firewall rules and lingering were already done before the reboot,
+# the weights go to $HOME, the image is pulled by the user's rootless podman
+# and the units are user units.
+install_resume_unit() {
+    local script; script="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    local unit=/etc/systemd/system/superfast-setup-resume.service
+    log "installing $unit: the setup continues by itself after the reboot"
+    sudo tee "$unit" >/dev/null <<EOF
+[Unit]
+Description=SUPERFAST setup, resumed after the kernel-parameter reboot
+After=network-online.target user@$UID_NUM.service
+Wants=network-online.target user@$UID_NUM.service
+ConditionPathExists=$script
+
+[Service]
+Type=oneshot
+User=$TARGET_USER
+WorkingDirectory=$(cd "$(dirname "$0")" && pwd)
+Environment=UNATTENDED=1
+Environment=SKIP_UPDATE=1
+Environment="PROFILES=$PROFILES"
+Environment="ONLY=weights image engine profiles ui_auth"
+Environment=HOME=$HOME
+Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
+TimeoutStartSec=infinity
+ExecStart=/bin/bash $script
+ExecStartPost=-/bin/systemctl disable superfast-setup-resume.service
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable superfast-setup-resume.service
+    log "after the reboot, follow it with: journalctl -u superfast-setup-resume -f"
 }
 
 main() {
@@ -581,8 +682,18 @@ main() {
     log "control: superfast-tui (terminal) or the GNOME extension"
     if [ "$REBOOT_NEEDED" = "1" ]; then
         log "REBOOT REQUIRED: the shared-memory kernel parameters take effect only after a reboot."
+        if [ "${UNATTENDED:-0}" = "1" ] || [ "${AUTO_REBOOT:-0}" = "1" ]; then
+            install_resume_unit
+            log "rebooting in 15 s; this session ends here and the setup continues by itself"
+            sleep 15
+            sudo systemctl reboot
+            exit 0
+        fi
         log "After rebooting, the large profiles (flash, deepseek) can load; check with:"
         log "  cat /proc/cmdline   # must show amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+        log "If PROFILES named more than dense, the other checkpoints were started in the"
+        log "background and may still be downloading:"
+        log "  systemctl --user list-units 'superfast-download*'"
     fi
 }
 
