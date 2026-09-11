@@ -7,9 +7,41 @@ Wants=network-online.target
 Type=simple
 Environment=XDG_RUNTIME_DIR=__XDG__
 ExecStartPre=-/usr/bin/podman rm -f superfast-flash
+# The engine reads HALOGEN_* names. SUPERFAST_* appears nowhere in either
+# image, so a setting written under that name is accepted by nobody and
+# silently does nothing (verified by searching both images for the string).
+#
+# These six values are one budget, and they are what lets several agent
+# conversations stay resident instead of re-prefilling their whole history:
+#   KV_SLOTS x CTX     what one request may use, 4 x 262144.
+#   KV_POOL_POSITIONS  positions resident across ALL conversations. The image
+#                      default is 2 x CTX (524288), which holds two
+#                      full-length conversations; 1048576 holds four, which is
+#                      what a client that opens subagents needs. The engine
+#                      refuses a pool smaller than CTX.
+#   KV_POOL_FIT=0      do not shrink the pool at startup. Left at its default
+#                      the engine fitted 1048576 back down to 524288, so the
+#                      setting had no effect at all.
+#   MAX_TOK=16384      the single-call prefill arena. This pool only fits with
+#                      the arena halved; longer prompts are prefilled in
+#                      arena-sized pieces, which is what makes a large context
+#                      affordable in the first place.
+#   CACHE_ENTRIES=32   how many conversations keep their resumable state. The
+#                      image ships 8; 32 leaves headroom for a client that opens
+#                      subagents. Each entry costs ~111 MiB.
+# Measured with four agents at 90K tokens and max_tokens 65536 (an aggregate
+# reservation of ~622K positions, larger than the 524288 default pool): the
+# second round is 90034/90064 tokens cached, 0.45 s instead of 65 s. The
+# numbers and the rollback are in the README under "Many agents at once".
 ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
+  -e HALOGEN_KV_SLOTS=4 \
+  -e HALOGEN_CTX=262144 \
+  -e HALOGEN_KV_POOL_POSITIONS=1048576 \
+  -e HALOGEN_KV_POOL_FIT=0 \
+  -e HALOGEN_MAX_TOK=16384 \
+  -e HALOGEN_CACHE_ENTRIES=32 \
   -v __FLASH_DIR__:/models:ro \
   -v __FLASH_DIR__/tokenizer:/tokenizer:ro \
   __FLASH_IMAGE__

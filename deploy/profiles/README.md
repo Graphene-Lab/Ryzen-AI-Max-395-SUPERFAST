@@ -34,6 +34,24 @@ Multi-turn conversations reuse the KV prefix of the previous turn
 automatically; the rest of the context handling is described in the README
 under "What each profile ships: context, tokens, tools".
 
+`superfast-flash.service` carries engine settings instead, because that profile
+runs the Flash-Next engine and the settings are how several agent
+conversations stay resident at once:
+
+| setting | value | why |
+|---|---|---|
+| `HALOGEN_KV_POOL_POSITIONS` | `1048576` | positions resident across **all** conversations. The image default is 524288 (two full-length conversations); a client that opens subagents needs more, and each request reserves `prompt + max_tokens` of it |
+| `HALOGEN_KV_POOL_FIT` | `0` | without it the engine shrinks the pool at startup — a pool requested as 1048576 came up as 524288, so the setting did nothing |
+| `HALOGEN_MAX_TOK` | `16384` | the prefill arena (not the answer budget). A 1,048,576-position pool fits only with the arena halved; longer prompts are prefilled in arena-sized pieces |
+| `HALOGEN_CACHE_ENTRIES` | `32` | conversations whose resumable state the cache keeps. The image ships 8; 32 leaves headroom for a client that opens subagents. ~111 MiB each |
+| `HALOGEN_KV_SLOTS` / `HALOGEN_CTX` | `4` / `262144` | explicit rather than inherited, so what the unit runs with is readable in the unit |
+
+The names are the engine's, and they are `HALOGEN_*`: `SUPERFAST_*` belongs to
+this project's own tools and no image contains it, so an engine setting written
+that way is read by nobody. The measurements for these six values, and how to
+put the image defaults back, are in the README under "Many agents at once";
+every name is listed in [`docs/FLAGS.md`](../../docs/FLAGS.md).
+
 The Gemma and DeepSeek units need `llama-rocmfpx:7.2.4`, the GGUF runtime built
 from [`runtime/`](../runtime/README.md). It is published by this repository's
 workflow as

@@ -381,22 +381,22 @@ profile as a managed service. On Docker instead of Podman, replace
 
 ### Or let SUPERFAST fetch the weights for you
 
-If you do not want to download separately, set `SUPERFAST_DOWNLOAD` and the
+If you do not want to download separately, set `HALOGEN_DOWNLOAD` and the
 container fetches the weights on the first start:
 
 ```bash
 podman run --rm -p 8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
-  -e SUPERFAST_DOWNLOAD=peonist-ai/halogen-qwen3.8-27b \
-  -e SUPERFAST_TOKENIZER=/models/tokenizer \
+  -e HALOGEN_DOWNLOAD=peonist-ai/halogen-qwen3.8-27b \
+  -e HALOGEN_TOKENIZER=/models/tokenizer \
   -v ~/superfast-models:/models \
   ghcr.io/peonist-ai/halogen:0.1.3
 ```
 
 Two differences from the manual route. The models volume is mounted
 **read-write**, because the download writes into it. And there is only *one*
-mount: the download brings the tokenizer with it, so `SUPERFAST_TOKENIZER`
+mount: the download brings the tokenizer with it, so `HALOGEN_TOKENIZER`
 points inside `/models` instead of at a second volume. Mounting
 `~/superfast-models/tokenizer` here would fail on a first run, because the
 container runtime would create it as an empty directory before the download
@@ -405,9 +405,9 @@ could fill it.
 The download starts only when the checkpoint is missing, so a restart does
 not download it again, and an interrupted transfer resumes.
 
-**With `SUPERFAST_DOWNLOAD` unset, the container opens no outbound network
+**With `HALOGEN_DOWNLOAD` unset, the container opens no outbound network
 connection at all** — no telemetry, no license check, no model fetch. If the
-checkpoint is not on disk where `SUPERFAST_CHECKPOINT` points, the container
+checkpoint is not on disk where `HALOGEN_CHECKPOINT` points, the container
 says so and exits instead of reaching for the network. That default is
 deliberate: a 35.9 GB transfer should not start because someone ran
 `podman run` to see what happens.
@@ -732,10 +732,13 @@ reason given above. That request is not a licensing condition.
 
 ## What every profile inherits from the engine
 
-All profiles run on the same purpose-built engine layer, so every profile gets
-the properties below. Profiles differ in their checkpoint, not in these
-behaviors. The numbers and capabilities are re-measured for each profile, and
-`/health` reports what the running one supports.
+All profiles run on one of two purpose-built engines: the Qwen profiles on the
+halogen engine (a dense build and a Flash-Next build), the Gemma, DeepSeek and
+orchestrator profiles on the ROCmFPX llama.cpp runtime. The properties below
+belong to the Qwen engines; `/health` reports what the running profile
+supports. Every engine setting is named `HALOGEN_*` — the `SUPERFAST_*` names
+belong to this project's own tools, and
+[`docs/FLAGS.md`](docs/FLAGS.md) says which is which.
 
 **Byte-identical speculative decoding.** Draft-then-verify commits only the
 tokens the full model would have produced, so the output is bit-for-bit
@@ -755,16 +758,19 @@ identical to cold", while the Flash-Next profile keeps the KV in place and
 reports the opposite on purpose ("a warm answer is NOT bitwise the cold one").
 Both resume the conversation; only the dense profile promises byte-identity.
 
-**Batched decode** — 8 concurrent sequences, 4.87× aggregate, each
-byte-identical to running alone. **Off by default**, and it trades away
-speculation when enabled; see
-[Configuration](#concurrency-and-the-one-trap) before turning it on.
+**Batched decode** — several sequences decoded together, each byte-identical
+to running alone. The dense engine serves one request at a time by default
+(`HALOGEN_KV_SLOTS=1`) and reaches 8 concurrent sequences at 4.87× aggregate
+when you raise it; the Flash-Next engine ships 4 slots over one shared KV
+pool. Batching trades away speculation for the streams that are not alone —
+see [Concurrency](#concurrency-and-the-one-trap) before changing it.
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control.
 
-**Three selectable drafters** — `dflash2` (default), `mtp`, `serial`. Choose
-per request; the output is identical, only the speed changes.
+**Selectable drafters** — the dense engine has three (`dflash2` by default,
+plus `mtp` and `serial`), the Flash-Next engine two (`mtp` by default, plus
+`serial`). Choose per request; the output is identical, only the speed changes.
 
 ---
 
@@ -778,15 +784,23 @@ its own tuned defaults and reports them through `/health`.
 
 | variable | default | what it does |
 |---|---|---|
-| `SUPERFAST_CHECKPOINT` | `/models/qwen3.8-27b-p1w4d-d2.hgn` | which checkpoint to load |
-| `SUPERFAST_TOKENIZER` | `/tokenizer` | flat tokenizer directory |
-| `SUPERFAST_API_PORT` | `8731` | the published port |
-| `SUPERFAST_DRAFTER` | `2` (DFlash2) | default drafter: `0` serial, `1` MTP, `2` DFlash2 |
-| `SUPERFAST_CACHE_MB` | *auto* | prompt-cache budget; `0` disables it |
-| `SUPERFAST_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — above it is a **400**, never a silent truncation |
-| `SUPERFAST_QUEUE_TIMEOUT` | `7200` | seconds a queued request will wait — **coupled to the cap**, see below |
-| `SUPERFAST_KV_SLOTS` | `1` | concurrent resident sequences — see below |
-| `SUPERFAST_SLOT_CTX` | `262144` | context each slot holds — see below |
+| `HALOGEN_CHECKPOINT` | `/models/qwen3.8-27b-p1w4d-d2.hgn` | which checkpoint to load |
+| `HALOGEN_TOKENIZER` | `/tokenizer` | flat tokenizer directory |
+| `HALOGEN_API_PORT` | `8731` | the published port |
+| `HALOGEN_DRAFTER` | `2` (DFlash2, dense) | default drafter: `0` serial, `1` MTP, `2` DFlash2 |
+| `HALOGEN_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — above it is a **400**, never a silent truncation |
+| `HALOGEN_QUEUE_TIMEOUT` | `7200` (dense), `3600` (flash) | seconds a queued request will wait — **coupled to the cap**, see below |
+| `HALOGEN_CACHE_ENTRIES` | `8` (flash) | conversations whose resumable state the prompt cache keeps — see [Many agents at once](#many-agents-at-once) |
+| `HALOGEN_KV_SLOTS` | `4` (flash) | concurrent resident sequences — see below |
+| `HALOGEN_CTX` | `262144` (flash) | the most context one request may use — see below |
+| `HALOGEN_KV_POOL_POSITIONS` | `2 × HALOGEN_CTX` (flash) | positions resident across **all** conversations — see below |
+
+The prefix is part of the name: the engines read `HALOGEN_*`, while
+`SUPERFAST_*` belongs to this project's own tools (the installer, the switch,
+the TUI, the gateway, the benchmarks) and to the client's `envKey`. **An engine
+setting written as `SUPERFAST_*` is read by nobody** — neither image contains
+that string, so the engine keeps its default and says nothing. The complete
+list, with which image reads what, is in [`docs/FLAGS.md`](docs/FLAGS.md).
 
 Per-request settings — drafter, temperature, top_p, seed, reasoning effort,
 tools — go in the JSON body and override the server defaults.
@@ -799,7 +813,7 @@ shorten the answer: it removes it. The reply comes back with
 `finish_reason: "length"`, an empty `content`, and the partial reasoning in
 `reasoning_content`, which most OpenAI clients do not display. The
 per-request default is **8192**, which finished every ordinary prompt we
-measured with room to spare. The ceiling is `SUPERFAST_MAX_TOKENS_CAP`.
+measured with room to spare. The ceiling is `HALOGEN_MAX_TOKENS_CAP`.
 
 Three field names work, and they mean the same thing here:
 `max_completion_tokens` (current OpenAI Chat Completions),
@@ -816,22 +830,20 @@ less.
 
 ### Concurrency, and the one trap
 
-**By default SUPERFAST serves one request at a time, with speculative
-decoding on.** That is the right setting for a single user: about 31 t/s.
+The two Qwen profiles run different engines, and they handle concurrency
+differently.
 
-Raising `SUPERFAST_KV_SLOTS` keeps several sequences resident at once and
-raises *aggregate* throughput to about 49 t/s at 8 concurrent requests. But
-**speculation and batching are currently mutually exclusive.** With more than
-one slot the drafter is off, so each individual stream runs at serial speed
-(~6 t/s at 8 slots). One user is much better off with the default; a shared
-server with steady concurrent load is better off with slots.
+**The dense profile serves one request at a time, with speculative decoding
+on** — about 31 t/s, which is the right setting for a single user. Its engine
+does read `HALOGEN_KV_SLOTS` and `HALOGEN_SLOT_CTX` (the names are in the
+shipped binary; the entrypoint does not forward them, so pass them with `-e`),
+and each slot then owns a private KV cache. **The trap is the product:**
+`slots × slot_ctx × 64 KiB`, so raising the slots without lowering the
+per-slot context multiplies the allocation. Eight slots at the native 262,144
+context asks for **137 GB** and will not fit. Keep the product at or below the
+native context:
 
-**The trap:** the KV pool costs `slots × slot_ctx × 64 KiB`, so raising the
-slots without lowering the per-slot context multiplies the allocation. Eight
-slots at the native 262,144 context asks for **137 GB** and will not fit.
-Keep the product at or below the native context:
-
-| `KV_SLOTS` | `SLOT_CTX` | pool |
+| `HALOGEN_KV_SLOTS` | `HALOGEN_SLOT_CTX` | pool |
 |---|---|---|
 | 1 | 262144 | 17.2 GB *(default)* |
 | 2 | 131072 | 17.2 GB |
@@ -839,12 +851,31 @@ Keep the product at or below the native context:
 | 8 | 32768 | 17.2 GB |
 | 8 | 262144 | 137 GB — **will not fit** |
 
-A prompt longer than `SLOT_CTX` is a hard error naming the limit. It is never
-silently truncated.
+A prompt longer than `HALOGEN_SLOT_CTX` is a hard error naming the limit. It is
+never silently truncated.
+
+**The Flash-Next profile serves four sequences at once from one shared KV
+pool**, so its sizes are settings rather than a product.
+`HALOGEN_KV_POOL_POSITIONS` is how many attention positions are resident
+across *all* conversations; each request reserves `prompt + max_tokens` of it,
+and one that does not fit **waits**. The image default is twice the context,
+524,288 — two full-length conversations, or four at 131K. The pool must be at
+least `HALOGEN_CTX`, or the engine refuses it (`at least --ctx 262144, a
+multiple of 256, at most 16777216`), and a larger one is silently shrunk at
+startup unless `HALOGEN_KV_POOL_FIT=0`. The unit in `deploy/profiles/` ships a
+1,048,576-position pool for exactly that reason, with `HALOGEN_MAX_TOK=16384`
+— the prefill arena, which has to halve for a pool that size to fit. See
+[Many agents at once](#many-agents-at-once) for the measurements and for how
+to put the image defaults back.
+
+On both engines the drafter speculates only while a stream is alone: with
+several streams live, decode is batched instead. That is why a single user
+gets the fastest numbers, and why parallel agents each run slower than one
+agent would.
 
 ### Raising the output cap
 
-`SUPERFAST_MAX_TOKENS_CAP` and `SUPERFAST_QUEUE_TIMEOUT` are coupled and
+`HALOGEN_MAX_TOKENS_CAP` and `HALOGEN_QUEUE_TIMEOUT` are coupled and
 should not be moved independently. The cap bounds how long one request can
 hold the GPU; the timeout bounds how long the next client waits for it. **If
 a full-length request can outlast the timeout, everyone queued behind it gets
@@ -874,21 +905,107 @@ cannot tell them apart.
 
 ### Prompt cache
 
-`SUPERFAST_CACHE_MB` is empty by default, which means **auto**: the engine
-sizes the cache from the available memory at startup. That suits a machine
-dedicated to serving. Set an explicit value in MB to pin it, or `0` to
-disable it.
+Both engines cache the prompt, and both key the cache on **the token prefix
+itself**. There is no per-conversation key to send: `prompt_cache_key`, the
+field OpenAI's API accepts for this purpose, is accepted here and deliberately
+ignored for exactly that reason — a client cannot name a conversation, because
+the prefix already is the name. The front-end's source says so in one line:
+"the prefix cache keys on the PREFIX already".
 
-One caveat if you pin it: a single full-context entry is about 18.4 GB at
-262K, so a small explicit budget produces a cache that reports itself enabled
-and never actually hits. The engine warns at startup when this happens.
+- **Dense:** `HALOGEN_CACHE_ALIGN=2048` aligns the snapshots, and that value is
+  what makes a warm answer byte-identical to a cold one. `HALOGEN_CACHE_MB` is
+  empty by default, which means **auto** — the engine sizes the cache from the
+  available memory at startup. Pin it only with a value large enough to matter:
+  a single full-context entry is about 18.4 GB at 262K, so a small explicit
+  budget produces a cache that reports itself enabled and never hits.
+- **Flash-Next:** the KV stays where it is and each cached conversation costs
+  ~111 MiB of O(1) state, counted by `HALOGEN_CACHE_ENTRIES`. The image ships
+  **8**, and the Flash-Next unit raises it to 32 so a client that opens
+  subagents has headroom. Warm answers are **not** byte-identical here —
+  `/health` reports `bitwise_identical_to_cold: false` — because the engine
+  snapshots at every request end instead of on an aligned boundary.
 
-Warm answers are byte-identical to cold ones **on the dense profile**, where
-the snapshots are aligned to 2048 and the engine's log says so. The Flash-Next
-profile reports the opposite in `/health` (`bitwise_identical_to_cold:
-false`), because it keeps the KV in place and snapshots every request: a
-follow-up prefills only its new tokens, which is equivalent in the normal
-sense but not byte-identical.
+### Many agents at once
+
+A coding agent that opens subagents runs several conversations at the same
+time, each with its own history. What the subagents share — the system prompt,
+the tool definitions — is computed once, because the cache is per-prefix. What
+they do not share is not shared, and then two numbers decide whether a turn
+takes a second or a minute:
+
+1. **How many positions stay resident across all conversations.** Each request
+   reserves its prompt plus its `max_tokens`, so four agents carrying 90,000
+   tokens of history with a 65,536-token answer budget reserve about 622,000
+   positions between them. The image's default pool holds 524,288: the working
+   set does not fit, and the engine has to drop what it cannot keep.
+2. **How many conversations the cache can keep resumable at once.** The image
+   ships 8 (`HALOGEN_CACHE_ENTRIES`), which is enough for one user and a few
+   subagents; the unit raises it to 32 for a fleet.
+
+Both show up in the engine's own log. From a real session, before this was
+changed:
+
+```
+serve_api: mtp 356 tok | prompt 120102 (30408 cached), prefill 71.20s
+serve_api: mtp 478 tok | prompt 123293 (120097 cached), prefill  4.65s
+```
+
+Only the shared system prompt (30,408 tokens) was still cached; the
+conversation's own 90,000 tokens had to be prefilled again, which is the 71
+seconds. The next line is the same conversation one turn later, once its KV
+was back in place: 4.65 seconds.
+
+The Flash-Next unit now ships a pool of 1,048,576 positions,
+`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`.
+Measured on the reference host with four agents at 90,041 tokens each and
+`max_tokens: 65536` — an aggregate reservation larger than the default pool:
+
+| | round 1 (cold) | round 2 (same four conversations) |
+|---|---|---|
+| prefill, per agent | 65.1–66.8 s | **0.45–0.48 s** |
+| prompt tokens served from cache | 21 | **90,034 of 90,064** |
+
+That is about 145× on the second turn, and it is what keeps a subagent turn
+fast instead of paying for its history again. The engine prints the cache it
+armed at startup — `prompt cache ON, resume-anywhere (8 entries, …)` on the
+image defaults, `(32 entries, …)` from this unit, 111 MiB each at the native
+context. `/cache` counts something narrower than that allowance: the snapshots
+currently stored and their per-entry size, which is why it can report
+`entries: 1, cap_bytes: 116 MB` on a machine that is allowed eight — read the
+startup line, not that field, for the number of entries.
+
+Small conversations were never the problem, which is why this went unnoticed:
+three 9,000-token agents stay warm on the image defaults too (7.5 s cold, 0.45
+s on the next round). It is many *large* sessions that need the pool.
+
+Four things to know if you tune it:
+
+- **The client has nothing to send.** Keep the prefix stable instead: the
+  system prompt, the tool definitions and the order of the messages identical
+  across turns, with volatile content (the clock, command output) at the end. A
+  subagent whose system prompt differs from its siblings' shares nothing with
+  them and starts cold by construction — that is expected, not a bug.
+- **The sizes are one budget, not four knobs.** A 1,048,576-position pool fits
+  only with the prefill arena at 16384, and the engine enforces the
+  relationships (pool at least the context, arena at most 32768).
+- **A bigger pool costs memory the model also wants.** 1,048,576 positions is
+  ~29.3 GiB against ~14.9 GiB for the default, measured with 72 GB still
+  available and the model resident. If you would rather keep the memory,
+  786432 (three full-length conversations) also starts and needs no arena
+  change.
+- **Do not reach for the disk.** `HALOGEN_CACHE_FILE` exists, but only with
+  `HALOGEN_CACHE_INPLACE=0`, where each entry copies the whole KV (~26 KiB per
+  position, ~6.5 GB at the native context). On this machine the host RAM is the
+  same pool the GPU allocates from, so a disk tier gives back memory you
+  already have and pays NVMe reads for it. Raising the pool and the entry count
+  is what pays.
+
+To go back to the image defaults, delete the six `-e HALOGEN_*` lines from the
+`ExecStart` in `~/.config/systemd/user/superfast-flash.service` and run
+`systemctl --user daemon-reload && systemctl --user restart superfast-flash`;
+the engine then sizes everything itself, including the pool. To keep the fix
+but use less memory, set `HALOGEN_KV_POOL_POSITIONS=786432` and drop
+`HALOGEN_MAX_TOK` so the arena returns to 32768.
 
 ---
 
@@ -1516,12 +1633,18 @@ Two limits that only show up in long agentic sessions:
   DeepSeek. Either keep the answer budget inside those numbers or raise that
   limit, otherwise a long turn is cut mid-answer even though the server is
   fine.
-- **Keep the prefix stable.** Every turn re-sends the conversation, but the
-  server reuses what it computed before — the engine has a prompt cache, and
-  the GGUF servers reuse the KV of the sequence. That only works while the
-  beginning of the prompt does not change: keep the system prompt and the tool
-  definitions identical across turns, and put volatile content (the time,
-  command output) at the end. Qwen Code shows the cache work in `/stats`.
+- **Keep the prefix stable, especially with subagents.** Every turn re-sends
+  the conversation, and the server reuses what it computed before: the prompt
+  cache is keyed on the prompt itself, so there is no cache key to send. It
+  only works while the beginning of the prompt does not change — keep the
+  system prompt and the tool definitions identical across turns, and put
+  volatile content (the clock, command output) at the end. Two consequences
+  when an agent opens subagents: each subagent carries its own history, so
+  only what it shares with its siblings is free, and the machine keeps warm
+  only what fits its KV pool while it decodes at most as many conversations at
+  once as the profile has slots (4 on Flash-Next) — see
+  [Many agents at once](#many-agents-at-once). Qwen Code shows the cache work
+  in `/stats`.
 
 A working entry for Qwen Code (`~/.qwen/settings.json`), the flash profile,
 tuned for coding:

@@ -1,6 +1,17 @@
 #!/bin/bash
 # deploy/entrypoint.sh — Peonist superfast release image entrypoint.
 #
+# Every setting this script reads is named HALOGEN_*, because that is what the
+# engine reads. It was written with a SUPERFAST_ prefix until 2026-09-11, and
+# neither image contains that string: the engine kept its built-in default and
+# said nothing about it, which is how the two-container compose file ended up
+# with an engine bound to 127.0.0.1 inside its own namespace. The `SUPERFAST_*`
+# names that remain here are this project's own tools (bench-serving.py), not
+# the engine's.
+#
+# The published images stay the authority for their own defaults: check them
+# with `podman image inspect` and the image's own /usr/local/bin/entrypoint.sh.
+#
 #   all      (default) engine on loopback + OpenAI front-end. One container,
 #            one published port. This is the shape a user who just wants to
 #            run the thing should get.
@@ -32,11 +43,11 @@
 # yourself — the compose file does, deliberately.
 set -euo pipefail
 
-ENG_PORT="${SUPERFAST_PORT:-8730}"
-API_PORT="${SUPERFAST_API_PORT:-8731}"
-BIND="${SUPERFAST_BIND:-127.0.0.1}"
+ENG_PORT="${HALOGEN_PORT:-8730}"
+API_PORT="${HALOGEN_API_PORT:-8731}"
+BIND="${HALOGEN_BIND:-127.0.0.1}"
 
-# OPTIONAL model download. OFF unless SUPERFAST_DOWNLOAD names a repo.
+# OPTIONAL model download. OFF unless HALOGEN_DOWNLOAD names a repo.
 #
 # Default-off is deliberate and is not timidity: with it off, this image opens
 # NO outbound connections at all, which is a property worth keeping and which
@@ -47,26 +58,26 @@ BIND="${SUPERFAST_BIND:-127.0.0.1}"
 # re-downloads. huggingface_hub resumes partial files natively, so an
 # interrupted pull continues rather than starting over.
 maybe_download() {
-  [ -n "${SUPERFAST_DOWNLOAD:-}" ] || return 0
-  [ -f "$SUPERFAST_CHECKPOINT" ] && return 0
+  [ -n "${HALOGEN_DOWNLOAD:-}" ] || return 0
+  [ -f "$HALOGEN_CHECKPOINT" ] && return 0
 
-  local dir; dir="$(dirname "$SUPERFAST_CHECKPOINT")"
+  local dir; dir="$(dirname "$HALOGEN_CHECKPOINT")"
   if [ ! -w "$dir" ]; then
-    echo "superfast: SUPERFAST_DOWNLOAD is set but $dir is not writable." >&2
+    echo "superfast: HALOGEN_DOWNLOAD is set but $dir is not writable." >&2
     echo "  The models volume must be read-WRITE to download into it." >&2
     echo "  Mount it as -v <path>:/models  (drop the :ro)." >&2
     exit 1
   fi
 
-  echo "superfast: $SUPERFAST_CHECKPOINT not found."
-  echo "superfast: downloading from $SUPERFAST_DOWNLOAD into $dir"
+  echo "superfast: $HALOGEN_CHECKPOINT not found."
+  echo "superfast: downloading from $HALOGEN_DOWNLOAD into $dir"
   echo "         this is tens of GB and will take a while; it resumes if interrupted."
   # HF_HUB_OFFLINE=1 is baked into the image and MUST stay set for serving --
   # it is what stops the front-end reaching for a tokenizer at request time.
   # Override it for this command only. Without this the download fails even
   # against a valid repo, which is exactly how the first build of this feature
   # behaved until the failure-path test caught it.
-  if ! HF_HUB_OFFLINE=0 hf download "$SUPERFAST_DOWNLOAD" --local-dir "$dir"; then
+  if ! HF_HUB_OFFLINE=0 hf download "$HALOGEN_DOWNLOAD" --local-dir "$dir"; then
     echo "superfast: download FAILED. Nothing was started." >&2
     echo "  Re-run to resume, or fetch it yourself and mount it." >&2
     exit 1
@@ -75,54 +86,54 @@ maybe_download() {
   # Verify rather than trust: a failed transfer can leave a plausible-looking
   # tree, and an engine that starts on a truncated checkpoint fails much later
   # and much more confusingly than one that refuses here.
-  if [ ! -f "$SUPERFAST_CHECKPOINT" ]; then
-    echo "superfast: download finished but $SUPERFAST_CHECKPOINT is still missing." >&2
-    echo "  The repo layout may not match SUPERFAST_CHECKPOINT. Contents:" >&2
+  if [ ! -f "$HALOGEN_CHECKPOINT" ]; then
+    echo "superfast: download finished but $HALOGEN_CHECKPOINT is still missing." >&2
+    echo "  The repo layout may not match HALOGEN_CHECKPOINT. Contents:" >&2
     ls -la "$dir" >&2
     exit 1
   fi
-  echo "superfast: download complete ($(du -h "$SUPERFAST_CHECKPOINT" | cut -f1))"
+  echo "superfast: download complete ($(du -h "$HALOGEN_CHECKPOINT" | cut -f1))"
 }
 
 need_ckpt() {
   maybe_download
-  [ -f "$SUPERFAST_CHECKPOINT" ] || {
-    echo "superfast: no checkpoint at $SUPERFAST_CHECKPOINT" >&2
+  [ -f "$HALOGEN_CHECKPOINT" ] || {
+    echo "superfast: no checkpoint at $HALOGEN_CHECKPOINT" >&2
     echo "  mount it:  -v /path/to/models:/models:ro" >&2
-    echo "  or point:  -e SUPERFAST_CHECKPOINT=/models/<file>.hgn" >&2
+    echo "  or point:  -e HALOGEN_CHECKPOINT=/models/<file>.hgn" >&2
     exit 1; }
 }
 
 need_tokenizer() {
   # Must be a FLAT dir. HF cache snapshots are symlinks into a sibling blobs/,
   # which dangle inside a container that mounts only the snapshot.
-  [ -f "$SUPERFAST_TOKENIZER/tokenizer.json" ] || {
-    echo "superfast: no tokenizer.json in $SUPERFAST_TOKENIZER" >&2
+  [ -f "$HALOGEN_TOKENIZER/tokenizer.json" ] || {
+    echo "superfast: no tokenizer.json in $HALOGEN_TOKENIZER" >&2
     echo "  the tokenizer dir must be FLAT (cp -L out of an HF snapshot)" >&2
     exit 1; }
 }
 
 start_engine() {
   need_ckpt
-  exec /usr/local/bin/superfast \
-    --checkpoint "$SUPERFAST_CHECKPOINT" \
+  exec /usr/local/bin/halogen \
+    --checkpoint "$HALOGEN_CHECKPOINT" \
     --serve --port "$ENG_PORT" --bind "$BIND"
 }
 
 start_api() {
   need_tokenizer
-  # SUPERFAST_ENGINE must be settable. In `all` the engine is in this same
+  # HALOGEN_ENGINE must be settable. In `all` the engine is in this same
   # container and loopback is right, but in the two-container topology
   # (docker-compose) the services get SEPARATE network namespaces and the
   # api has to reach `engine:8730` by name. Hardcoding 127.0.0.1 here made
   # `api` mode silently unusable for exactly the deployment the split exists
   # to serve — found by writing the compose file, not by testing.
   exec python3 /superfast/tools/serve_api.py \
-    --tokenizer "$SUPERFAST_TOKENIZER" \
-    --engine "${SUPERFAST_ENGINE:-127.0.0.1:$ENG_PORT}" \
+    --tokenizer "$HALOGEN_TOKENIZER" \
+    --engine "${HALOGEN_ENGINE:-127.0.0.1:$ENG_PORT}" \
     --host 0.0.0.0 --port "$API_PORT" \
-    --max-tokens-cap "${SUPERFAST_MAX_TOKENS_CAP:-65536}" \
-    --queue-timeout "${SUPERFAST_QUEUE_TIMEOUT:-7200}"
+    --max-tokens-cap "${HALOGEN_MAX_TOKENS_CAP:-65536}" \
+    --queue-timeout "${HALOGEN_QUEUE_TIMEOUT:-7200}"
 }
 
 case "${1:-all}" in
@@ -130,7 +141,7 @@ engine) start_engine ;;
 api)    start_api ;;
 all)
   need_ckpt; need_tokenizer
-  /usr/local/bin/superfast --checkpoint "$SUPERFAST_CHECKPOINT" \
+  /usr/local/bin/halogen --checkpoint "$HALOGEN_CHECKPOINT" \
       --serve --port "$ENG_PORT" --bind 127.0.0.1 &
   ENGINE_PID=$!
   trap 'kill -TERM "$ENGINE_PID" 2>/dev/null || true' TERM INT
@@ -149,11 +160,11 @@ all)
   done
 
   python3 /superfast/tools/serve_api.py \
-    --tokenizer "$SUPERFAST_TOKENIZER" \
+    --tokenizer "$HALOGEN_TOKENIZER" \
     --engine "127.0.0.1:$ENG_PORT" \
     --host 0.0.0.0 --port "$API_PORT" \
-    --max-tokens-cap "${SUPERFAST_MAX_TOKENS_CAP:-65536}" \
-    --queue-timeout "${SUPERFAST_QUEUE_TIMEOUT:-7200}" &
+    --max-tokens-cap "${HALOGEN_MAX_TOKENS_CAP:-65536}" \
+    --queue-timeout "${HALOGEN_QUEUE_TIMEOUT:-7200}" &
   API_PID=$!
 
   # Either process exiting must take the container down — a live API in front
@@ -172,7 +183,7 @@ bench|sweep)
   BENCH_LOG=/tmp/superfast-api.log
   : > "$BENCH_LOG"
 
-  /usr/local/bin/superfast --checkpoint "$SUPERFAST_CHECKPOINT" \
+  /usr/local/bin/halogen --checkpoint "$HALOGEN_CHECKPOINT" \
       --serve --port "$ENG_PORT" --bind 127.0.0.1 > /tmp/superfast-engine.log 2>&1 &
   ENGINE_PID=$!
   trap 'kill -TERM "$ENGINE_PID" 2>/dev/null || true' TERM INT EXIT
@@ -190,11 +201,11 @@ bench|sweep)
   # scrapes for commit/round and prefill only exist in this stream, and a
   # bench that silently lost them would still print a t/s table.
   python3 /superfast/tools/serve_api.py \
-    --tokenizer "$SUPERFAST_TOKENIZER" \
+    --tokenizer "$HALOGEN_TOKENIZER" \
     --engine "127.0.0.1:$ENG_PORT" \
     --host 127.0.0.1 --port "$API_PORT" \
-    --max-tokens-cap "${SUPERFAST_MAX_TOKENS_CAP:-65536}" \
-    --queue-timeout "${SUPERFAST_QUEUE_TIMEOUT:-7200}" 2>&1 | tee "$BENCH_LOG" &
+    --max-tokens-cap "${HALOGEN_MAX_TOKENS_CAP:-65536}" \
+    --queue-timeout "${HALOGEN_QUEUE_TIMEOUT:-7200}" 2>&1 | tee "$BENCH_LOG" &
   API_PID=$!
 
   # python, not curl: the slim base has no curl and a bench that silently
@@ -210,6 +221,8 @@ except Exception: sys.exit(1)" 2>/dev/null && break
     python3 /superfast/tools/superfast-bench.py \
       --api "http://127.0.0.1:$API_PORT" "$@"
   else
+    # SUPERFAST_API / SUPERFAST_API_LOG, not HALOGEN_*: these two belong to
+    # bench-serving.py, this project's own tool, not to the engine.
     SUPERFAST_API="http://127.0.0.1:$API_PORT" SUPERFAST_API_LOG="$BENCH_LOG" \
       python3 /superfast/tools/bench-serving.py \
         "${1:-dflash2}" "${2:-256}" "${3:-low}" "${4:-1}"

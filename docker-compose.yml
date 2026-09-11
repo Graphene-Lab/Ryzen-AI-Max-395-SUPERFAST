@@ -16,6 +16,11 @@
 # `group_add: keep-groups` below is a PODMAN keyword, so this file is written
 # for podman-compose. Under docker compose, replace it with
 # `group_add: ["video", "render"]`.
+#
+# Every engine setting below is named HALOGEN_*, which is what the image reads.
+# The same names under a SUPERFAST_ prefix are read by nobody: this file used
+# them until 2026-09-11, so the engine kept its built-in 127.0.0.1 bind inside
+# its own network namespace and the api container could never reach it.
 services:
   engine:
     image: ghcr.io/peonist-ai/halogen:0.1.3
@@ -25,16 +30,16 @@ services:
       # interfaces WITHIN the compose network. It stays UNPUBLISHED to the
       # host: the token protocol has no authentication and the API is the
       # only edge that should ever be reachable.
-      SUPERFAST_BIND: 0.0.0.0
-      SUPERFAST_PORT: "8730"
-      SUPERFAST_CHECKPOINT: /models/${CHECKPOINT:-qwen3.8-27b-p1w4d-d2.hgn}
-      SUPERFAST_DRAFTER: "${DRAFTER:-2}"
+      HALOGEN_BIND: 0.0.0.0
+      HALOGEN_PORT: "8730"
+      HALOGEN_CHECKPOINT: /models/${CHECKPOINT:-qwen3.8-27b-p1w4d-d2.hgn}
+      HALOGEN_DRAFTER: "${DRAFTER:-2}"
       # Uncomment to fetch the weights on first start instead of downloading
       # them yourself. OFF by default: with it unset this container makes no
       # outbound connections at all. It only fires when the checkpoint is
       # missing, so restarts do not re-download, and it needs the volume below
       # mounted read-WRITE (drop the :ro).
-      # SUPERFAST_DOWNLOAD: peonist-ai/halogen-qwen3.8-27b
+      # HALOGEN_DOWNLOAD: peonist-ai/halogen-qwen3.8-27b
     volumes:
       - ${MODELS:?set MODELS to the directory holding your .hgn checkpoint}:/models:ro
     devices: ["/dev/kfd", "/dev/dri"]
@@ -50,9 +55,9 @@ services:
     command: ["api"]
     depends_on: [engine]
     environment:
-      SUPERFAST_ENGINE: engine:8730
-      SUPERFAST_API_PORT: "8731"
-      SUPERFAST_TOKENIZER: /tokenizer
+      HALOGEN_ENGINE: engine:8730
+      HALOGEN_API_PORT: "8731"
+      HALOGEN_TOKENIZER: /tokenizer
     ports:
       - "127.0.0.1:${API_PORT:-8731}:8731"   # loopback; the API-key gateway is the LAN path
     volumes:

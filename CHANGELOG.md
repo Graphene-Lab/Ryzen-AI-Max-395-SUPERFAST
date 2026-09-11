@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Engine settings were documented, and shipped in `docker-compose.yml`,
+  under a name no image reads.** The engines take `HALOGEN_*`; `SUPERFAST_*`
+  appears nowhere in either image, so a value set that way is read by nobody
+  and the engine silently keeps its default. The consequence was not cosmetic:
+  `docker-compose.yml` set `SUPERFAST_BIND: 0.0.0.0`, so the engine bound
+  `127.0.0.1` inside its own network namespace and the `api` container could
+  never reach it — the two-container topology could not work as written. The
+  same prefix was wrong throughout `docs/FLAGS.md`, the README, the vendored
+  `deploy/entrypoint.sh` and the EULA. Entries below this one that mention a
+  `SUPERFAST_*` engine setting are written under the old prefix; the engine
+  name is the same word with `HALOGEN_` in front of it.
+
+### Changed
+
+- **The Flash-Next unit now sizes the KV pool for parallel agents.** A coding
+  agent that opens subagents runs several conversations at once, and the image
+  defaults hold two full-length conversations and eight resumable ones. The
+  unit ships `HALOGEN_KV_POOL_POSITIONS=1048576`, `HALOGEN_KV_POOL_FIT=0`,
+  `HALOGEN_MAX_TOK=16384` (the prefill arena: the pool only fits with it
+  halved), `HALOGEN_KV_SLOTS=4`, `HALOGEN_CTX=262144` and
+  `HALOGEN_CACHE_ENTRIES=32`.
+
+  Measured on the reference host with four agents at 90,041 tokens each and
+  `max_tokens: 65536` — an aggregate reservation of ~622,000 positions, larger
+  than the 524288 default pool: the second round is **90034 of 90064 prompt
+  tokens served from cache, 0.45 s instead of 65 s** (~145×). The pool is
+  larger than the default by design; the README says what it costs in memory
+  and how to step back to the image defaults or to a 786432-position pool.
+
+### Docs
+
+- The README has a **Many agents at once** section: how the prefix cache
+  behaves when several agents share the machine, why there is no cache key to
+  send (`prompt_cache_key` is accepted and ignored, because the cache keys on
+  the prefix), the measured before/after, and why the disk snapshot
+  (`HALOGEN_CACHE_FILE`) is not the lever on unified memory.
+- `docs/FLAGS.md` now separates the engines' `HALOGEN_*` settings from this
+  project's own `SUPERFAST_*` tooling variables, names which image honours
+  each one, and documents the pool, its constraints (at least the context, a
+  multiple of 256, at most 16777216) and the prompt-cache entries.
+
 ## 0.1.3
 
 A serving bug-fix release. **The kernels, the checkpoint format and the weights
