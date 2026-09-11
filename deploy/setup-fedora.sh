@@ -754,9 +754,12 @@ Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
 TimeoutStartSec=infinity
 ExecStart=/bin/bash $script
 # Disable on the way out, success or failure: ExecStartPost alone would leave a
-# failed resume enabled, and it would run again at every boot.
-ExecStartPost=-/bin/systemctl disable superfast-setup-resume.service
-ExecStopPost=-/bin/systemctl disable superfast-setup-resume.service
+# failed resume enabled, and it would run again at every boot. The `+` matters:
+# the unit runs as $TARGET_USER and disabling a system unit needs root — with a
+# plain `-` this silently fails with "Access denied" and the unit stays enabled
+# (measured, and that is why this line looks the way it does).
+ExecStartPost=+/bin/systemctl disable superfast-setup-resume.service
+ExecStopPost=+/bin/systemctl disable superfast-setup-resume.service
 RemainAfterExit=no
 
 [Install]
@@ -765,6 +768,8 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable superfast-setup-resume.service
     log "after the reboot, follow it with: journalctl -u superfast-setup-resume -f"
+    log "it disables itself when it finishes; starting it by hand needs --no-block,"
+    log "because the unit only completes when the phases do."
 }
 
 main() {
