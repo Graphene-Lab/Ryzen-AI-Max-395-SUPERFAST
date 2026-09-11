@@ -10,8 +10,8 @@ machine:
 | profile | model | speed here (prose / code) | best for |
 |---|---|---|---|
 | `dense` | **Qwen3.8-27B**, dense, 27B parameters | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
-| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, twice the speed |
-| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; it is also the only family here that reads images |
+| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed |
+| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; its family can read images, but this profile is text only |
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
 
 ![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -36,9 +36,9 @@ open LLMs on it as fast as the hardware allows, without giving up quality.
 
 One property of this hardware makes that possible: the CPU and the GPU share
 one pool of fast LPDDR5X memory. The 16 Zen 5 cores and the Radeon 8060S
-graphics use the same 124 GB. AMD's ROCm stack turns that shared memory into
-GPU compute. A general-purpose engine cannot use all of it. A machine built
-for it can.
+graphics use the same 124 GB — the usable part of the 128 GB installed on
+this machine. AMD's ROCm stack turns that shared memory into GPU compute. A
+general-purpose engine cannot use all of it. A machine built for it can.
 
 The project turns that machine into a repeatable recipe:
 
@@ -631,8 +631,9 @@ The published checkpoints for the engine support this with three files. The
 main one is the 4-bit MoE checkpoint. Beside it there is a quality overlay,
 which re-quantizes the most sensitive tensors with extra care and measures on
 par with full precision for those rows; removing it costs several percent on
-perplexity. The optional speed overlay adds the speculative-decoding head; it
-keeps the output byte-identical and only changes the speed.
+perplexity. The third file, the optional speed arm, is a different trade: it
+swaps that calibration for a quantization that decodes about two percent
+faster.
 
 Running Flash-Next needs the full 124 GB of unified memory as one pool,
 because the checkpoint alone is about 115 GB. On the reference host that meant
@@ -648,12 +649,16 @@ profile in the same memory layout — about **1.8 times faster** — while using
 45 GB of memory instead of 36, and holding a 262,144-token context. Its cold
 load from disk to a healthy endpoint took about forty seconds.
 
-One open item on this profile. Its model card says speculative decoding with
-the MTP head is on by default when the head is present, and the optional
-speed overlay is the file that carries it. On our host, `/health` for this
-profile reports `drafter_weights_loaded: false`, so we publish the numbers
-above as they are: measured without the speed arm. We have not yet found why
-the unit does not load it, and we will not claim a speedup we have not seen.
+**Speculative decoding was already on, and the reading that said otherwise was
+wrong.** The MTP head lives in the checkpoint and the engine drafts with it by
+default, with no configuration. `/health` used to report
+`drafter_weights_loaded: false` on every build of the server, this profile's
+included: it was a reporting bug, not a fact, and the server's 0.5.6 changelog
+documents the fix. The numbers above are therefore measured **with**
+speculation. The same release line also made long prompts prefill faster: on
+this machine, moving from the shipped 0.5.2 to 0.5.6 raised prefill from 1,097
+to 1,180 tokens per second at an 8K prompt and from 1,239 to 1,339 at 32K
+(byte-identical output), while decode stayed where it was.
 
 ---
 
@@ -896,7 +901,7 @@ so they are connected to this repository and appear in its Packages section.
 |---|---|---|
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
 | `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
-| `ghcr.io/peonist-ai/halogen-flash-server:0.5.2` | GHCR (upstream) | the engine that serves the Flash-Next MoE profile |
+| `ghcr.io/peonist-ai/halogen-flash-server:0.5.6` | GHCR (upstream) | the engine that serves the Flash-Next MoE profile |
 | `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
 | `peonist-ai/halogen-qwen3.8-flash-next` | Hugging Face | the MoE checkpoint and both overlays |
 | `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` | Hugging Face | the Gemma-4 weights used by the `gemma` profile |
@@ -1014,9 +1019,10 @@ They are the vendors' own measurements on the instruction-tuned versions.
 On the shared benchmarks, Qwen3.8-27B leads on coding and reasoning. Gemma-4-26B-A4B
 is an Apache-2.0 MoE built for speed: it activates only a few billion
 parameters per token, which is why its publishers report it running "almost
-as fast as a 4B model" while carrying far more knowledge. It also reads
-images. The two roles are complementary: Qwen is the quality-first brain,
-Gemma the fast, permissive, multimodal option.
+as fast as a 4B model" while carrying far more knowledge. Its family also
+reads images, though this profile is text only. The two roles are
+complementary: Qwen is the quality-first brain, Gemma the fast, permissive
+option.
 
 What the community says follows the same pattern. Third-party write-ups and
 developer tests consistently report that Qwen models win on formal benchmarks,
@@ -1059,7 +1065,7 @@ First, the sizes, because these profiles are not the same class of model:
 | profile | total parameters | active per token | context | speed here | role |
 |---|---|---|---|---|---|
 | DeepSeek-V4-Flash | **284B** | 13B | 1M | 11.2 t/s | the largest model the machine runs |
-| Qwen3.8-Flash-Next | **125B** (+51B n-gram table) | 6B | 262K | 37.7–46.4 t/s | the largest Qwen profile, and the fastest of the large ones |
+| Qwen3.8-Flash-Next | **125B** model, plus a 51B n-gram drafter table (not weights) | 6B | 262K | 37.7–46.4 t/s | the largest Qwen profile, and the fastest of the large ones |
 | Qwen3.8-27B dense | **27B** | 27B (all) | 262K | 21.0–26.1 t/s | the precision-first profile |
 | Gemma-4-26B-A4B | 25.2B | 3.8B | 256K | 57.3–57.6 t/s | the small, fast profile |
 
@@ -1443,8 +1449,8 @@ validated on this machine.
 ### What each profile ships: context, tokens, tools
 
 The context window is the reason this machine runs one model at a time (see
-[Why one model at a time](#a-note-on-names)), so every profile is configured
-at the largest window its model supports on this hardware. Measured on the
+[A note on names](#a-note-on-names)), so every profile is configured at the
+largest window its model supports on this hardware. Measured on the
 reference machine:
 
 | profile | context | memory in use while serving | notes |

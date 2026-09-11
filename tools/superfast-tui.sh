@@ -87,7 +87,7 @@ ports() {
 }
 
 help() {
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 menu() {
@@ -117,7 +117,13 @@ menu() {
 
 case "${1:-menu}" in
     status) show_status ;;
-    use) [ $# -ge 2 ] && "$SW" use "$2" || echo "usage: superfast-tui use <$PROFILES>" ;;
+    use)
+        if [ $# -ge 2 ]; then
+            "$SW" use "$2"
+        else
+            echo "usage: superfast-tui use <$PROFILES>"
+        fi
+        ;;
     orchestrator) "$SW" orchestrator "${2:-status}" ;;
     api-key|apikey) api_key "${2:-show}" "${3:-}" ;;
     ports) ports ;;

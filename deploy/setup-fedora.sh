@@ -52,7 +52,7 @@ RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
 # pulled, the image is built from runtime/ instead.
 RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
 RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
-FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.2}"
+FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.6}"
 REBOOT_NEEDED=0
 PROFILES="${PROFILES:-dense}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
@@ -112,7 +112,8 @@ install_template() { # src dst
         -e "s#__FLASH_DIR__#$MODELS_DIR_FLASH#g" \
         -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
-        -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" "$1" > "$2"
+        -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
+        -e "s#__FLASH_IMAGE__#$FLASH_IMAGE#g" "$1" > "$2"
 }
 
 # Install the shared weights downloader (one script, one unit template).

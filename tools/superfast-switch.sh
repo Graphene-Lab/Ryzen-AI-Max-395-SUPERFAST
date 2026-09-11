@@ -217,7 +217,14 @@ cmd_stop() {
 case "${1:-}" in
     status) cmd_status ;;
     list)   echo "profiles: ${PROFILES[*]}"; echo "auxiliary: orchestrator (on|off|status)" ;;
-    use)    [ $# -ge 2 ] && cmd_use "$2" || { echo "usage: $0 use <${PROFILES[*]}>" >&2; exit 2; } ;;
+    use)
+        if [ $# -ge 2 ]; then
+            cmd_use "$2"
+        else
+            echo "usage: $0 use <${PROFILES[*]}>" >&2
+            exit 2
+        fi
+        ;;
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
     stop)   cmd_stop ;;
     *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|stop}" >&2; exit 2 ;;
