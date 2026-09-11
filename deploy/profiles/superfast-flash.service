@@ -29,10 +29,11 @@ ExecStartPre=-/usr/bin/podman rm -f superfast-flash
 #   CACHE_ENTRIES=32   how many conversations keep their resumable state. The
 #                      image ships 8; 32 leaves headroom for a client that opens
 #                      subagents. Each entry costs ~111 MiB.
-# Measured with four agents at 90K tokens and max_tokens 65536 (an aggregate
-# reservation of ~622K positions, larger than the 524288 default pool): the
-# second round is 90034/90064 tokens cached, 0.45 s instead of 65 s. The
-# numbers and the rollback are in the README under "Many agents at once".
+# Measured with four agents asking at once, each at 139,541 tokens: on the
+# image defaults the follow-up turn takes 229.5 s, because two of the four
+# re-prefill their whole history; with this pool all four are served from cache
+# and the whole turn takes 2.2 s. The numbers and the rollback are in the
+# README under "Many agents at once".
 ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \

@@ -957,26 +957,31 @@ was back in place: 4.65 seconds.
 
 The Flash-Next unit now ships a pool of 1,048,576 positions,
 `HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`.
-Measured on the reference host with four agents at 90,041 tokens each and
-`max_tokens: 65536` — an aggregate reservation larger than the default pool:
+Measured on the reference host with four agents asking **at the same time**,
+each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
+positions of KV between them, more than the 524,288 the image's pool holds:
 
-| | round 1 (cold) | round 2 (same four conversations) |
+| four concurrent agents, 139.5K tokens each | image defaults, pool 524288 | this unit, pool 1048576 |
 |---|---|---|
-| prefill, per agent | 65.1–66.8 s | **0.45–0.48 s** |
-| prompt tokens served from cache | 21 | **90,034 of 90,064** |
+| first turn, all four | 533.8 s | 419.2 s |
+| follow-up turn, all four | 229.5 s | **2.2 s** |
+| tokens served from cache, per agent | 139,534 for two of four; **21 and 0 for the other two** | **139,534 for all four** |
+| prefill of the follow-up, per agent | 0.44 s twice, then 119.53 s and 108.53 s | 0.44 s four times |
 
-That is about 145× on the second turn, and it is what keeps a subagent turn
-fast instead of paying for its history again. The engine prints the cache it
-armed at startup — `prompt cache ON, resume-anywhere (8 entries, …)` on the
-image defaults, `(32 entries, …)` from this unit, 111 MiB each at the native
-context. `/cache` counts something narrower than that allowance: the snapshots
-currently stored and their per-entry size, which is why it can report
-`entries: 1, cap_bytes: 116 MB` on a machine that is allowed eight — read the
-startup line, not that field, for the number of entries.
+So on the defaults two of the four agents pay for their whole history again,
+and none does with the larger pool. That is the same failure the real session
+above shows at 120K, and it is what the pool is for: 524,288 positions is
+about four conversations of 131,072 tokens, which is why this went unnoticed
+— four agents at 90,000 tokens are 360,000 positions and fit — and why it
+starts to hurt on longer sessions.
 
-Small conversations were never the problem, which is why this went unnoticed:
-three 9,000-token agents stay warm on the image defaults too (7.5 s cold, 0.45
-s on the next round). It is many *large* sessions that need the pool.
+The engine prints the cache it armed at startup — `prompt cache ON,
+resume-anywhere (8 entries, …)` on the image defaults, `(32 entries, …)` from
+this unit, 111 MiB each at the native context. `/cache` counts something
+narrower than that allowance: the snapshots currently stored and their
+per-entry size, which is why it can report `entries: 1, cap_bytes: 116 MB` on
+a machine that is allowed eight — read the startup line, not that field, for
+the number of entries.
 
 Four things to know if you tune it:
 

@@ -26,12 +26,15 @@
   halved), `HALOGEN_KV_SLOTS=4`, `HALOGEN_CTX=262144` and
   `HALOGEN_CACHE_ENTRIES=32`.
 
-  Measured on the reference host with four agents at 90,041 tokens each and
-  `max_tokens: 65536` — an aggregate reservation of ~622,000 positions, larger
-  than the 524288 default pool: the second round is **90034 of 90064 prompt
-  tokens served from cache, 0.45 s instead of 65 s** (~145×). The pool is
-  larger than the default by design; the README says what it costs in memory
-  and how to step back to the image defaults or to a 786432-position pool.
+  Measured on the reference host with four agents asking **at the same time**,
+  each at 139,541 tokens of history: 560,000 positions of KV against the
+  524,288 the image's pool holds. On the image defaults the follow-up turn
+  takes 229.5 s — two of the four agents are served from cache (139,534 tokens,
+  0.44 s) and the other two re-prefill their whole history (119.53 s and
+  108.53 s). With this unit all four are served from cache and the whole turn
+  takes 2.2 s. The pool is larger than the default by design; the README says
+  what it costs in memory and how to step back to the image defaults or to a
+  786432-position pool.
 
 ### Docs
 
