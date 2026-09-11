@@ -17,6 +17,12 @@
   without the rest of unattended mode. The script also enables the GNOME
   extension itself when there is a session to talk to, and points at the
   command to re-run when there is not.
+- **`SKIP_WEIGHTS=1` and `SKIP_IMAGE=1`**, so a run on a machine that will not
+  serve every profile does not fetch 275 GB of checkpoints or pull images it
+  cannot use. The downloaders are still installed and enabled, and a skipped
+  image is reported rather than silently missing. Both were added to run the
+  installer on a Fedora 44 machine with no GPU (inside WSL on the development
+  PC), which is what produced the fixes below.
 - A **Quick install** section and a badge row at the top of the README, so the
   installer is the first thing a visitor sees.
 - **A report path for a stopped installer.** `.github/ISSUE_TEMPLATE/` gains a
@@ -32,6 +38,29 @@
 
 ### Fixed
 
+- **The dense unit the installer wrote was corrupted by the installer itself.**
+  The heredoc that writes `superfast.service` is unquoted, and one of its
+  comment lines contained `` `superfast-switch status` `` — a command
+  substitution, which ran at install time and pasted its output into the file.
+  On the reference machine that is how the dense unit came to carry a
+  `superfast-switch status` listing in the middle of its comments, with two
+  comment lines destroyed; systemd ignores the unknown keys, so it worked, and
+  nobody noticed. The backticks are escaped now, and the trap below writes to
+  stderr so a failing substitution can never be captured into a generated file.
+  Found by running the installer on a machine without the switch on PATH.
+- **The `ERR` trap that prints the report URL never fired.** Bash does not
+  inherit an `ERR` trap into shell functions unless `-E` is set, and every phase
+  is a function: the first real failure printed nothing. `set -eEuo pipefail`
+  now.
+- **A machine without `firewalld` stopped the install dead.** `firewall-cmd`
+  missing (a container image, the WSL image) meant phase 3 exited and nothing
+  else ran. The firewall rules are now attempted through a helper that warns
+  clearly and continues — the rules matter, but they should not abort a run
+  that can still configure everything else.
+- **`video` and `render` missing made `usermod` fail.** Minimal images may not
+  have the groups Fedora Workstation ships; phase 4 creates what is missing.
+- **`SKIP_IMAGE` did not cover the GGUF runtime image**, so a run that meant to
+  pull nothing sat downloading 3.7 GB in phase 9. It does now.
 - **`superfast-switch use <profile>` did not enable the profile it started.**
   The setup script enables the dense unit and installs every other profile
   disabled, and it says so: "installed (disabled until 'superfast-switch use
@@ -54,6 +83,14 @@
 
 ### Changed
 
+- **DeepSeek-V4-Flash tool calling was measured, and it does not work in
+  practice.** Three budgets were tried — 1,024, 2,048 and 8,192 tokens — and
+  the model spent each of them thinking: at 8,192 it had written 6,123
+  reasoning tokens with no tool call when the attempt was stopped after 22
+  minutes, with the generation down to about 0.4 tokens per second and the
+  machine using 105 GB of its 124 GB. The README now says to treat that profile
+  as a long-context text model rather than an agentic one, instead of leaving
+  the question open.
 - **Every timeout is now computed, not chosen.** The profile units carry
   explicit request policy (`HALOGEN_QUEUE_TIMEOUT` 6000 s dense / 3600 s flash,
   `HALOGEN_MAX_TOKENS_CAP` 65536), and the llama.cpp units raise their socket

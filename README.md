@@ -51,10 +51,16 @@ passphrase prompt on every reboot, which is not headless). Both are in
 
 ### If the installer stops
 
-The guided path is what was validated on the reference machine. The unattended
-path is newer, and it has not yet been through a first run on a fresh host, so
-yours may be that run. If the script stops, or the machine does not end up
-serving a model, report it — the form asks for exactly what makes it fixable:
+The guided path is what was validated on the reference machine. Every phase
+has also been exercised since on a Fedora 44 machine with no GPU and no
+checkpoints (`SKIP_WEIGHTS=1 SKIP_IMAGE=1`, which is what those flags are for):
+phases 1 to 7 and 9 to 10 complete, and phase 8 stops where it should, at the
+GPU groups a fresh session does not have yet. That run is what found five
+installer bugs, including one that corrupted the generated dense unit. What has
+not happened yet is a first run on a fresh host with the hardware and the room
+for the weights, so that may be yours. If the script stops, or the machine does
+not end up serving a model, report it — the form asks for exactly what makes it
+fixable:
 
 **→ [The installer did not finish](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/issues/new?template=installer-failure.yml)**
 
@@ -332,6 +338,11 @@ Workstation 44. There are two ways to get there:
   the shell and systemd files need Unix line endings, and CRLF makes the
   installer stop on its first line with `invalid option name ... set:
   pipefail`. Cloning the repository on the machine itself works too.
+
+  Two flags make a run cheap on a machine that will not serve every profile:
+  `SKIP_WEIGHTS=1` installs the downloaders and fetches no checkpoint (start
+  one later with `systemctl --user start superfast-download@flash`), and
+  `SKIP_IMAGE=1` skips the container images, the 3.7 GB GGUF runtime included.
 
   If you installed before 2026-09-11, the flash profile on your machine still
   carries the old engine settings, and parallel agents on it are slow. Re-run
@@ -1716,13 +1727,17 @@ Three properties that matter when a program uses this machine as its model:
 - **The KV cache is shared by the four server slots** (`kv_unified`), so one
   session can use the whole window; four sessions share the same window
   instead of getting one each.
-- **Tool calling works on every profile.** The GGUF profiles run with
-  `--jinja`, so the model's own chat template handles tools. Verified on
-  Gemma-4: asked for a tool call, and the answer was a proper `tool_calls`
-  reply with the right arguments (`get_time({"city":"Rome"})`). On
-  DeepSeek-V4-Flash the flag is accepted and the template loads; a
-  1024-token tool request was spent entirely on reasoning, which is the trap
-  described in the next point, so give it a large budget.
+- **Tool calling works on the profile we could verify it on.** The GGUF
+  profiles run with `--jinja`, so the model's own chat template handles tools.
+  Verified on Gemma-4: asked for a tool call, and the answer was a proper
+  `tool_calls` reply with the right arguments (`get_time({"city":"Rome"})`).
+  On **DeepSeek-V4-Flash it does not work in practice**, and that is measured
+  rather than assumed: with a 1,024, 2,048 and 8,192-token budget the model
+  spent the whole budget thinking. At 8,192 it had written **6,123 reasoning
+  tokens with no tool call** when the attempt was stopped after 22 minutes,
+  the generation down to about 0.4 tokens per second and the machine using
+  105 GB of its 124 GB. Treat that profile as a long-context text model, not
+  an agentic one.
 - **Give the thinking profiles room.** Gemma-4 and DeepSeek-V4-Flash spend
   their whole budget on reasoning when the budget is small — measured at 192,
   512 and 1024 tokens — so a client should send a large `max_tokens` with

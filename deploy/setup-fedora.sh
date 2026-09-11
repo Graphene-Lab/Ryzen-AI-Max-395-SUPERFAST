@@ -46,6 +46,12 @@
 #                     names, space separated), e.g. ONLY="profiles" to install
 #                     the profile units and downloaders again.
 #   SKIP_UPDATE=1     skip `dnf upgrade`
+#   SKIP_WEIGHTS=1    install the downloaders but fetch no checkpoint. For a
+#                     dry-ish run on a machine that has no room for 275 GB of
+#                     weights, or to set the machine up before the link is
+#                     quiet: `systemctl --user start superfast-download@<p>`
+#                     fetches them later.
+#   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
 #   SMOKE=1           also run the small container device test
 #   UNATTENDED=1      never wait for a human: passwordless sudo required, the
 #                     script must be on disk, and it reboots by itself once the
@@ -67,7 +73,10 @@
 # dense 27B checkpoint. Phase 5 also raises the shared-memory limits the GPU
 # may allocate from (amdgpu.gttsize + ttm.pages_limit, both on the kernel
 # command line), which the largest checkpoints need.
-set -euo pipefail
+# `-E` matters: without it bash does not inherit the ERR trap into shell
+# functions, and every phase here is a function — the report prompt below would
+# never fire. Verified the hard way: a phase failed and nothing was printed.
+set -eEuo pipefail
 
 IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
 RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
@@ -98,10 +107,13 @@ log() { echo "[$(date '+%F %T')] $*"; }
 # screen, and says which lines of it matter.
 ISSUE_URL="https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/issues/new?template=installer-failure.yml"
 on_error() {
-    log "STOPPED at line $2 (exit $1). Whatever finished before this is done; re-running is safe."
-    log "If the cause is not obvious, the form asks for the log and two lines of it:"
-    log "  $ISSUE_URL"
-    log "  the last '== phase N/10' line, and the error under it."
+    # stderr, not stdout: with `set -E` this trap also runs inside command
+    # substitutions, and anything it writes to stdout would be captured into
+    # whatever that substitution is building — a unit file, for instance.
+    log "STOPPED at line $2 (exit $1). Whatever finished before this is done; re-running is safe." >&2
+    log "If the cause is not obvious, the form asks for the log and two lines of it:" >&2
+    log "  $ISSUE_URL" >&2
+    log "  the last '== phase N/10' line, and the error under it." >&2
 }
 trap 'on_error $? $LINENO' ERR
 
@@ -109,6 +121,22 @@ trap 'on_error $? $LINENO' ERR
 is_in() { # "list" word
     case " $1 " in *" $2 "*) return 0 ;; esac
     return 1
+}
+
+# firewalld is what Fedora Workstation ships, and the rules matter: 8741 open
+# for the API-key gateway, 8731 closed. A container image or a WSL image may
+# not have it at all, and that is no reason to stop halfway through an install,
+# so the rules are skipped with a clear warning instead. Users get the same
+# treatment on any Fedora that is missing it.
+firewall_rule() { # args passed to firewall-cmd
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        sudo firewall-cmd "$@"
+    else
+        log "firewalld is not installed here: skipping 'firewall-cmd $*'."
+        log "  Fedora Workstation always has it. On this machine, open 8741/tcp"
+        log "  yourself for the LAN gateway, and keep 8731 closed."
+        return 0
+    fi
 }
 
 # Is a profile in the PROFILES list?
@@ -232,13 +260,22 @@ phase_sshd() {
     log "== phase 3/10: SSH server =="
     sudo dnf install -y openssh-server
     sudo systemctl enable --now sshd
-    sudo firewall-cmd --add-service=ssh --permanent
-    sudo firewall-cmd --reload
+    firewall_rule --add-service=ssh --permanent
+    firewall_rule --reload
     log "sshd enabled; port 22 open"
 }
 
 phase_groups() {
     log "== phase 4/10: GPU groups =="
+    # Fedora Workstation has both; a minimal image (a container rootfs, the WSL
+    # image) may not, and `usermod -aG` fails outright on a group that does not
+    # exist. Create what is missing rather than stopping the install.
+    for g in video render; do
+        if ! getent group "$g" >/dev/null 2>&1; then
+            log "creating missing group: $g"
+            sudo groupadd -r "$g"
+        fi
+    done
     sudo usermod -aG video,render "$TARGET_USER"
     log "added $TARGET_USER to video,render (effective on next login)"
 }
@@ -279,6 +316,10 @@ phase_weights() {
         return 0
     fi
     install_downloader || return 0
+    if [ "${SKIP_WEIGHTS:-0}" = "1" ]; then
+        log "SKIP_WEIGHTS set — the downloader is installed, nothing is fetched"
+        return 0
+    fi
     # Run in the foreground: the unit installed later in this script expects
     # the checkpoint to be there. The downloader resumes at the exact byte
     # offset if it is interrupted, keeps one writer per file, and checks the
@@ -299,6 +340,10 @@ phase_image() {
     fi
     if podman image exists "$IMAGE"; then
         log "image already present: $IMAGE"
+        return 0
+    fi
+    if [ "${SKIP_IMAGE:-0}" = "1" ]; then
+        log "SKIP_IMAGE set — not pulling $IMAGE"
         return 0
     fi
     # Bounded retries: an unbounded loop would spin forever on a tag that no
@@ -358,9 +403,9 @@ phase_engine() {
     # so 8731 must NOT be open on the LAN. The only way in from the network is
     # the API-key gateway on 8741, opened here; a request without the key is
     # refused with 401. Remove any 8731 rule an earlier version added.
-    sudo firewall-cmd --remove-port=8731/tcp --permanent 2>/dev/null || true
-    sudo firewall-cmd --add-port=8741/tcp --permanent
-    sudo firewall-cmd --reload
+    firewall_rule --remove-port=8731/tcp --permanent 2>/dev/null || true
+    firewall_rule --add-port=8741/tcp --permanent
+    firewall_rule --reload
 
     # A classic user unit (not a podman quadlet): quadlet units were not
     # regenerated by `daemon-reload` on the reference host, while a classic
@@ -405,7 +450,11 @@ ExecStart=/usr/bin/podman run --name superfast --rm -p 127.0.0.1:8731:8731 \\
 ExecStop=/usr/bin/podman stop -t 30 superfast
 # podman run in the foreground exits 143 (SIGTERM) or 137 (SIGKILL) when the
 # container is stopped. Without this line a profile switch leaves the unit in
-# the "failed" state, which `superfast-switch status` then reports.
+# the "failed" state, which \`superfast-switch status\` then reports.
+# The backticks above are escaped on purpose: this heredoc is unquoted, so an
+# unescaped command substitution here would RUN at install time and paste its
+# output into this unit — which is how the dense unit on the reference machine
+# ended up carrying a status listing instead of that sentence.
 SuccessExitStatus=137 143
 Restart=on-failure
 RestartSec=10
@@ -463,6 +512,12 @@ phase_profiles() {
     if in_profiles gemma || in_profiles deepseek || in_profiles small; then
         if podman image exists "$RUNTIME_IMAGE"; then
             log "GGUF runtime already present: $RUNTIME_IMAGE"
+        elif [ "${SKIP_IMAGE:-0}" = "1" ]; then
+            # The runtime is a 3.7 GB pull (or a build). Skipping it is what
+            # makes a run on a machine that will not serve these profiles
+            # cheap, but their units cannot start without it, so say that.
+            log "SKIP_IMAGE set — not pulling or building $RUNTIME_IMAGE."
+            log "  gemma, deepseek and the orchestrator need it before they can start."
         else
             pulled=""
             # $RUNTIME_PUBLISHED_EXTRA is deliberately unquoted: it is a list.
@@ -513,6 +568,10 @@ phase_profiles() {
         fi
         if weights_complete "$p"; then
             log "$p: weights already complete"
+        elif [ "${SKIP_WEIGHTS:-0}" = "1" ]; then
+            log "$p: weights missing; SKIP_WEIGHTS set, so the downloader is only enabled"
+            systemctl --user enable "superfast-download@$p.service" \
+                || log "$p: could not enable the downloader; enable it later with: systemctl --user enable superfast-download@$p.service"
         else
             log "$p: weights missing; starting superfast-download@$p.service (keeps running after this script)"
             systemctl --user enable --now "superfast-download@$p.service" \
