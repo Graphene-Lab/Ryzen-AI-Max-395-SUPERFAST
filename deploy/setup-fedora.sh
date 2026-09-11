@@ -291,9 +291,12 @@ phase_engine() {
         log "  PROFILES=\"$PROFILES\" bash deploy/setup-fedora.sh"
         return 1
     fi
-    # OpenAI-compatible API port, reachable from the LAN. The engine's token
-    # protocol stays unpublished inside the container.
-    sudo firewall-cmd --add-port=8731/tcp --permanent
+    # The profile API binds loopback on the host (see -p 127.0.0.1:8731 below),
+    # so 8731 must NOT be open on the LAN. The only way in from the network is
+    # the API-key gateway on 8741, opened here; a request without the key is
+    # refused with 401. Remove any 8731 rule an earlier version added.
+    sudo firewall-cmd --remove-port=8731/tcp --permanent 2>/dev/null || true
+    sudo firewall-cmd --add-port=8741/tcp --permanent
     sudo firewall-cmd --reload
 
     # A classic user unit (not a podman quadlet): quadlet units were not
@@ -320,7 +323,7 @@ Wants=network-online.target
 Type=simple
 Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
 ExecStartPre=-/usr/bin/podman rm -f superfast
-ExecStart=/usr/bin/podman run --name superfast --rm -p 8731:8731 \\
+ExecStart=/usr/bin/podman run --name superfast --rm -p 127.0.0.1:8731:8731 \\
   --device /dev/kfd --device /dev/dri --group-add keep-groups \\
   --security-opt seccomp=unconfined --ipc=host \\
   -v $MODELS_DIR:/models:ro \\
@@ -508,11 +511,24 @@ RestartSec=10
 [Install]
 WantedBy=default.target
 EOF
+    # With every profile on loopback, the gateway is the only way in from the
+    # network, so a machine with no key would be unreachable from the LAN. A
+    # fresh setup therefore creates a key and enables the gateway. The key is
+    # printed once here and can be read any time with
+    # `superfast-switch api-key show`. Set SUPERFAST_NO_KEY=1 to skip this and
+    # leave the machine loopback-only.
+    if [ ! -s "$CONF_DIR/api.key" ] && [ "${SUPERFAST_NO_KEY:-0}" != "1" ]; then
+        mkdir -p "$CONF_DIR"
+        head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32 > "$CONF_DIR/api.key"
+        chmod 600 "$CONF_DIR/api.key"
+        log "generated an API key; clients send: Authorization: Bearer <key>"
+    fi
     if [ -s "$CONF_DIR/api.key" ]; then
         XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable --now superfast-gateway.service
-        log "gateway enabled on :8741 (key from $CONF_DIR/api.key)"
+        log "gateway enabled on :8741 (the only LAN path; key in $CONF_DIR/api.key)"
+        log "API KEY: $(cat "$CONF_DIR/api.key")"
     else
-        log "gateway installed but disabled: create a key with 'superfast-tui api-key set' first"
+        log "no API key: the machine is loopback-only. Create one with 'superfast-switch api-key set'."
     fi
 
     # GNOME Shell extension (control panel), if a GNOME session is present and

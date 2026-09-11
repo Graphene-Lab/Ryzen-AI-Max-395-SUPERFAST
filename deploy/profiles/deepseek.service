@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 Environment=XDG_RUNTIME_DIR=__XDG__
 ExecStartPre=-/usr/bin/podman rm -f deepseek-server
-ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 8731:8731 \
+ExecStart=/usr/bin/podman run --name deepseek-server --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
   -v __DEEPSEEK_DIR__:/models:ro \

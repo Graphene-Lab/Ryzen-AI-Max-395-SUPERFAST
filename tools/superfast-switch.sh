@@ -14,6 +14,13 @@
 #   superfast-switch list
 #   superfast-switch use dense|flash|gemma|deepseek
 #   superfast-switch stop
+#   superfast-switch api-key status|on|off|show|set [key]|clear
+#
+# The API key is enforced by the gateway (superfast-gateway.service) on :8741.
+# Every profile binds :8731 to loopback, so the gateway is the ONLY way in from
+# the network: `api-key on` means "reachable from the LAN, key required" and
+# `api-key off` means "no remote access at all" (loopback on the host still
+# works, no key needed there).
 set -euo pipefail
 
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -23,6 +30,9 @@ HEALTH="http://127.0.0.1:${PORT}/health"
 FLASH_DIR="${SUPERFAST_FLASH_DIR:-$HOME/superfast-flash}"
 GEMMA_DIR="${SUPERFAST_GEMMA_DIR:-$HOME/gemma-models}"
 DEEPSEEK_DIR="${SUPERFAST_DEEPSEEK_DIR:-$HOME/deepseek-models}"
+API_KEY_FILE="${SUPERFAST_KEY_FILE:-$HOME/.config/superfast/api.key}"
+GATEWAY_UNIT="${SUPERFAST_GATEWAY_UNIT:-superfast-gateway.service}"
+GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
 
 declare -A UNIT=(
     [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
@@ -115,6 +125,70 @@ cmd_status() {
     else
         echo "no model responding on :${PORT}"
     fi
+    if [ -s "$API_KEY_FILE" ]; then k="set"; else k="not set"; fi
+    echo "api key: $k, gateway $(unit_state "$GATEWAY_UNIT") (port ${GATEWAY_PORT}, the only LAN path)"
+}
+
+# Turn the LAN-facing API key on or off, and manage the key itself. `on` keeps
+# an existing key and only starts the gateway, so a running client is not
+# invalidated; `set` writes a given key (or a fresh one when none is given) and
+# turns the gateway on; `clear` removes the key and stops the gateway.
+cmd_apikey() {
+    local action="${1:-status}"
+    case "$action" in
+        status)
+            if [ -s "$API_KEY_FILE" ]; then
+                echo "api key: set ($API_KEY_FILE)"
+            else
+                echo "api key: not set"
+            fi
+            echo "gateway: $(unit_state "$GATEWAY_UNIT") on :${GATEWAY_PORT} (the only LAN path)"
+            ;;
+        show)
+            [ -s "$API_KEY_FILE" ] || { echo "no api key set (run: superfast-switch api-key set)" >&2; return 3; }
+            cat "$API_KEY_FILE"; echo
+            ;;
+        on)
+            if [ -s "$API_KEY_FILE" ]; then
+                systemctl --user enable --now "$GATEWAY_UNIT" 2>/dev/null || {
+                    echo "could not start $GATEWAY_UNIT; create it with deploy/setup-fedora.sh" >&2
+                    return 1; }
+                echo "api key on :${GATEWAY_PORT} (key unchanged: $(cat "$API_KEY_FILE"))"
+            else
+                cmd_apikey set ""
+            fi
+            ;;
+        set)
+            local k="${2:-}"
+            if [ -z "$k" ]; then
+                # 32 chars drawn from 48 random bytes: a longer source avoids
+                # the short key that tr -dc '/+=' alone could leave behind.
+                k="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
+            fi
+            mkdir -p "$(dirname "$API_KEY_FILE")"
+            printf '%s' "$k" > "$API_KEY_FILE"
+            chmod 600 "$API_KEY_FILE"
+            systemctl --user enable --now "$GATEWAY_UNIT" 2>/dev/null || {
+                echo "key saved to $API_KEY_FILE, but $GATEWAY_UNIT could not be started;" >&2
+                echo "create it with deploy/setup-fedora.sh, then: superfast-switch api-key on" >&2
+                return 1; }
+            echo "$k"
+            echo "api key on :${GATEWAY_PORT}; clients send: Authorization: Bearer <key>" >&2
+            ;;
+        off)
+            systemctl --user stop "$GATEWAY_UNIT" 2>/dev/null || true
+            echo "api key off: gateway stopped, no access from the LAN (loopback on the host still works)"
+            ;;
+        clear)
+            rm -f "$API_KEY_FILE"
+            systemctl --user disable --now "$GATEWAY_UNIT" 2>/dev/null || true
+            echo "api key cleared: key removed and gateway stopped"
+            ;;
+        *)
+            echo "usage: $0 api-key status|on|off|show|set [key]|clear" >&2
+            exit 2
+            ;;
+    esac
 }
 
 orch_ready() {
@@ -226,6 +300,7 @@ case "${1:-}" in
         fi
         ;;
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
+    api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|stop}" >&2; exit 2 ;;
 esac

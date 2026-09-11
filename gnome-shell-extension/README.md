@@ -27,9 +27,15 @@ For development, copy the folder to
 
 ## What the menu does
 
-- **Serving:** which model currently answers on port 8731.
+- **Serving:** which model currently answers (loopback on port 8731; from the
+  LAN it is the gateway on port 8741).
 - **Model:** activate `dense`, `flash`, `gemma` or `deepseek` (one at a time).
 - **Orchestrator:** on/off for the small fast router on port 8732.
+- **API key:** turn LAN access on or off, copy the key to the clipboard,
+  generate a new key, or clear it. On = the gateway on port 8741 answers, and
+  only with `Authorization: Bearer <key>`. Off = the gateway is stopped and
+  there is no access from the network at all, because every profile binds its
+  port to loopback on the host.
 - **Open terminal menu:** launches the text interface (`superfast-tui`) in the
   first terminal emulator found on the machine, in this order: `ptyxis`,
   `gnome-terminal`, `kgx`, `xterm`, `konsole`. The order matters: Fedora 44

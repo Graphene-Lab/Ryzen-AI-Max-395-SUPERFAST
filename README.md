@@ -20,10 +20,12 @@ machine:
 profile. The filled circle marks what is running now, the entry below toggles
 the small orchestrator, and the last one opens the terminal menu.*
 
-One model at a time, on one OpenAI-compatible endpoint (`:8731`, or `:8741`
-behind an API key). Switch with one click in the GNOME panel, or with one
-command over SSH. No subscription, nothing leaves the machine. The full
-comparison with paid models, and the measured numbers, are further down.
+One model at a time, on one OpenAI-compatible endpoint. On the machine itself
+that endpoint is `:8731`, on loopback; from your network it is the API-key
+gateway on `:8741`, and without the key there is no access at all. Switch with
+one click in the GNOME panel, or with one command over SSH. No subscription,
+nothing leaves the machine. The full comparison with paid models, and the
+measured numbers, are further down.
 
 New to this? Read the **[plain-language guide](docs/PLAIN-GUIDE.md)** first.
 It is written for readers who are not engineers.
@@ -1432,6 +1434,8 @@ superfast-switch use flash       # Qwen3.8-Flash-Next MoE
 superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
 superfast-switch use deepseek    # DeepSeek-V4-Flash ROCmFPX
 superfast-switch stop            # stop everything
+superfast-switch api-key on      # require the API key from the LAN (:8741)
+superfast-switch api-key status  # is the gateway on, is a key set
 ```
 
 The tool stops the current profile, starts the requested one and waits until
@@ -1490,11 +1494,11 @@ seconds at 10.1 t/s. If this machine is to run nothing else, `-c 1048576` in
 A coding agent sends a large system prompt, the tool definitions and the files
 it is working on, and then asks for long answers. Any OpenAI-compatible client
 works, and the settings that matter are these — they come from the
-measurements above, not from taste. The base URL is
-`http://<machine-ip>:8731/v1`; on a machine reachable from your network you can
-use the key-protected gateway on port 8741 instead (open that port in the
-firewall first: `sudo firewall-cmd --add-port=8741/tcp --permanent &&
-sudo firewall-cmd --reload`).
+measurements above, not from taste. Every profile binds port 8731 to loopback,
+so from another machine the base URL is the API-key gateway,
+`http://<machine-ip>:8741/v1`, with `Authorization: Bearer <key>`; the setup
+script opens 8741 in the firewall and keeps 8731 closed. Local tools on the
+machine itself use `http://127.0.0.1:8731/v1` with no key.
 
 | setting | what to do |
 |---|---|
@@ -1526,7 +1530,7 @@ tuned for coding:
 {
   "id": "halogen-qwen3.8-flash-next",
   "name": "[SUPERFAST] flash profile (MoE 125B) - coding",
-  "baseUrl": "http://<machine-ip>:8731/v1",
+  "baseUrl": "http://<machine-ip>:8741/v1",
   "envKey": "SUPERFAST_API_KEY",
   "generationConfig": {
     "timeout": 900000,
@@ -1541,9 +1545,12 @@ tuned for coding:
 
 Repeat it once per profile, changing `id`, `name` and `contextWindowSize`
 (524,288 for DeepSeek), and dropping `extra_body` on Gemma and DeepSeek, which
-ignore it. `envKey` names an environment variable, not the key itself: the
-server needs no key on 8731, so the value can be the placeholder `local`.
-Qwen Code re-reads `modelProviders` edits without a restart.
+ignore it. `envKey` names an environment variable, not the key itself: point it
+at the gateway key, read with `superfast-switch api-key show`, and set it with
+`setx SUPERFAST_API_KEY <key>` on Windows or `export SUPERFAST_API_KEY=<key>`
+elsewhere. When the client runs on the machine itself, use
+`http://127.0.0.1:8731/v1` and any placeholder value, because loopback needs no
+key. Qwen Code re-reads `modelProviders` edits without a restart.
 
 The stream limit is not a per-provider field, so it goes in the environment of
 whatever starts the client (on Windows, `setx`, then a new terminal):
@@ -1553,9 +1560,11 @@ export QWEN_STREAM_MAX_LIFETIME_MS=1800000    # 30 minutes
 ```
 
 For another client the rules are the same: point it at
-`http://<machine-ip>:8731/v1`, use the model name from `/health`, send tools
-enabled and a large output budget, keep the context at what the server
-allocates, and do not send sampling parameters the server already applies.
+`http://<machine-ip>:8741/v1` with the `Authorization: Bearer <key>` header
+(or `http://127.0.0.1:8731/v1` on the machine itself, no key), use the model
+name from `/health`, send tools enabled and a large output budget, keep the
+context at what the server allocates, and do not send sampling parameters the
+server already applies.
 
 The auxiliary orchestrator is toggled separately, because it runs *alongside*
 the active profile instead of replacing it:
@@ -1574,31 +1583,51 @@ stopped until you switch it on.
 
 The same controls exist in two friendlier forms. On the desktop, a small GNOME
 panel menu (`gnome-shell-extension/`) shows what is serving and lets you switch
-model or toggle the orchestrator with a click. In a terminal — including over
-SSH — `superfast-tui` offers a minimal menu plus simple commands (`status`,
-`use`, `orchestrator`, `api-key`, `help`).
+model, toggle the orchestrator, and turn the API key on or off (set, copy or
+clear it) with a click. In a terminal — including over SSH — `superfast-tui`
+offers a minimal menu plus simple commands (`status`, `use`, `orchestrator`,
+`api-key`, `help`), and `superfast-switch` is the same set for scripts.
 
 ### Locking it down (API key)
 
-The profile endpoint listens on loopback, which is what you want on a
-single-user machine. If you expose the machine to your network, put a key in
-front of it. One command generates one:
+Networking is off by default and switched on with a key. Every profile binds
+port 8731 to **loopback** on the machine, so nothing on your network can reach
+a model directly. The only way in from the network is the gateway on port
+8741, and it answers a request only when it carries the key. Without the key
+there is no access at all — this is not "open, but also has a key".
+
+Turn it on and read the key (this also starts the gateway):
 
 ```bash
-superfast-tui api-key set          # writes ~/.config/superfast/api.key
+superfast-switch api-key on        # generates a key if none exists, starts the gateway
+superfast-switch api-key show      # print the key, to paste into a client
 ```
 
-Enable the gateway unit (`superfast-gateway.service`, created by the setup
-script) and reach the machine on port 8741 instead of 8731. Clients must then
-send the key, and requests without it are refused with 401:
+Clients then send one of these, and a request without it is refused with 401:
 
 ```
-Authorization: Bearer <your key>
+Authorization: Bearer <key>
+X-API-Key: <key>
 ```
 
-The loopback endpoint stays key-less, so local tools are unaffected. The
-firewall decides whether 8741 is reachable from outside, and it should be
-opened deliberately, not by default.
+The commands live in `superfast-switch` and are mirrored in `superfast-tui`
+and in the GNOME menu:
+
+| command | what it does |
+|---|---|
+| `superfast-switch api-key status` | is the key set, and is the gateway running |
+| `superfast-switch api-key on` | start the gateway; the key is required from now on |
+| `superfast-switch api-key off` | stop the gateway: **no access from the network at all** |
+| `superfast-switch api-key show` | print the key |
+| `superfast-switch api-key set [key]` | set the given key, or generate one, and turn the gateway on |
+| `superfast-switch api-key clear` | remove the key and stop the gateway |
+
+"Off" means remote access is off, not "open without a key": with the gateway
+stopped, only the machine itself can reach a model. The key lives at
+`~/.config/superfast/api.key` (mode 600) and the gateway is
+`superfast-gateway.service`. The setup script opens 8741 in the firewall and
+keeps 8731 closed; if you ever open 8731 yourself, you have exposed the models
+with no key again.
 
 **Roadmap: other model families.** A second runtime is already in use —
 llama.cpp with the ROCmFPX fork, which serves GGUF models with AMD's FP4
@@ -1624,11 +1653,12 @@ open source, and it follows a "bring your own model" approach: it uses
 whatever LLM you point it at — which is what the SUPERFAST server provides.
 
 **Where it runs.** AgentBridge does not have to run on the Fedora machine.
-The Fedora machine is the brain: an OpenAI-compatible API on port 8731. Install
-AgentBridge on your everyday computer (Windows, Linux or macOS), add the
-SUPERFAST server as its model provider, and the assistant works locally on
-your computer while asking the server for intelligence. The API needs no key
-on a private network.
+The Fedora machine is the brain: an OpenAI-compatible API. Install AgentBridge
+on your everyday computer (Windows, Linux or macOS), add the SUPERFAST server
+as its model provider, and the assistant works locally on your computer while
+asking the server for intelligence. From another machine the provider points
+at port 8741 and sends the API key; on the machine itself, port 8731 needs no
+key.
 
 **How to install it.** AgentBridge ships self-contained binaries, so no .NET
 runtime is needed. On Windows, open PowerShell and run:
@@ -1646,8 +1676,9 @@ curl -fsSL https://graphenelab.it/AgentBridge/install.sh | bash
 Alternatively, download the archive for your operating system from the
 [download page](https://graphenelab.it/AgentBridge/download/). Then start it,
 type `/setup`, open the LLM and Providers tab, add the SUPERFAST server as a
-provider pointing at `http://<your-fedora-host>:8731`, and leave the API key
-empty.
+provider pointing at `http://<your-fedora-host>:8741`, and paste the API key
+(read it on the machine with `superfast-switch api-key show`). On the machine
+itself the provider can point at `http://127.0.0.1:8731` with no key.
 
 A worked example, measured from the desktop PC to the machine over the direct
 cable (the health check answered in about six milliseconds):
@@ -1658,14 +1689,15 @@ superfast-switch use gemma
 curl -s localhost:8731/health         # -> "model":"gemma-4-26b-a4b"
 ```
 
-From any computer on the network, the OpenAI-compatible endpoint is
-`http://<machine-ip>:8731`, and the model name is whatever `/health` reports —
-`gemma-4-26b-a4b`, `deepseek-v4-flash` or the Qwen name, depending on the
-active profile. One caution learned the hard way: give the model a generous
-`max_tokens`. In our own test, a 256-token budget was consumed entirely by
-Gemma's reasoning phase and the answer came back empty; 1,024 tokens produced
-a normal reply. If you enabled the API-key gateway, point the client at
-`http://<machine-ip>:8741` instead and send `Authorization: Bearer <key>`.
+From any computer on the network, the OpenAI-compatible endpoint is the
+key-protected gateway, `http://<machine-ip>:8741`, and the model name is
+whatever `/health` reports — `gemma-4-26b-a4b`, `deepseek-v4-flash` or the
+Qwen name, depending on the active profile. One caution learned the hard way:
+give the model a generous `max_tokens`. In our own test, a 256-token budget
+was consumed entirely by Gemma's reasoning phase and the answer came back
+empty; 1,024 tokens produced a normal reply. The gateway requires the key
+(`Authorization: Bearer <key>`); on the machine itself use
+`http://127.0.0.1:8731` with no key.
 
 The official repository is
 [github.com/Graphene-Lab/AgentBridge](https://github.com/Graphene-Lab/AgentBridge/):

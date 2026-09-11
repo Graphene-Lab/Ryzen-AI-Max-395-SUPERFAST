@@ -59,13 +59,17 @@ when you switch.
    graphical processor. Run the same script again and it finishes the job.
 4. Open the control panel (or the terminal menu) and choose which model to
    use.
-5. Point any OpenAI-compatible app at `http://<machine>:8731` and talk to it.
+5. Point any OpenAI-compatible app at `http://<machine>:8741` and send the API
+   key (read it with `superfast-switch api-key show`). On the machine itself,
+   `http://127.0.0.1:8731` needs no key.
 
 ## Everyday use
 
 - The desktop control panel (or `superfast-tui` in a terminal) lets you pick
-  the model, turn the orchestrator on or off, and set an API key so strangers
-  on your network cannot use your machine.
+  the model, turn the orchestrator on or off, and turn the API key on or off.
+  When it is on, a stranger on your network cannot use your machine without the
+  key; when it is off, nobody on the network can use it, only you on the
+  machine itself.
 - You can do all of it over SSH as well; the terminal tool has a simple
   `help`.
 

@@ -6,7 +6,7 @@
 #   superfast-tui status              show profiles + orchestrator state
 #   superfast-tui use <profile>       activate a profile
 #   superfast-tui orchestrator on|off turn the small router on/off
-#   superfast-tui api-key show|set|clear
+#   superfast-tui api-key on|off|show|set|clear
 #   superfast-tui ports               show the ports in use
 #   superfast-tui help                this help
 #
@@ -20,7 +20,6 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 SW="${SUPERFAST_SWITCH:-$HOME/.local/bin/superfast-switch}"
 CONF_DIR="${SUPERFAST_CONF_DIR:-$HOME/.config/superfast}"
 CONF="$CONF_DIR/superfast.conf"
-KEY_FILE="$CONF_DIR/api.key"
 PROFILES="dense flash gemma deepseek"
 
 mkdir -p "$CONF_DIR"
@@ -33,11 +32,6 @@ EOF
 
 show_status() {
     "$SW" status
-    if [ -s "$KEY_FILE" ]; then
-        echo "api key: set ($(wc -c < "$KEY_FILE") bytes in $KEY_FILE)"
-    else
-        echo "api key: not set (use: superfast-tui api-key set)"
-    fi
     # grep exits 1 when the setting is absent, so guard the pipeline; the
     # value may carry a trailing comment, which is stripped here.
     local effort
@@ -45,40 +39,9 @@ show_status() {
     echo "thinking default: ${effort:-(unset: low is what we recommend for chat)}"
 }
 
-api_key() {
-    case "${1:-show}" in
-        show)
-            if [ -s "$KEY_FILE" ]; then echo "key file: $KEY_FILE"; cat "$KEY_FILE"; else echo "no api key set"; fi ;;
-        set)
-            local k="${2:-}"
-            if [ -z "$k" ]; then
-                # 48 random bytes, base64, then keep the alphanumeric part: a
-                # longer source avoids the short key that `tr -d '/+='` alone
-                # could leave behind.
-                k="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
-                echo "generated a new key"
-            fi
-            printf '%s' "$k" > "$KEY_FILE"; chmod 600 "$KEY_FILE"
-            echo "saved to $KEY_FILE (clients must send: Authorization: Bearer <key>)"
-            # A gateway without a key forwards everything through, so it is only
-            # worth running once a key exists: turn it on here instead of
-            # asking the user for a second command.
-            if systemctl --user enable --now superfast-gateway.service >/dev/null 2>&1; then
-                echo "gateway enabled on :${GATEWAY_PORT:-8741} (it forwards to the profile on :8731)"
-            else
-                echo "gateway not installed here: deploy/setup-fedora.sh creates its unit"
-            fi ;;
-        clear)
-            rm -f "$KEY_FILE"; echo "api key cleared"
-            # Stop it: with no key file the gateway forwards every request
-            # through, so leaving it running would expose the profile on :8741
-            # without authentication.
-            if systemctl --user disable --now superfast-gateway.service >/dev/null 2>&1; then
-                echo "gateway stopped (without a key it would not filter anything)"
-            fi ;;
-        *) echo "usage: superfast-tui api-key show|set [key]|clear" ;;
-    esac
-}
+# One implementation, shared with the GNOME extension: the api-key commands live
+# in superfast-switch, and the TUI forwards to them (on|off|show|set|clear).
+api_key() { "$SW" api-key "$@"; }
 
 ports() {
     echo "main profile endpoint : ${SUPERFAST_PORT:-8731}"
@@ -106,7 +69,7 @@ menu() {
             1) show_status ;;
             2) printf 'profile (%s): ' "$PROFILES"; read -r p; "$SW" use "$p" ;;
             3) printf 'orchestrator on/off: '; read -r o; "$SW" orchestrator "$o" ;;
-            4) printf 'api-key show/set/clear: '; read -r a b; api_key "$a" "$b" ;;
+            4) printf 'api-key on/off/show/set/clear: '; read -r a b; api_key "$a" "$b" ;;
             5) ports ;;
             h|help) help ;;
             q|quit) break ;;
@@ -125,7 +88,7 @@ case "${1:-menu}" in
         fi
         ;;
     orchestrator) "$SW" orchestrator "${2:-status}" ;;
-    api-key|apikey) api_key "${2:-show}" "${3:-}" ;;
+    api-key|apikey) api_key "${@:2}" ;;
     ports) ports ;;
     help|-h|--help) help ;;
     menu) menu ;;

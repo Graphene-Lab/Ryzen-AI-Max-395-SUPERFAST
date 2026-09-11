@@ -1,5 +1,6 @@
 // SUPERFAST GNOME Shell extension — a small panel menu to pick the model
-// profile and toggle the orchestrator by calling the superfast-switch CLI.
+// profile, toggle the orchestrator and manage the LAN API key, by calling the
+// superfast-switch CLI.
 //
 // It deliberately keeps no state: every refresh reads the CLI output, so the
 // menu always reflects what the machine is really doing, including changes
@@ -98,6 +99,52 @@ class SuperfastMenu extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._orchItem);
 
+        // LAN access and the API key. The toggle starts/stops the gateway on
+        // :8741, which is the only way in from the network (every profile binds
+        // :8731 to loopback). The key can be copied to the clipboard, rotated,
+        // or cleared. Everything goes through superfast-switch, so the menu
+        // holds no state of its own.
+        this._keySub = new PopupMenu.PopupSubMenuMenuItem('API key: …');
+
+        this._keyToggle = new PopupMenu.PopupMenuItem('Turn on / off');
+        this._keyToggle.connect('activate', () => {
+            runCli(['api-key', this._gatewayActive ? 'off' : 'on'], () => this.poll());
+        });
+        this._keySub.menu.addMenuItem(this._keyToggle);
+
+        this._keyCopy = new PopupMenu.PopupMenuItem('Copy key to clipboard');
+        this._keyCopy.connect('activate', () => {
+            runCli(['api-key', 'show'], out => {
+                const key = (out || '').trim();
+                if (key) {
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, key);
+                    this._keySub.label.text = 'API key: copied';
+                } else {
+                    this._keySub.label.text = 'API key: not set';
+                }
+            });
+        });
+        this._keySub.menu.addMenuItem(this._keyCopy);
+
+        this._keyNew = new PopupMenu.PopupMenuItem('Generate a new key');
+        this._keyNew.connect('activate', () => {
+            // `api-key set` prints the new key on stdout, so it can be copied
+            // straight away.
+            runCli(['api-key', 'set'], out => {
+                const key = (out || '').trim();
+                if (key)
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, key);
+                this.poll();
+            });
+        });
+        this._keySub.menu.addMenuItem(this._keyNew);
+
+        this._keyClear = new PopupMenu.PopupMenuItem('Clear key and stop the gateway');
+        this._keyClear.connect('activate', () => runCli(['api-key', 'clear'], () => this.poll()));
+        this._keySub.menu.addMenuItem(this._keyClear);
+
+        this.menu.addMenuItem(this._keySub);
+
         // Note: since GNOME 45, `menu.addMenuItem()` returns nothing, so the
         // item has to be created, connected and then added — chaining
         // `.connect()` on the return value throws and the whole extension goes
@@ -157,6 +204,14 @@ class SuperfastMenu extends PanelMenu.Button {
             this._statusItem.label.text = `Serving: ${serving}`;
             this._orchItem.label.text =
                 `Orchestrator: ${this._orchestratorActive ? 'on' : 'off'}`;
+            // `superfast-switch status` prints "... api key: <set|not set>,
+            // gateway <active|inactive> ...", parsed here so one call covers
+            // the whole menu.
+            const keySet = /api key:\s*set/.test(out);
+            const gw = (out.match(/gateway (\w+)/) || [])[1] ?? 'inactive';
+            this._gatewayActive = gw === 'active';
+            this._keySub.label.text =
+                `API key: ${this._gatewayActive ? 'on' : 'off'}${keySet ? '' : ' (none)'}`;
 
             this._modelSection.removeAll();
             for (const p of PROFILES) {

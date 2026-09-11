@@ -1,8 +1,8 @@
 {
   "uuid": "superfast@graphene-lab",
   "name": "SUPERFAST",
-  "description": "Choose which local LLM profile runs on this machine, toggle the small orchestrator, and see what is serving. Talks to the superfast-switch CLI; no network access of its own.",
+  "description": "Choose which local LLM profile runs on this machine, toggle the small orchestrator, and turn the LAN API key on or off (set, copy or clear it). Talks to the superfast-switch CLI; no network access of its own.",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "url": "https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST",
-  "version": 1
+  "version": 2
 }
