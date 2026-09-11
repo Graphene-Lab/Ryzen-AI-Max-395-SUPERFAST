@@ -745,11 +745,18 @@ Environment=UNATTENDED=1
 Environment=SKIP_UPDATE=1
 Environment="PROFILES=$PROFILES"
 Environment="ONLY=weights image engine profiles ui_auth"
+# Carry the two skip flags over: a run that was told not to download must not
+# start downloading in its second half.
+Environment=SKIP_WEIGHTS=${SKIP_WEIGHTS:-0}
+Environment=SKIP_IMAGE=${SKIP_IMAGE:-0}
 Environment=HOME=$HOME
 Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
 TimeoutStartSec=infinity
 ExecStart=/bin/bash $script
+# Disable on the way out, success or failure: ExecStartPost alone would leave a
+# failed resume enabled, and it would run again at every boot.
 ExecStartPost=-/bin/systemctl disable superfast-setup-resume.service
+ExecStopPost=-/bin/systemctl disable superfast-setup-resume.service
 RemainAfterExit=no
 
 [Install]
