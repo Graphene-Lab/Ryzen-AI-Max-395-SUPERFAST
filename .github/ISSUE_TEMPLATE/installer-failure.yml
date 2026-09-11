@@ -1,0 +1,80 @@
+name: The installer did not finish
+description: setup-fedora.sh stopped, or the machine did not end up serving a model
+title: "[install] "
+labels: ["installer"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying it. The installer is the part of this project that
+        depends most on the machine it runs on, so a report like this is worth
+        more than a review.
+
+        **The three things that make a report fixable in one pass:**
+
+        1. the phase it stopped on — the last line that looks like
+           `== phase 7/10: engine image ==`
+        2. the log around it — the last 40 lines are usually enough
+        3. whether you used `UNATTENDED=1`, and if so, whether it was the first
+           run or the part after the reboot
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How did you run it?
+      options:
+        - "guided (bash setup-fedora.sh)"
+        - "unattended (UNATTENDED=1), first run"
+        - "unattended (UNATTENDED=1), the run after the reboot (superfast-setup-resume.service)"
+        - "a single phase (ONLY=...)"
+    validations:
+      required: true
+  - type: input
+    id: phase
+    attributes:
+      label: The last phase line
+      description: Copy the last line that starts with `== phase`
+      placeholder: "== phase 6/10: dense checkpoint download (resumable, sha256-verified) =="
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The log
+      description: |
+        The last ~40 lines are enough. If it stopped in the part after the
+        reboot, that log is the journal:
+        `journalctl -u superfast-setup-resume --no-pager | tail -40`
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Fedora version
+      description: "Output of: `grep -E '^(NAME|VERSION_ID)=' /etc/os-release`"
+      placeholder: 'VERSION_ID="44"'
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host and memory
+      description: "The APU model and the installed memory, e.g. `Ryzen AI Max+ 395, 128 GB`"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+      description: One or two lines are enough. "It should have started the engine; it exited at the download" tells us where to look.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I checked that the script is a text file with Unix line endings (not copied from Windows)
+          required: false
+        - label: I am pasting the log, not retyping it from memory
+          required: true

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Not the installer? Read the troubleshooting notes first
+    url: https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/blob/main/README.md#honest-limits
+    about: Known limits, profile behaviour and client configuration. If the installer is what stopped, use the form above instead.

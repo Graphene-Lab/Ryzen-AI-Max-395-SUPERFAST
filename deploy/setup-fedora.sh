@@ -12,6 +12,13 @@
 # Run as the admin user (sudo is used internally where needed):
 #   bash deploy/setup-fedora.sh
 #
+# When a phase fails the script prints where it stopped and the URL of the
+# issue form, because the first runs on fresh hardware ARE the test for this
+# script — we cannot try it on your machine. Two lines of the log are usually
+# enough: the last "== phase N/10" line and the error under it. For the half
+# that runs after the reboot, that log is the journal:
+#   journalctl -u superfast-setup-resume --no-pager | tail -40
+#
 # Fully unattended, including the reboot the kernel parameters need:
 #   curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
 #   PROFILES="dense flash gemma deepseek small" UNATTENDED=1 bash setup-fedora.sh
@@ -84,6 +91,19 @@ TARGET_USER="${SUDO_USER:-$USER}"
 UID_NUM="$(id -u)"
 
 log() { echo "[$(date '+%F %T')] $*"; }
+
+# A stopped install is worth a report: this script cannot know what a different
+# machine does with it, so the first runs on fresh hardware are the test. The
+# trap prints the one URL that makes reporting easy, while the log is still on
+# screen, and says which lines of it matter.
+ISSUE_URL="https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/issues/new?template=installer-failure.yml"
+on_error() {
+    log "STOPPED at line $2 (exit $1). Whatever finished before this is done; re-running is safe."
+    log "If the cause is not obvious, the form asks for the log and two lines of it:"
+    log "  $ISSUE_URL"
+    log "  the last '== phase N/10' line, and the error under it."
+}
+trap 'on_error $? $LINENO' ERR
 
 # Is a word in a space-separated list?
 is_in() { # "list" word

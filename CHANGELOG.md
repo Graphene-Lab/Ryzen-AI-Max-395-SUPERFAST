@@ -19,6 +19,16 @@
   command to re-run when there is not.
 - A **Quick install** section and a badge row at the top of the README, so the
   installer is the first thing a visitor sees.
+- **A report path for a stopped installer.** `.github/ISSUE_TEMPLATE/` gains a
+  form that asks for the three things that make a report fixable — the phase it
+  stopped in, the error under it, and whether it was the half before or after
+  the reboot — plus the `installer` label so those reports group together, and
+  a `config.yml` that points everything else at the README. The script prints
+  the prefilled URL itself from an `ERR` trap when a phase fails, while the log
+  is still on screen. The README says plainly what is and is not validated: the
+  guided path was run on the reference machine, the unattended path has not had
+  its first fresh-host run, and installer breakage is treated as the top
+  priority.
 
 ### Fixed
 

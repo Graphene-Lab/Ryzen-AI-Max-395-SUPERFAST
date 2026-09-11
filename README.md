@@ -49,6 +49,26 @@ passphrase prompt on every reboot, which is not headless). Both are in
 [step 1](#1-install-fedora-workstation-44-recommended) and
 [step 3](#3-configure-the-machine-for-superfast).
 
+### If the installer stops
+
+The guided path is what was validated on the reference machine. The unattended
+path is newer, and it has not yet been through a first run on a fresh host, so
+yours may be that run. If the script stops, or the machine does not end up
+serving a model, report it — the form asks for exactly what makes it fixable:
+
+**→ [The installer did not finish](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/issues/new?template=installer-failure.yml)**
+
+Three things are usually enough: the last line that looks like
+`== phase 7/10: engine image ==`, the error under it, and whether it was the
+run before the reboot or the one after. The second half logs to the journal,
+so `journalctl -u superfast-setup-resume --no-pager | tail -40` is the report.
+
+Installer breakage goes to the top of the list. We look at a report as soon as
+we see it — usually within hours — and the fix is released once it has run
+through on a machine like yours, because the installer is the one part of this
+project that cannot be tested on anybody else's hardware. An issue stays open
+until the script finishes for the person who opened it.
+
 The full walkthrough, phase by phase, with what each step verifies, is
 [Set up a new machine](#set-up-a-new-machine). The installer prints its own
 progress and, at the end, what is running and what to check.
