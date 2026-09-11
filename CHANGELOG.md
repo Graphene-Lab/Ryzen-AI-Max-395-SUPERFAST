@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **`superfast-switch use <profile>` did not enable the profile it started.**
+  The setup script enables the dense unit and installs every other profile
+  disabled, and it says so: "installed (disabled until 'superfast-switch use
+  flash')". But `use` only stopped the others and started the one asked for, so
+  the profile you picked served until the next reboot and then the machine came
+  up on the profile that was still enabled — or, with two enabled, on whichever
+  won the race for port 8731. `use` enables the profile it activates and
+  disables its siblings now, so the choice survives a reboot.
 - **Engine settings were documented, and shipped in `docker-compose.yml`,
   under a name no image reads.** The engines take `HALOGEN_*`; `SUPERFAST_*`
   appears nowhere in either image, so a value set that way is read by nobody

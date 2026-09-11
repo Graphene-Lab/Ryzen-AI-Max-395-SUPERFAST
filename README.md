@@ -255,9 +255,12 @@ Workstation 44. There are two ways to get there:
   PROFILES="dense flash gemma deepseek small" ONLY="profiles" bash deploy/setup-fedora.sh
   ```
 
-  It rewrites the unit files and does not stop a profile that is already
-  running: the new settings apply the next time that profile starts, which
-  `superfast-switch use flash` does.
+  It rewrites the unit files (and refreshes the tools in `~/.local/bin`) and
+  does not stop a profile that is already running: the new settings apply the
+  next time that profile starts. Run `superfast-switch use flash` for that,
+  which also makes flash the profile that starts at boot. Until you pick one,
+  the machine comes up on whichever profile was enabled before (dense, on a
+  machine from the automated install).
 
   The weights of the extra profiles are fetched by one systemd service per
   profile, so the script returns instead of waiting hours for them, the
@@ -1592,6 +1595,9 @@ superfast-switch api-key status  # is the gateway on, is a key set
 
 The tool stops the current profile, starts the requested one and waits until
 `/health` answers with **200**, so when `use` returns, the endpoint is ready.
+It also enables the profile you picked and disables the others: the profile you
+act on is the one that starts at boot, and two enabled profiles would both try
+to hold port 8731.
 This matters for the GGUF profiles: a llama.cpp server binds its port at once
 and answers 503 while it loads, so the switch waits for the load to finish (a
 minute or two for the large checkpoints) instead of reporting early. A profile

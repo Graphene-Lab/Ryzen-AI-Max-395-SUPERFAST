@@ -4,7 +4,9 @@
 # Only one profile runs at a time and serves an OpenAI-compatible API on
 # port 8731, so clients (and AgentBridge) never change their configuration
 # when you switch model. Switching stops the previous profile first, which
-# releases its memory before the next model loads.
+# releases its memory before the next model loads. The profile you activate is
+# also the one that starts at boot: `use` enables it and disables the other
+# profile units, which the setup script installs disabled.
 #
 # Profiles can run on any runtime (halogen engine containers or llama.cpp
 # servers); readiness is detected by HTTP 200 on /health.
@@ -260,6 +262,16 @@ cmd_use() {
             systemctl --user stop "${UNIT[$q]}"
         fi
     done
+    # The setup script enables the dense unit and installs every other profile
+    # disabled, so the enabled unit is what starts at boot. Picking a profile
+    # here is what has to decide that: enable it and disable its siblings, or a
+    # reboot comes up on the previous model — or, with two enabled, on whichever
+    # one wins the race for port 8731.
+    for q in "${PROFILES[@]}"; do
+        [ "$q" = "$p" ] && continue
+        systemctl --user disable "${UNIT[$q]}" >/dev/null 2>&1 || true
+    done
+    systemctl --user enable "${UNIT[$p]}" >/dev/null 2>&1 || true
     if ! unit_active "${UNIT[$p]}"; then
         echo "starting ${UNIT[$p]} (${LABEL[$p]})"
         systemctl --user start "${UNIT[$p]}"
