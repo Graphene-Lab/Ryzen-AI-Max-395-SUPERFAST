@@ -309,8 +309,9 @@ Workstation 44. There are two ways to get there:
   ```
 
   Get the script with `curl` rather than copying it from a Windows machine:
-  the shell and systemd files need Unix line endings (see
-  [Things we learned on the reference machine](#things-we-learned-on-the-reference-machine)).
+  the shell and systemd files need Unix line endings, and CRLF makes the
+  installer stop on its first line with `invalid option name ... set:
+  pipefail`. Cloning the repository on the machine itself works too.
 
   If you installed before 2026-09-11, the flash profile on your machine still
   carries the old engine settings, and parallel agents on it are slow. Re-run

@@ -63,8 +63,8 @@ to, not about the entrypoint. The set of names is not guesswork: they are the
 
 | flag | images | default | meaning |
 |---|---|---|---|
-| `HALOGEN_MAX_TOKENS_CAP` | both | `65536` | Largest `max_tokens` a request may ask for. Exceeding it is a **400**, never a silent truncation — a truncated response and a model that stopped on its own both end with `finish_reason: "length"`, so a client cannot tell them apart. **Coupled to `HALOGEN_QUEUE_TIMEOUT`** — see the README. |
-| `HALOGEN_QUEUE_TIMEOUT` | both | `7200` (dense), `3600` (flash) | Seconds a queued request waits before `503 engine_busy`. Must exceed the time a full-length request takes, or a long request 503s everyone behind it. |
+| `HALOGEN_MAX_TOKENS_CAP` | both | `65536`, shipped explicitly | Largest `max_tokens` a request may ask for. Exceeding it is a **400**, never a silent truncation — a truncated response and a model that stopped on its own both end with `finish_reason: "length"`, so a client cannot tell them apart. **Coupled to `HALOGEN_QUEUE_TIMEOUT`**: the cap bounds how long one request can hold the machine, the timeout how long the next client waits for it. The shipped units set it rather than inheriting it, so a new image tag cannot change it silently. |
+| `HALOGEN_QUEUE_TIMEOUT` | both | `7200` dense / `3600` flash, shipped as `6000` dense and `3600` flash | Seconds a queued request waits before `503 engine_busy`. It must exceed the longest legitimate wait, or a 503 throws away work already queued: four worst-case requests are 4,980 s on the single-slot dense profile, which is where the shipped 6000 comes from. The README derives both numbers, and the client-side values that pair with them, under "Timeouts, and why they are what they are". |
 | `HALOGEN_DRAFTER` | dense | `2` | Default drafter for requests that do not name one: `0` serial, `1` MTP, `2` DFlash2. Output is identical whichever is used; only speed changes. Overridable per request. The Flash-Next engine has no DFlash: its two drafters are `serial` and `mtp`, and `/health` reports which it defaults to. |
 
 ## Concurrency and the KV pool

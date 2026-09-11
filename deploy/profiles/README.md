@@ -45,10 +45,24 @@ conversations stay resident at once:
 | `HALOGEN_MAX_TOK` | `16384` | the prefill arena (not the answer budget). A 1,048,576-position pool fits only with the arena halved; longer prompts are prefilled in arena-sized pieces |
 | `HALOGEN_CACHE_ENTRIES` | `32` | conversations whose resumable state the cache keeps. The image ships 8; 32 leaves headroom for a client that opens subagents. ~111 MiB each |
 | `HALOGEN_KV_SLOTS` / `HALOGEN_CTX` | `4` / `262144` | explicit rather than inherited, so what the unit runs with is readable in the unit |
+| `HALOGEN_QUEUE_TIMEOUT` | `3600` | seconds a request waits for room in the pool before the engine answers 503. Four concurrent worst-case requests are 2,386 s here, and a 503 throws away the work already queued. The dense unit ships 6000 for the same reason (one slot, four requests, 4,980 s) |
+| `HALOGEN_MAX_TOKENS_CAP` | `65536` | largest answer budget a request may ask for. Above it the engine answers 400 rather than truncating; the largest client budget this project documents is 32,768 |
+
+Both are the engine's own names, and both are written explicitly rather than
+left to the image: they decide whether a long turn is refused, and a default
+that changes under a new image tag is not something to discover in production.
+The values, and the client-side ones that pair with them, are derived in the
+README under "Timeouts, and why they are what they are".
+
+The two llama.cpp units set `--timeout` for a different reason: it is the
+*socket* timeout (600 s by default, `LLAMA_ARG_TIMEOUT`), and the server sends
+nothing while it prefills. Gemma ships 1800 s, deepseek 3600 s, because a
+507,904-token prompt on deepseek is 3,116 s of silence. See the comments in
+those units.
 
 The names are the engine's, and they are `HALOGEN_*`: `SUPERFAST_*` belongs to
 this project's own tools and no image contains it, so an engine setting written
-that way is read by nobody. The measurements for these six values, and how to
+that way is read by nobody. The measurements for these values, and how to
 put the image defaults back, are in the README under "Many agents at once";
 every name is listed in [`docs/FLAGS.md`](../../docs/FLAGS.md).
 

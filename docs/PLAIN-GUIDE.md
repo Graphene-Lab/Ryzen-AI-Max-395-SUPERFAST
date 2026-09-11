@@ -99,6 +99,12 @@ either. The full numbers are in the main README, under "Many agents at once".
 
 ## Honest notes
 
+- **A long answer is never cut by a timeout.** While the machine reads a long
+  prompt it sends nothing at all, and reading the longest prompt a profile
+  accepts can take up to 52 minutes on the largest model. Every timeout is
+  therefore computed from those worst cases, on the machine and in the client
+  settings, and the main README shows the arithmetic under "Timeouts, and why
+  they are what they are".
 - A few settings are about avoiding an AI bad habit: some models can "think"
   for too long and loop. The main README explains the defaults we ship and
   why, in the same plain style.
