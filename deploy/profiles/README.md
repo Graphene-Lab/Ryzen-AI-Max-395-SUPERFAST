@@ -67,7 +67,7 @@ put the image defaults back, are in the README under "Many agents at once";
 every name is listed in [`docs/FLAGS.md`](../../docs/FLAGS.md).
 
 The Gemma and DeepSeek units need `llama-rocmfpx:7.2.4`, the GGUF runtime built
-from [`runtime/`](../runtime/README.md). It is published by this repository's
+from [`runtime/`](../../runtime/README.md). It is published by this repository's
 workflow as
 `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1`; the setup script
 pulls it and tags it, and builds it from `runtime/` if the pull fails (it also

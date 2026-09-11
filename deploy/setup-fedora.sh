@@ -5,7 +5,9 @@
 #
 # STATUS (2026-09-10):
 #   Phases 1-10 VALIDATED on the reference host. Every command below was run
-#   and verified there; see docs/fedora-44-setup.md for the log. Phase 9
+#   and verified there. The chronological log we kept is not published, because
+#   it carries host-specific details; the README's setup chapter is the version
+#   users get. Phase 9
 #   installs one unit and one downloader per requested profile, so a single
 #   run can prepare the machine for all four models plus the orchestrator.
 #
