@@ -200,7 +200,10 @@ curl --resolve fedora.<tailnet>.ts.net:443:<public-ip> \
 ```
 
 and then send one request with a very large prompt and a small `max_tokens`. If
-it returns 200 after several minutes of silence, the path holds.
+it returns 200 after several minutes of silence, the path holds. On our machine
+that request came back **HTTP 200 after 136.9 seconds, with 166,457 prompt
+tokens**: the relay held the silence, and the public path was proven, not
+assumed.
 
 ## Troubleshooting
 
@@ -226,9 +229,11 @@ curl -s "https://dns.google/resolve?name=fedora.<tailnet>.ts.net&type=A"
 ```
 
 A section named `Answer` must contain an address. If the name exists but returns
-no address, the record is not published yet. On our machine this was still the
-case 30 minutes after Funnel was enabled, so the delay can be longer than the
-documented 10 minutes.
+no address, the record is not published yet. On our machine the record appeared
+**about 45 minutes** after Funnel was enabled, so the delay can be much longer
+than the documented 10 minutes. The published address is one of Tailscale's
+relay servers, not the machine: that is how Funnel hides the machine's own
+address.
 
 **`curl: (6) Could not resolve host` from the other computer.** This is DNS, not
 the machine. The machine can be serving perfectly while its public name does not

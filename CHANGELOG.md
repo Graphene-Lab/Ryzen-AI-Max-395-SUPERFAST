@@ -16,13 +16,14 @@
   records what we met rather than what the documentation promises: a certificate
   request that fails with "does not support getting TLS certs" until HTTPS is
   enabled, a Funnel command that prints its reason and then waits silently (run
-  it with a timeout), and a public DNS name that was still unpublished 30
-  minutes after Funnel came on, past the documented 10 minutes. It also records
-  why an HTTP proxy is the wrong tool for this workload: Cloudflare returns 524
-  after 125 seconds, while this engine sends nothing at all during a prefill —
-  measured at 166,457 prompt tokens and 134 seconds of silence. The README links
-  to it from the client-configuration section, described as an accessory rather
-  than part of the local setup.
+  it with a timeout), and a public DNS name that appeared only about 45 minutes
+  after Funnel came on, far past the documented 10 minutes. The guide also
+  carries the two measurements that settled the design: the public path held
+  136.9 seconds of silence while the engine prefilled 166,457 tokens and
+  answered 200, and an HTTP proxy does not — Cloudflare returns 524 after 125
+  seconds, 6000 on Enterprise only. The README links to it from the
+  client-configuration section, described as an accessory rather than part of
+  the local setup.
 - **`UNATTENDED=1` (and `AUTO_REBOOT=1`) for `deploy/setup-fedora.sh`.** The
   installer already had no prompts, but two steps needed a human: the sudo
   password, and the reboot that the kernel memory parameters require — the
