@@ -251,6 +251,34 @@ answer is the problem. If this path needs to be dependable, do not rely on the
 network's DNS: use encrypted DNS on the computer that connects, or pin the relay
 address in its hosts file.
 
+**How to set encrypted DNS on Windows.** It is a setting of the network adapter,
+and two commands apply it, from an elevated PowerShell:
+
+```powershell
+netsh dns set encryption server=9.9.9.9 dohtemplate=https://dns.quad9.net/dns-query autoupgrade=yes udpfallback=no
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses 9.9.9.9,149.112.112.112
+Clear-DnsClientCache
+```
+
+`udpfallback=no` means **encrypted only**: the computer does not fall back to a
+plain query, which is the only kind a network can intercept. The price is that on
+a network with a captive portal — a hotel, an airport — the login page may not
+open until you set `udpfallback=yes` and reconnect. That is the one command to
+remember for travelling.
+
+Quad9 is used here because it also filters domains known to distribute malware,
+it is free, it does not log, and Windows already knows its template. Cloudflare
+for Families (`1.1.1.2`) and AdGuard DNS (`94.140.14.14`) work the same way, with
+their own templates.
+
+Check the result with `Get-DnsClientDohServerAddress` (it shows the template and
+whether a plain fallback is allowed) and with `Resolve-DnsName <name>`, which
+should return the same records that a DNS-over-HTTPS query returns. To undo it:
+
+```powershell
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses
+```
+
 ## Security
 
 - **The address is public.** The API key is the lock. Treat it as a secret.
