@@ -27,7 +27,7 @@ the errors we hit and what they meant.
 | client on the connecting computer | **none** — the Funnel address is a normal HTTPS address |
 | address | `https://<machine>.<tailnet>.ts.net` — a stable name, so it does not change when the network changes |
 | ports | only `443`, `8443` and `10000` |
-| protocol | HTTPS only. Funnel does not forward plain TCP |
+| protocol | HTTPS, and TLS-terminated TCP. Funnel never forwards a plain connection: the client speaks TLS and the machine decrypts it. That is what makes SSH possible through it, with a wrapper on the client (see below) |
 | path | through Tailscale's relay servers, with bandwidth limits that cannot be configured |
 | exposure | **public** — anyone on the internet can reach the address, so the API key is the only lock |
 | cost | the free Personal plan (limited to a small number of users, unlimited devices) |
@@ -311,6 +311,75 @@ Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses
 - **The traffic is encrypted end to end.** The connection is TLS from the client
   to the machine, and the relay cannot read it. An observer on the network sees
   the tailnet name, the timing and the volume, not the prompts or the answers.
+
+## SSH through the same Funnel
+
+The same tunnel can carry SSH, so you can administer the machine from anywhere
+with no client installed either. Two things have to be understood first.
+
+**Port 22 cannot be exposed, and a plain SSH client cannot connect.** Funnel
+serves only 443, 8443 and 10000, and it never forwards a plain connection: the
+client speaks TLS and the machine decrypts it. So SSH runs *inside* TLS, on one
+of the allowed ports, and the client needs something that can wrap it.
+
+**Use `--tls-terminated-tcp`, not `--tcp`.** Both flags exist, and `--tcp` looks
+like the right one. It is not: with `--tcp` the relay closes a plain SSH
+connection and answers a TLS one with a non-TLS response, and SSH never
+completes. `--tls-terminated-tcp` is the mode meant for this.
+
+On the machine, with the HTTPS mapping already in place:
+
+```bash
+sudo tailscale funnel --bg --tls-terminated-tcp 10000 tcp://127.0.0.1:22
+```
+
+That adds a second mapping next to the gateway one, so 443 keeps serving the API
+and 10000 carries SSH:
+
+```
+|-- tcp://fedora.<tailnet>.ts.net:10000 (TLS terminated, Funnel on)
+|--> tcp://127.0.0.1:22
+https://fedora.<tailnet>.ts.net (Funnel on)
+|-- / proxy http://127.0.0.1:8741
+```
+
+Then, from any computer, wrap SSH in TLS with `openssl s_client`. Windows does
+not ship `openssl`, but **Git for Windows does**, so on a machine with Git there
+is nothing to install — the command below uses its 8.3 path, because OpenSSH on
+Windows cannot spawn a program whose path contains spaces:
+
+```powershell
+ssh -p 10000 `
+  -o 'ProxyCommand=C:\PROGRA~1\Git\usr\bin\openssl.exe s_client -quiet -verify_quiet -connect %h:10000 -servername %h' `
+  user@fedora.<tailnet>.ts.net
+```
+
+On Linux and macOS, `openssl` is already present:
+
+```bash
+ssh -p 10000 -o 'ProxyCommand=openssl s_client -quiet -connect %h:10000 -servername %h' \
+    user@fedora.<tailnet>.ts.net
+```
+
+Two details worth knowing, both met while setting this up:
+
+- **Right after `tailscale funnel reset`, the TCP mapping takes a moment.** In
+  that window the TLS handshake completes and then the SSH banner never arrives
+  ("Connection timed out during banner exchange"). Retrying a minute later works.
+- **This puts sshd on the public internet.** Prefer key-only authentication:
+
+  ```bash
+  sudo sshd -T | grep -i passwordauthentication     # what is in effect now
+  ```
+
+  If that says `yes`, anyone can attempt a password login on port 10000. A high
+  port is not protection. Either set `PasswordAuthentication no` in
+  `/etc/ssh/sshd_config.d/` and restart `sshd`, or remove the mapping when you do
+  not need it:
+
+  ```bash
+  sudo tailscale funnel --tls-terminated-tcp=10000 off
+  ```
 
 ## The private alternative: the client everywhere
 
