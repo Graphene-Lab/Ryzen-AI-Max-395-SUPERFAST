@@ -207,7 +207,7 @@ assumed.
 
 ## Troubleshooting
 
-These are the four problems we actually met.
+These are the five problems we actually met.
 
 **The Funnel command prints nothing and seems to hang.** It is waiting, and it
 prints its reason before it waits. Run it with a timeout so you always see the
@@ -238,6 +238,18 @@ address.
 **`curl: (6) Could not resolve host` from the other computer.** This is DNS, not
 the machine. The machine can be serving perfectly while its public name does not
 exist yet.
+
+**The name works on one network and not on another, and it changes by itself.**
+Some networks intercept DNS and answer with their own content. We met this on a
+phone hotspot: the public record was correct — three A records with a 300-second
+TTL, visible over DNS-over-HTTPS — but the hotspot's resolver answered with only
+an IPv6 address, and there was no usable IPv6 route, so Windows reported "host
+not found" and Node reported `ENOTFOUND`. Ten minutes later the same query
+worked, with nothing changed on our side. Check what your own computer sees
+before blaming the tunnel: if `nslookup <name>` shows only an IPv6 address, that
+answer is the problem. If this path needs to be dependable, do not rely on the
+network's DNS: use encrypted DNS on the computer that connects, or pin the relay
+address in its hosts file.
 
 ## Security
 
