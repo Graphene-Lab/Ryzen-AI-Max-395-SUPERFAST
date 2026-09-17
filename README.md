@@ -2186,6 +2186,17 @@ curl -s http://<machine-ip>:8741/v1/models -H "Authorization: Bearer <key>"
 superfast-switch status        # on the machine: which profile is serving
 ```
 
+**From outside your network.** The address above is the machine's address on
+your own network. If the machine has no public IP — it is behind a phone hotspot
+or a router you cannot configure — you can still reach the gateway from any
+computer, with nothing installed on that computer: it needs a tunnel that the
+machine opens in the outbound direction.
+[Remote access from anywhere](docs/REMOTE-ACCESS.md) is the step-by-step guide:
+what to install, what to enable in the console, how to verify it, the four
+problems we met and what they meant. It is an accessory rather than part of the
+local setup — the machine works on your network without it, and the tunnel only
+adds a second way to reach the gateway.
+
 Both timeouts are milliseconds, and they are not round numbers by accident:
 each one is the worst case of that profile — the largest prompt it serves, the
 longest answer its budget allows, and the wait for the requests ahead of it —
