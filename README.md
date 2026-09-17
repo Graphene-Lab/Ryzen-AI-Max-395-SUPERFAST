@@ -2197,6 +2197,13 @@ problems we met and what they meant. It is an accessory rather than part of the
 local setup — the machine works on your network without it, and the tunnel only
 adds a second way to reach the gateway.
 
+A useful shape is two entries per profile: one for your own network, one for the
+address from outside. Give the remote one a different `id` — ours end in
+`-remote` — because an entry is identified by `id` **and** `baseUrl`, while
+Qwen Code's `-m` flag selects by `id` alone: with two entries sharing one `id` it
+takes the first, and only the picker can reach the other one. The engine does not
+check the model name it receives, so a distinct `id` is safe.
+
 Both timeouts are milliseconds, and they are not round numbers by accident:
 each one is the worst case of that profile — the largest prompt it serves, the
 longest answer its budget allows, and the wait for the requests ahead of it —

@@ -24,6 +24,21 @@
   seconds, 6000 on Enterprise only. The README links to it from the
   client-configuration section, described as an accessory rather than part of
   the local setup.
+- **An encrypted-DNS recipe in that guide, and the failure that came with it.**
+  A network that intercepts DNS can answer for the Funnel name with something
+  wrong, so the guide now carries the commands that put the connecting computer
+  on DNS-over-HTTPS (Cloudflare for Families, with the two `add encryption`
+  lines Windows needs for those addresses, `udpfallback=no` so nothing falls
+  back to a plain query), the captive-portal exception, the alternatives, and how
+  to check and undo it. Setting it up produced a second failure worth writing
+  down: the resolver we tried first kept answering NXDOMAIN for the Funnel name
+  for about an hour after the record existed, while Google and Cloudflare
+  returned it at the same moment, so the tunnel looked broken when only the
+  resolver was. The guide now says to ask more than one resolver before touching
+  the tunnel, and the README's client section records the other half of the same
+  day: a profile can have two entries, one per network, if the remote one takes a
+  distinct `id`, because `-m` selects by `id` alone and would otherwise always
+  find the first.
 - **`UNATTENDED=1` (and `AUTO_REBOOT=1`) for `deploy/setup-fedora.sh`.** The
   installer already had no prompts, but two steps needed a human: the sudo
   password, and the reboot that the kernel memory parameters require — the
