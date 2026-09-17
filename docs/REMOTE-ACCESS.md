@@ -252,13 +252,19 @@ network's DNS: use encrypted DNS on the computer that connects, or pin the relay
 address in its hosts file.
 
 **How to set encrypted DNS on Windows.** It is a setting of the network adapter,
-and two commands apply it, from an elevated PowerShell:
+and three commands apply it, from an elevated PowerShell:
 
 ```powershell
-netsh dns set encryption server=9.9.9.9 dohtemplate=https://dns.quad9.net/dns-query autoupgrade=yes udpfallback=no
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses 9.9.9.9,149.112.112.112
+netsh dns add encryption server=1.1.1.2 dohtemplate=https://security.cloudflare-dns.com/dns-query autoupgrade=yes udpfallback=no
+netsh dns add encryption server=1.0.0.2 dohtemplate=https://security.cloudflare-dns.com/dns-query autoupgrade=yes udpfallback=no
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses 1.1.1.2,1.0.0.2
 Clear-DnsClientCache
 ```
+
+Windows already knows the templates for `1.1.1.1` and `8.8.8.8`. The addresses
+above are Cloudflare for Families, which also filters domains known to
+distribute malware, and they need the two `add encryption` lines because Windows
+does not know their template yet.
 
 `udpfallback=no` means **encrypted only**: the computer does not fall back to a
 plain query, which is the only kind a network can intercept. The price is that on
@@ -266,14 +272,31 @@ a network with a captive portal — a hotel, an airport — the login page may n
 open until you set `udpfallback=yes` and reconnect. That is the one command to
 remember for travelling.
 
-Quad9 is used here because it also filters domains known to distribute malware,
-it is free, it does not log, and Windows already knows its template. Cloudflare
-for Families (`1.1.1.2`) and AdGuard DNS (`94.140.14.14`) work the same way, with
-their own templates.
+AdGuard DNS (`94.140.14.14`) and Quad9 (`9.9.9.9`) work the same way, with their
+own templates.
+
+**A resolver can also keep a name invisible after it exists.** We first set this
+up with Quad9, and that resolver answered NXDOMAIN for our Funnel name for about
+an hour after the record had been published: its negative cache outlived the
+record's 300-second TTL, while Google and Cloudflare returned the three
+addresses at the same moment. If a name works for other people and not for you,
+ask more than one resolver before touching the tunnel:
+
+```powershell
+Resolve-DnsName <name> -Type A -DnsOnly -Server 8.8.8.8
+Resolve-DnsName <name> -Type A -DnsOnly -Server 1.1.1.1
+Resolve-DnsName <name> -Type A -DnsOnly -Server 9.9.9.9
+```
+
+A resolver that says the name does not exist, while another returns addresses, is
+the problem — not your machine and not the tunnel. Switching to a resolver that
+answers fixed it for us.
 
 Check the result with `Get-DnsClientDohServerAddress` (it shows the template and
 whether a plain fallback is allowed) and with `Resolve-DnsName <name>`, which
-should return the same records that a DNS-over-HTTPS query returns. To undo it:
+should return the same records that a DNS-over-HTTPS query returns. The filter
+itself is visible too: `Resolve-DnsName malware.testcategory.com` answers
+`0.0.0.0`, which is how a filtering resolver blocks a domain. To undo it:
 
 ```powershell
 Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses
