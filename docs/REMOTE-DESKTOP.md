@@ -178,6 +178,26 @@ in there with the usual user credentials. The first stage can be remembered by t
 RDP client (`cmdkey /generic:TERMSRV/<machine> /user:<user> /pass:<password>` on
 Windows); the login screen cannot, so a password is typed at each connection.
 
+Microsoft documents both halves of that, and the second one explains why the
+prompt comes back even when the credential was saved:
+
+- The saved credential lives in the Windows Vault under the profile of the user
+  who is connecting, not under the remote account: "Credentials are saved in
+  special encrypted folders on the computer **under the user's profile**", and
+  Credential Manager "**automatically supplies the credential** that is stored in
+  the Windows Vault. **If it isn't accepted, the user is prompted** for the
+  correct access information".
+- For Remote Desktop, acceptance has an extra condition the Credentials
+  Delegation settings state: saved credentials are delegated "after **proper
+  mutual authentication**" — the server identity has to be verifiable, which a
+  self-signed certificate that does not match the address you type is not. A
+  client that is not domain-joined may delegate to any host by default; a
+  domain-joined one may not.
+
+So a prompt is the client telling you the server did not accept, or did not
+receive, the stored credential. It is not a missing key store, and the remote
+account does not need one.
+
 Saving the credential does not remove that second step, and on the versions this
 guide was written against it also breaks the connection: the client then answers
 the second-stage NLA challenge automatically, with credential material the
