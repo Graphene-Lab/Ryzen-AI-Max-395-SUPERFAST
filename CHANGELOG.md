@@ -8,37 +8,38 @@
   outside the network.** The case it covers is the common one: the machine has
   no public IP, because it sits behind a phone hotspot or a router you cannot
   configure, so no port can be forwarded to it and a DNS name has nothing to
-  point at. It walks through the setup we ran by hand on the reference machine —
-  install Tailscale from the Fedora repositories, join the tailnet with a
-  hostname that gives a stable address, enable HTTPS certificates in the console,
-  add the `funnel` attribute to the policy, expose **only** the key-protected
-  gateway, and point a client at `https://<machine>.<tailnet>.ts.net/v1`. It
-  records what we met rather than what the documentation promises: a certificate
-  request that fails with "does not support getting TLS certs" until HTTPS is
-  enabled, a Funnel command that prints its reason and then waits silently (run
-  it with a timeout), and a public DNS name that appeared only about 45 minutes
-  after Funnel came on, far past the documented 10 minutes. The guide also
-  carries the two measurements that settled the design: the public path held
-  136.9 seconds of silence while the engine prefilled 166,457 tokens and
-  answered 200, and an HTTP proxy does not — Cloudflare returns 524 after 125
-  seconds, 6000 on Enterprise only. The README links to it from the
+  point at. It is written as a general procedure, with placeholders instead of
+  any real machine, tailnet or address, and the steps are in the order that
+  works the first time: install Tailscale, join the tailnet with a hostname that
+  gives a stable address, enable HTTPS certificates in the console, add the
+  `funnel` attribute to the policy, expose **only** the key-protected gateway,
+  and point a client at `https://<machine>.<tailnet>.ts.net/v1`. It also carries
+  the verification that matters (the machine resolves its own name through
+  MagicDNS, so the public path has to be tested with `--resolve`) and a short
+  section for the three things that can still stop it: a Funnel command that
+  prints its reason and then waits, a public DNS record that is not published
+  yet, and a network that rewrites DNS answers. The README links to it from the
   client-configuration section, described as an accessory rather than part of
   the local setup.
-- **An encrypted-DNS recipe in that guide, and the failure that came with it.**
-  A network that intercepts DNS can answer for the Funnel name with something
-  wrong, so the guide now carries the commands that put the connecting computer
-  on DNS-over-HTTPS (Cloudflare for Families, with the two `add encryption`
-  lines Windows needs for those addresses, `udpfallback=no` so nothing falls
-  back to a plain query), the captive-portal exception, the alternatives, and how
-  to check and undo it. Setting it up produced a second failure worth writing
-  down: the resolver we tried first kept answering NXDOMAIN for the Funnel name
-  for about an hour after the record existed, while Google and Cloudflare
-  returned it at the same moment, so the tunnel looked broken when only the
-  resolver was. The guide now says to ask more than one resolver before touching
-  the tunnel, and the README's client section records the other half of the same
-  day: a profile can have two entries, one per network, if the remote one takes a
-  distinct `id`, because `-m` selects by `id` alone and would otherwise always
-  find the first.
+- **An encrypted-DNS recipe in that guide, and SSH over the same Funnel.** A
+  network that intercepts DNS can answer for the Funnel name with something
+  wrong, so the guide gives the commands that put the connecting computer on
+  DNS-over-HTTPS (Cloudflare for Families, with the `add encryption` lines
+  Windows needs for those addresses, `udpfallback=no` so nothing falls back to a
+  plain query), the captive-portal exception, how to check the result and how to
+  undo it. The guide also documents SSH through the same tunnel: port 22 cannot
+  be exposed and a plain SSH client cannot connect, so the machine maps it with
+  `--tls-terminated-tcp` — not `--tcp`, which looks right and does not work —
+  and the client wraps SSH in TLS with `openssl s_client`, which Git for Windows
+  already ships. It closes with the security shape all of this creates: the
+  address is public, the API key is the lock, and an SSH mapping should be
+  key-only and removed when it is not needed.
+- **The README's client section records how to reach a profile two ways.** One
+  entry per network, and the remote one needs a distinct `id`: entries are
+  identified by `id` and `baseUrl`, while `-m` selects by `id` alone and would
+  always find the first, leaving the picker as the only way to the second. The
+  engine does not check the model name it receives, which is what makes a
+  distinct `id` safe.
 - **`UNATTENDED=1` (and `AUTO_REBOOT=1`) for `deploy/setup-fedora.sh`.** The
   installer already had no prompts, but two steps needed a human: the sudo
   password, and the reboot that the kernel memory parameters require — the
