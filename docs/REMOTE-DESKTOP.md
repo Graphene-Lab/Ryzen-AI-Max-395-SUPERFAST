@@ -170,6 +170,37 @@ sudo firewall-cmd --permanent --zone=FedoraWorkstation --add-service=rdp
 sudo firewall-cmd --reload
 ```
 
+## What to expect when you connect
+
+Remote Login is a **two-stage** flow, by design: the system-wide password set with
+`grdctl --system` gets the client to the **login screen**, and the user then logs
+in there with the usual user credentials. The first stage can be remembered by the
+RDP client (`cmdkey /generic:TERMSRV/<machine> /user:<user> /pass:<password>` on
+Windows); the login screen cannot, so a password is typed at each connection.
+
+Saving the credential does not remove that second step, and on some builds it
+also breaks the connection: the client then answers the NLA challenge of the
+**handover** instance automatically, and that instance has no such credentials,
+so it refuses them and the session closes as soon as it opens. If that happens,
+delete the saved credential (`cmdkey /delete:TERMSRV/<machine>`) and type the
+password at the login screen again.
+
+If your goal is to connect **without typing anything**, Remote Login is not the
+right mode, because of that second stage. The alternative is a session that
+already exists on the machine: enable autologin for the user, then share that
+session instead (the per-session mode: `grdctl rdp set-credentials` and
+`systemctl --user enable --now gnome-remote-desktop.service`, with the same
+firewall zone). One authentication, a saved credential that is used, and no
+login screen. The price is a desktop session that is always running, visible on
+the machine's own screen.
+
+**Single-user headless is not an alternative here.** It looks ideal on paper — a
+private desktop for one user, no login screen — and its configuration is
+accepted, but the daemon never opens the port unless a headless graphical
+session is already running for that user (it talks to
+`org.gnome.Mutter.RemoteDesktop`). On a machine where nobody is logged in at the
+console, nothing provides that session.
+
 ## Security
 
 - **Nothing is published.** RDP is not mapped through the Funnel, and the local
