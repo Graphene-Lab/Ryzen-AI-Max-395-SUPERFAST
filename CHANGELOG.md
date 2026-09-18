@@ -4,6 +4,17 @@
 
 ### Added
 
+- **README: where the cache is visible, and the two mistakes an OpenAI-compatible client makes
+  here.** The prompt-cache section now names the two places the cache is measurable — `GET /cache`
+  (counters, `prompt_tokens_saved` first) and the engine's per-request journal line
+  (`prompt 6276 (4791 cached), prefill 2.37s`) — and records that the API response carries
+  `prompt_tokens_details.cached_tokens` only when the cache served part of the prompt. The
+  client-configuration section warns about the two things that stop such a client: `response_format`
+  is not implemented and a request carrying it is refused with 400 (`/health` already lists it
+  under `not_implemented`), and with a large tool catalog the model sometimes calls a tool class
+  by a name that does not exist (`ExcelTool`, `XlsxTool`), which costs one round trip rather than
+  the task.
+
 - **`docs/REMOTE-DESKTOP.md`, and an "Accessory tools" section in the README.**
   The second accessory guide configures GNOME Remote Desktop over RDP so the
   graphical desktop is reachable from anywhere, and it records the three facts

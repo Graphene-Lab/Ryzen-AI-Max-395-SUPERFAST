@@ -1095,6 +1095,20 @@ the prefix already is the name. The front-end's source says so in one line:
   `/health` reports `bitwise_identical_to_cold: false` — because the engine
   snapshots at every request end instead of on an aligned boundary.
 
+**Where to read the cache.** The API response does not carry it: `usage` reports
+`prompt_tokens`, `completion_tokens` and `total_tokens`, and adds
+`prompt_tokens_details.cached_tokens` only when the cache served part of the prompt. Two places
+report it in full, and both are worth knowing when you measure an agent:
+
+- `GET /cache` returns the counters — `prompt_tokens_saved` (tokens the cache kept out of the
+  prefill), `hits`, `misses`, `stores`, `evicted`, `hit_rate`.
+- The engine's journal logs one line per request, for example
+  `serve_api: mtp 24 tok in 0.57s = 42.16 t/s | prompt 6276 (4791 cached), prefill 2.37s`.
+  A warm request shows its cached share and a prefill of a second or two; a cold one shows no
+  cached share and a prefill that grows with the prompt.
+
+Both go through the gateway unchanged, so a client on the network can read them with the same key.
+
 ### Many agents at once
 
 **In plain words.** The engine remembers the start of every conversation it has
@@ -2131,6 +2145,15 @@ Two limits that only show up in long agentic sessions:
   once as the profile has slots (4 on Flash-Next) — see
   [Many agents at once](#many-agents-at-once). Qwen Code shows the cache work
   in `/stats`.
+
+**Two things that stop an OpenAI-compatible client here.** First, `response_format` is not
+implemented: a request that carries it is refused with **400** and a message that says so
+(`/health` lists it under `not_implemented`). Leave the field out and parse the reply yourself.
+Second, with a large tool catalog the model sometimes calls a tool class by a name that does not
+exist — `ExcelTool` for a spreadsheet tool, `XlsxTool`, and similar guesses. The engine rejects
+that call, and the agent usually corrects itself on the next iteration, so it costs one round
+trip rather than the task. Both are visible in the log; a client that reports them saves a
+debugging session.
 
 A working `~/.qwen/settings.json`, with the flash profile filled in.
 `modelProviders` is an object, its keys are provider ids and each key holds an
