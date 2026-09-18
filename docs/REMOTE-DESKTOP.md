@@ -178,12 +178,27 @@ in there with the usual user credentials. The first stage can be remembered by t
 RDP client (`cmdkey /generic:TERMSRV/<machine> /user:<user> /pass:<password>` on
 Windows); the login screen cannot, so a password is typed at each connection.
 
-Saving the credential does not remove that second step, and on some builds it
-also breaks the connection: the client then answers the NLA challenge of the
-**handover** instance automatically, and that instance has no such credentials,
-so it refuses them and the session closes as soon as it opens. If that happens,
-delete the saved credential (`cmdkey /delete:TERMSRV/<machine>`) and type the
-password at the login screen again.
+Saving the credential does not remove that second step, and on the versions this
+guide was written against it also breaks the connection: the client then answers
+the second-stage NLA challenge automatically, with credential material the
+handover instance does not have, so it refuses them and the session closes as
+soon as it opens. If that happens, delete the saved credential
+(`cmdkey /delete:TERMSRV/<machine>`) and type the password at the login screen
+again.
+
+Upstream knows both halves of this, which is why neither is a local
+misconfiguration:
+
+- [Issue #318](https://gitlab.gnome.org/GNOME/gnome-remote-desktop/-/issues/318)
+  (open) describes exactly that reconnect: a Windows client sends stale NTLM
+  credential material, the NLA step fails, and an abandoned greeter is left
+  holding the screen lock. No workaround is listed.
+- [Issue #357](https://gitlab.gnome.org/GNOME/gnome-remote-desktop/-/issues/357)
+  (closed, security) found that in Remote Login mode the first stage returns
+  `TRUE` unconditionally — a peer is admitted without completing the configured
+  NLA authentication. So in this mode the system-wide password is not really what
+  protects the service; **who can reach the port at all** is, which is why this
+  guide keeps RDP on the tailnet and off the local network.
 
 If your goal is to connect **without typing anything**, Remote Login is not the
 right mode, because of that second stage. The alternative is a session that
