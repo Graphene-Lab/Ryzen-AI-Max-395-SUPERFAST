@@ -22,7 +22,17 @@
   that a desktop costs GPU time on the same integrated GPU the model uses.
   The README gains an "Accessory tools" section with one short paragraph per
   guide, and the client-configuration section now points at it instead of
-  repeating the description.
+  repeating the description. The guide also states what to expect when
+  connecting, because the mode authenticates **twice** by design: the
+  system-wide password, then the login screen where the user signs in. A client
+  that saves the first password therefore still asks for the second, and worse,
+  it answers the NLA challenge of the handover instance automatically, which
+  refuses credentials it does not have and closes the session as soon as it
+  opens — with the `cmdkey /delete` that recovers from it, and the alternative
+  that does give a single authentication (autologin on the console plus the
+  per-session mode). It records as well why single-user headless is not that
+  alternative: its configuration is accepted, but the daemon never opens the
+  port without a headless graphical session already running for that user.
 - **`docs/REMOTE-ACCESS.md`, a step-by-step guide to reaching the machine from
   outside the network.** The case it covers is the common one: the machine has
   no public IP, because it sits behind a phone hotspot or a router you cannot
