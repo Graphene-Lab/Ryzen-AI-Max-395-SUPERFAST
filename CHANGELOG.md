@@ -4,6 +4,25 @@
 
 ### Added
 
+- **`docs/REMOTE-DESKTOP.md`, and an "Accessory tools" section in the README.**
+  The second accessory guide configures GNOME Remote Desktop over RDP so the
+  graphical desktop is reachable from anywhere, and it records the three facts
+  that decide the design: the Funnel cannot carry RDP (it serves only 443, 8443
+  and 10000, for clients that speak TLS first, while RDP opens with a plain-text
+  negotiation), SSH port forwarding is not available on Fedora (SELinux denies
+  the session process every outgoing connection, so `ssh -L` fails on the local
+  network too), and the tailnet needs neither. It therefore sets up Remote Login
+  — the system instance, which creates a session when you connect and needs
+  nobody at the console — gives the service a certificate and its credentials,
+  and puts the tailscale interface in a firewall zone of its own so RDP answers
+  tailnet members and not the local network. It carries the step that stops
+  people (the certificate and key must belong to the user `gnome-remote-desktop`,
+  or the daemon starts and never listens, logging `RDP TLS certificate and key
+  not yet configured properly`), the checks to run on the machine, and the note
+  that a desktop costs GPU time on the same integrated GPU the model uses.
+  The README gains an "Accessory tools" section with one short paragraph per
+  guide, and the client-configuration section now points at it instead of
+  repeating the description.
 - **`docs/REMOTE-ACCESS.md`, a step-by-step guide to reaching the machine from
   outside the network.** The case it covers is the common one: the machine has
   no public IP, because it sits behind a phone hotspot or a router you cannot

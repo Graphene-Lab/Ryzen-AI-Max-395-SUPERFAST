@@ -2186,16 +2186,12 @@ curl -s http://<machine-ip>:8741/v1/models -H "Authorization: Bearer <key>"
 superfast-switch status        # on the machine: which profile is serving
 ```
 
-**From outside your network.** The address above is the machine's address on
-your own network. If the machine has no public IP — it is behind a phone hotspot
-or a router you cannot configure — you can still reach the gateway from any
-computer, with nothing installed on that computer: it needs a tunnel that the
+**From outside your network.** If the machine has no public IP — a phone
+hotspot, or a router you cannot configure — you can still reach the gateway from
+any computer, with nothing installed on that computer, through a tunnel the
 machine opens in the outbound direction.
-[Remote access from anywhere](docs/REMOTE-ACCESS.md) is the step-by-step guide:
-what to install, what to enable in the console, how to verify it, the four
-problems we met and what they meant. It is an accessory rather than part of the
-local setup — the machine works on your network without it, and the tunnel only
-adds a second way to reach the gateway.
+[Accessory tools](#accessory-tools-use-the-machine-from-anywhere) has that guide,
+and the one for the graphical desktop.
 
 A useful shape is two entries per profile: one for your own network, one for the
 address from outside. Give the remote one a different `id` — ours end in
@@ -2381,6 +2377,32 @@ is only a weight folder plus a systemd unit. Gemma-4-26B-A4B and
 DeepSeek-V4-Flash are the two families validated on it so far. Nothing enters
 the switch before it is measured on this exact machine and its numbers are
 published here.
+
+---
+
+## Accessory tools: use the machine from anywhere
+
+None of this is needed for the machine to work on your own network. These are the
+two guides that turn it into a machine you can use from anywhere, and each one is
+step by step and self-contained.
+
+### Reach the API and a shell from any network
+
+[**Remote access from anywhere**](docs/REMOTE-ACCESS.md) is for the case where
+the machine has no public IP: behind a phone hotspot, or behind a router you
+cannot configure. It sets up a tunnel that the machine opens in the outbound
+direction, exposes **only** the key-protected gateway, and shows how to carry
+SSH through the same tunnel. The computers that connect need nothing installed:
+they only need the address and the API key.
+
+### See the graphical desktop
+
+[**A desktop on the machine, from anywhere**](docs/REMOTE-DESKTOP.md)
+configures GNOME Remote Desktop over RDP, reachable from your tailnet only —
+nothing published, nothing exposed on the local network. Use it when a shell is
+not enough: a setting to change, a window to look at, a file manager. It also
+explains why RDP cannot go through the tunnel, and what that means for the
+computer you connect from.
 
 ---
 
