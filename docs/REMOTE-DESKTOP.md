@@ -201,6 +201,35 @@ misconfiguration:
   protects the service; **who can reach the port at all** is, which is why this
   guide keeps RDP on the tailnet and off the local network.
 
+#### Making the saved credential work is not possible in this mode
+
+It is worth writing down what does **not** help, because each of these looks like
+the missing piece:
+
+- **A certificate the client can verify.** Give the service a certificate whose
+  subject alternative names cover how clients connect — the machine name, its
+  DNS name if you have one, and the address if you connect by address — and add
+  that certificate to the client's trusted root. This is the precondition
+  Windows documents for delegating a saved credential ("after proper mutual
+  authentication"), and it does fix the first authentication.
+- **The credential delegation policies.** Microsoft's Credentials Delegation
+  settings (`Allow delegating saved credentials`, and the NTLM-only variant,
+  under `Software\Policies\Microsoft\Windows\CredentialsDelegation`) control
+  whether a saved credential may be sent at all.
+- **TPM-backed credential storage on Fedora.** If the service log shows
+  `Init TPM credentials failed … using GKeyFile as fallback`, the service user is
+  not in the `tss` group, so the daemon cannot read `/dev/tpmrm0` and keeps its
+  credentials in a file instead
+  ([issue #339](https://gitlab.gnome.org/GNOME/gnome-remote-desktop/-/issues/339)).
+  Adding the user to `tss` removes the warning.
+
+Even with all three in place, the connection still fails, because the failure is
+in the **handover** instance: it receives the client after the redirection and
+has no credential material to validate it, so it answers
+`SEC_E_NO_CREDENTIALS` and the session ends as soon as it starts. The credentials
+work for the first stage and not for the second. Until that is fixed upstream,
+the prompt is the working state.
+
 If your goal is to connect **without typing anything**, Remote Login is not the
 right mode, because of that second stage. The alternative is a session that
 already exists on the machine: enable autologin for the user, then share that
