@@ -182,7 +182,8 @@ Saving the credential does not remove that second step, and on the versions this
 guide was written against it also breaks the connection: the client then answers
 the second-stage NLA challenge automatically, with credential material the
 handover instance does not have, so it refuses them and the session closes as
-soon as it opens. If that happens, delete the saved credential
+soon as it opens. **In this mode the first password cannot be remembered either
+— the prompt is the working state.** If you have already saved it, delete it
 (`cmdkey /delete:TERMSRV/<machine>`) and type the password at the login screen
 again.
 
