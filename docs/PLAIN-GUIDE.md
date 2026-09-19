@@ -33,8 +33,9 @@ Several "models" live on the machine, and you pick one at a time:
   slower (about 21 words per second).
 - **Qwen3.8-Flash-Next (MoE)** — a bigger, newer model that works differently
   and is much faster.
-- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second). Text
-  only, like the others.
+- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second). Like
+  the Flash-Next model, it can also look at pictures when you turn "vision"
+  on (see *Everyday use*).
 - **DeepSeek-V4-Flash** — a very large model (284 billion parameters) for
   coding and hard problems. It is the **slowest** of the four (about 11 words
   per second), it needs a large answer budget, and it requires two kernel
@@ -73,6 +74,13 @@ when you switch.
   When it is on, a stranger on your network cannot use your machine without the
   key; when it is off, nobody on the network can use it, only you on the
   machine itself.
+- Two of the models (Flash-Next and Gemma) can **look at pictures**. There is
+  a "Vision" switch in the desktop panel: it is greyed out for the models that
+  cannot see, and you can turn it on or off for the two that can. Turning it
+  on gives the model its "eyes", but it restarts that model — so do it
+  between conversations, not in the middle of one. Once it is on, an app can
+  send a picture along with the text, the same way it would to a cloud
+  service.
 - You can do all of it over SSH as well; the terminal tool has a simple
   `help`.
 

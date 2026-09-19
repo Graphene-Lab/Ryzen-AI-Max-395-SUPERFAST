@@ -65,10 +65,18 @@ files() {
             echo "qwen38-flash-next-w4b.hgn|124068083904|9c116bbc01f77b7a15464c1a124eb3325b286089b8a2a6f2856c9b246a235bd6|https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next/resolve/main/qwen38-flash-next-w4b.hgn"
             echo "qwen38-flash-next-w4b.overlay.hgn|2477677120|737d6bdaef274d3cc22de5bc265b390b89db5fb1e709f58db75287fdc35bb276|https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next/resolve/main/qwen38-flash-next-w4b.overlay.hgn"
             echo "qwen38-flash-next-w4b.overlay-speed.hgn|2383306048|113d77358107549fa22e06643ae3a524908aa7ea011afaebec69fc5f1991c370|https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next/resolve/main/qwen38-flash-next-w4b.overlay-speed.hgn"
+            # Vision tower: downloaded always so the toggle can use it without
+            # a second wait, but NOT loaded unless the vision drop-in is active
+            # (superfast-switch vision on). ~856 MiB, resident only when on.
+            echo "qwen38-flash-next-vision.hgn|897916416|d62e0ae553fe88afd3833733d4a4c669f34d20fd8dfce4b9610525bed2134b10|https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next/resolve/main/qwen38-flash-next-vision.hgn"
             ;;
         gemma)
             echo "gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf|14439364064|76559759aee76a4a29f233f3279c4470ce2c47c206fac3ec60f33d00e3daecdb|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf"
             echo "mtp-gemma-4-26B-A4B-it-Q8_0.gguf|461766816|6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/mtp-gemma-4-26B-A4B-it-Q8_0.gguf"
+            # Vision projector (mmproj): downloaded always so the toggle can
+            # use it without a second wait, but NOT loaded unless the vision
+            # drop-in is active (superfast-switch vision on). ~1.1 GiB.
+            echo "mmproj-BF16.gguf|1194828256|41926ed5f1403cf5add23b0684992805ea6f97253096132e769e65646b8cef9d|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/mmproj-BF16.gguf"
             ;;
         deepseek)
             echo "DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf|91547243200|a936e0a514385c8ae964c0f42263a4314a34fbc6efea9d9aced5320f320a3d54|https://huggingface.co/otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF/resolve/main/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf"

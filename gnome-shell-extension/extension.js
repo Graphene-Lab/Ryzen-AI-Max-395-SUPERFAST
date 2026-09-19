@@ -79,6 +79,17 @@ class SuperfastMenu extends PanelMenu.Button {
     _init() {
         super._init(0.0, 'SUPERFAST');
         this._pollLeft = 0;
+        // _busy is true while a model restart is in flight (a profile switch
+        // or a vision toggle). While it is, the action items are insensitive
+        // so a second change cannot start on top of one already running.
+        this._busy = false;
+        // _syncing guards the vision switch so a programmatic state update in
+        // refresh() does not fire its 'toggled' handler (which would start a
+        // toggle we did not ask for).
+        this._syncing = false;
+        this._visionSupported = false;
+        this._visionEnabled = false;
+        this._modelItems = [];
         this.add_child(new St.Icon({
             icon_name: 'utilities-system-monitor-symbolic',
             style_class: 'system-status-icon',
@@ -91,6 +102,28 @@ class SuperfastMenu extends PanelMenu.Button {
         this._modelSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._modelSection);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        // Vision toggle for the active profile. It is sensitive only when the
+        // running model can carry a vision component (flash, gemma) and no
+        // restart is in flight; on the text-only profiles (dense, deepseek)
+        // it stays off and greyed out. Toggling restarts the profile and drops
+        // its prompt cache, so it is meant to be used between conversations.
+        this._visionSwitch = new PopupMenu.PopupSwitchMenuItem('Vision', false);
+        this._visionSwitch.connect('toggled', (item) => {
+            if (this._syncing)
+                return;
+            const target = item.state ? 'on' : 'off';
+            this._busy = true;
+            this._updateSensitivity();
+            runCli(['vision', target], () => {
+                this._busy = false;
+                this.poll();
+            });
+        });
+        this.menu.addMenuItem(this._visionSwitch);
+        // Start insensitive: _visionSupported is false until the first
+        // refresh confirms the running model can carry a vision component.
+        this._updateSensitivity();
 
         this._orchItem = new PopupMenu.PopupMenuItem('Orchestrator: …');
         this._orchItem.connect('activate', () => {
@@ -214,13 +247,46 @@ class SuperfastMenu extends PanelMenu.Button {
                 `API key: ${this._gatewayActive ? 'on' : 'off'}${keySet ? '' : ' (none)'}`;
 
             this._modelSection.removeAll();
+            this._modelItems = [];
             for (const p of PROFILES) {
                 const label = `${p === active ? '● ' : '○ '}${p}`;
                 const item = new PopupMenu.PopupMenuItem(label);
-                item.connect('activate', () => runCli(['use', p], () => this.poll()));
+                item.connect('activate', () => {
+                    this._busy = true;
+                    this._updateSensitivity();
+                    runCli(['use', p], () => {
+                        this._busy = false;
+                        this.poll();
+                    });
+                });
                 this._modelSection.addMenuItem(item);
+                this._modelItems.push(item);
             }
+
+            // The switch line is "vision: supported=<yes|no> enabled=<yes|no>
+            // profile=<name>". supported=no on the text-only profiles and when
+            // nothing is running, which keeps the switch off and insensitive.
+            this._visionSupported = /vision:.*supported=yes/.test(out);
+            this._visionEnabled = /vision:.*enabled=yes/.test(out);
+            this._syncing = true;
+            this._visionSwitch.setToggleState(this._visionEnabled);
+            this._syncing = false;
+            this._updateSensitivity();
         });
+    }
+
+    // Enable or grey out the action items. A model restart (profile switch or
+    // vision toggle) sets _busy, during which nothing else may be started; the
+    // vision switch is additionally gated on the running model supporting it.
+    _updateSensitivity() {
+        if (this._visionSwitch) {
+            this._visionSwitch.setSensitive(this._visionSupported && !this._busy);
+            this._visionSwitch.label.text = this._visionSupported
+                ? 'Vision'
+                : 'Vision (not on this model)';
+        }
+        for (const it of this._modelItems)
+            it.setSensitive(!this._busy);
     }
 });
 

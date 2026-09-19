@@ -668,6 +668,46 @@ phase_profiles() {
         fi
     done
 
+    # 4b. Vision drop-ins, staged INACTIVE. The tower (flash) and projector
+    #     (gemma) are downloaded with the profile, but the engine loads them
+    #     only when a systemd drop-in is present in the unit's .d/ directory.
+    #     Here we only stage the prepared drop-in under
+    #     ~/.config/superfast/vision/ so `superfast-switch vision on` can
+    #     move it into .d/ without a second download. We deliberately do NOT
+    #     put it in .d/ here: the default machine stays text-only, exactly as
+    #     before this feature. Only the two profiles whose engine can carry a
+    #     vision component are staged, and only when they were requested (so
+    #     their tower/projector is actually on disk).
+    mkdir -p "$HOME/.config/superfast/vision"
+    for pair in "flash superfast-flash" "gemma gemma"; do
+        set -- $pair
+        vp="$1"; vu="$2"
+        case " $requested " in *" $vp "*) ;; *) continue ;; esac
+        vtmpl="$PROF_DIR/${vu}.service.vision.conf"
+        if [ -f "$vtmpl" ]; then
+            install_template "$vtmpl" "$HOME/.config/superfast/vision/${vu}.service.conf"
+            log "vision drop-in staged for $vp (inactive; enable with 'superfast-switch vision on')"
+        else
+            log "$vtmpl missing; the vision toggle will be unavailable for $vp"
+            continue
+        fi
+        # On a machine installed before the vision files were added, the
+        # profile is already marked .download-complete, so the per-profile
+        # downloader would not run again and the tower/projector would never
+        # arrive. Fetch it when it is missing: the downloader skips the files
+        # already present and takes a lock, so this is safe even if a download
+        # for the same profile is already running. Skipped under SKIP_WEIGHTS.
+        case "$vp" in
+            flash) vfile="$MODELS_DIR_FLASH/qwen38-flash-next-vision.hgn" ;;
+            gemma) vfile="$MODELS_DIR_GEMMA/mmproj-BF16.gguf" ;;
+        esac
+        if [ ! -f "$vfile" ] && [ "${SKIP_WEIGHTS:-0}" != "1" ]; then
+            log "$vp: vision file missing; fetching it via superfast-download@$vp.service"
+            systemctl --user enable --now "superfast-download@$vp.service" \
+                || log "$vp: could not start the downloader; run it later with: systemctl --user start superfast-download@$vp.service"
+        fi
+    done
+
     # 5. The sampler. One `/health` and one `/cache` read every 30 s, plus the
     #    GPU and memory counters, appended to
     #    ~/.local/share/superfast-monitor/samples.jsonl; `superfast-monitor.py

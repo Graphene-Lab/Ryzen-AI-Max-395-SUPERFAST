@@ -120,6 +120,30 @@ image, and `/health` says so.
 | `HALOGEN_VISION_TOWER` | flash | *(unset)* | Path to the vision tower. Unset = the engine starts without one, and `/health` reports `vision.enabled: false` with the reason. |
 | `HALOGEN_VISION_MAX_PIXELS` | flash | `3686400` | Largest accepted image, in pixels. `/health` reports the effective value. |
 
+**This project ships a toggle for it.** The vision tower (flash) and the vision
+projector `mmproj-BF16.gguf` (gemma, whose engine is llama.cpp, which takes
+`--mmproj` rather than a `HALOGEN_*` name) are downloaded at setup for the
+`flash` and `gemma` profiles, but **not loaded by default** — the machine comes
+up text-only, exactly as before. `superfast-switch vision on|off` activates or
+removes a systemd drop-in (`~/.config/superfast/vision/<unit>.service.conf` →
+the unit's `.d/override.conf`) that sets `HALOGEN_VISION_TOWER` (flash) or
+`--mmproj` (gemma), and restarts that profile. The dense and deepseek profiles
+have no encoder in their repositories, so the toggle is unavailable for them.
+
+Because the engine reads these flags once at startup, toggling vision restarts
+the profile and **drops its prompt cache** — use it between conversations, not
+mid-chat. The prompt cache is keyed on the token prefix, so a vision request and
+a concurrent text chat keep separate cache entries and do not collide; the
+vision tower is a single shared encoder, so simultaneous image prefills
+serialize on it (more latency under concurrency, no correctness issue). The
+text-only bitwise guarantees are unaffected: the tower only runs for requests
+that carry an image. `superfast-switch vision on` verifies the engine came back
+healthy with the tower and rolls back to text-only if it did not (the flash
+contiguous-block allocator is tight at the shipped pool, so a tower that will
+not fit does not leave the machine down). The GNOME panel menu exposes the same
+toggle: greyed out and off on the text-only profiles, on/off on flash and
+gemma, and insensitive while a restart is in flight.
+
 ## Fairness and diagnostics (Flash-Next)
 
 | flag | images | default | meaning |

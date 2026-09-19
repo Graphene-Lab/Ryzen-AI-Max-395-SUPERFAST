@@ -22,6 +22,7 @@ installs them, replacing the placeholders
 | `superfast-download@.service` | one downloader per profile: `superfast-download@flash`, `@gemma`, `@deepseek`, `@small` |
 | `download-weights.sh` | the downloader itself: resume at the exact byte offset, one writer per file, SHA-256 verified before the final rename |
 | `superfast-monitor.service`, `superfast-monitor.timer` | the engine sampler: one read of `/health`, `/cache`, the GPU and memory every 30 s, for telling a slow machine apart from a queueing one |
+| `superfast-flash.service.vision.conf`, `gemma.service.vision.conf` | the **vision drop-ins**, staged INACTIVE by setup into `~/.config/superfast/vision/`. They are not in the unit's `.d/` by default, so the machine comes up text-only. `superfast-switch vision on` copies the active profile's drop-in into `.d/override.conf` and restarts it (loading the tower for flash, `--mmproj` for gemma); `vision off` removes it and restarts. Each mirrors its base unit's `ExecStart` plus the one vision flag — keep them in sync. dense and deepseek have no such file: no encoder exists for them |
 
 The dense unit has a `.service` file of its own because it is installed by two
 phases: the engine phase starts it on a fresh machine, and the profiles phase

@@ -17,12 +17,18 @@
 #   superfast-switch use dense|flash|gemma|deepseek
 #   superfast-switch stop
 #   superfast-switch api-key status|on|off|show|set [key]|clear
+#   superfast-switch vision status|on|off
 #
 # The API key is enforced by the gateway (superfast-gateway.service) on :8741.
 # Every profile binds :8731 to loopback, so the gateway is the ONLY way in from
 # the network: `api-key on` means "reachable from the LAN, key required" and
 # `api-key off` means "no remote access at all" (loopback on the host still
 # works, no key needed there).
+#
+# `vision on|off` toggles the vision component of the ACTIVE profile (flash
+# and gemma only; dense and deepseek are text-only). It restarts that profile
+# and drops its prompt cache, so use it between conversations. The vision
+# files are downloaded at setup whether or not the toggle is used.
 set -euo pipefail
 
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -57,6 +63,23 @@ ORCH_UNIT="${SUPERFAST_ORCH_UNIT:-orchestrator.service}"
 ORCH_DIR="${SUPERFAST_ORCH_DIR:-$HOME/small-models}"
 ORCH_PORT="${SUPERFAST_ORCH_PORT:-8732}"
 ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
+
+# Vision is a per-profile toggle. The tower (flash) / projector (gemma) is
+# loaded only when a systemd drop-in is active in the unit's .d/ directory.
+# The drop-in templates are staged here by setup and moved into .d/ by
+# `vision on`, removed by `vision off`. Because the engine reads the flag once
+# at startup, toggling restarts the profile and drops its prompt cache.
+VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
+# Profiles whose engine can carry a vision component. dense and deepseek are
+# text-only: no encoder exists in their repositories, so the toggle is not
+# available for them.
+VISION_CAPABLE="flash gemma"
+
+# Is a word in a space-separated list?
+is_in() { # "list" word
+    case " $1 " in *" $2 "*) return 0 ;; esac
+    return 1
+}
 
 http_ok() {
     # A reply is not enough: a llama.cpp profile binds its port immediately and
@@ -129,6 +152,17 @@ cmd_status() {
     fi
     if [ -s "$API_KEY_FILE" ]; then k="set"; else k="not set"; fi
     echo "api key: $k, gateway $(unit_state "$GATEWAY_UNIT") (port ${GATEWAY_PORT}, the only LAN path)"
+    # Vision state of the active profile, on one line so the desktop menu can
+    # read it from the same `status` call. supported=no for the text-only
+    # profiles (dense, deepseek) and when nothing is running.
+    local vp vsup ven
+    vp="$(active_profile)"
+    vsup=no; ven=no
+    if [ -n "$vp" ] && is_in "$VISION_CAPABLE" "$vp"; then
+        vsup=yes
+        [ -f "$(vision_override_path "$vp")" ] && ven=yes
+    fi
+    echo "vision: supported=$vsup enabled=$ven profile=${vp:-none}"
 }
 
 # Turn the LAN-facing API key on or off, and manage the key itself. `on` keeps
@@ -241,6 +275,116 @@ cmd_orchestrator() {
     esac
 }
 
+# The profile whose unit is currently active, or empty when none is.
+active_profile() {
+    for p in "${PROFILES[@]}"; do
+        unit_active "${UNIT[$p]}" && { echo "$p"; return; }
+    done
+    echo ""
+}
+
+# Wait for /health to answer 200, up to `rounds` tries of 5 s each.
+wait_healthy() { # rounds
+    local n="${1:-60}"
+    for _ in $(seq 1 "$n"); do
+        http_ok && return 0
+        sleep 5
+    done
+    return 1
+}
+
+# The active override file for a profile's vision drop-in, and the staged
+# template setup installed for it.
+vision_override_path() { # profile
+    echo "$HOME/.config/systemd/user/${UNIT[$1]}.d/override.conf"
+}
+vision_staged() { # profile
+    [ -f "$VISION_DIR/${UNIT[$1]}.conf" ]
+}
+
+# Whether the engine reports the vision component enabled. Only the flash
+# engine exposes it in /health; llama.cpp (gemma) does not, so for gemma a
+# healthy 200 is the signal — a projector that fails to load stops the server,
+# which never reaches 200.
+vision_health_enabled() { # profile
+    case "$1" in
+        flash)
+            curl -s --max-time 5 "$HEALTH" 2>/dev/null \
+                | grep -Eq '"vision"[^}]*"enabled"[[:space:]]*:[[:space:]]*true' ;;
+        *) return 0 ;;
+    esac
+}
+
+# Toggle the vision component of the ACTIVE profile. The state is per profile:
+# the drop-in lives in that profile's unit, so switching profiles keeps each
+# one's own vision setting. Turning it on or off restarts the profile and
+# drops its prompt cache, so do it between conversations, not mid-chat.
+cmd_vision() {
+    local action="${1:-status}"
+    local p; p="$(active_profile)"
+    case "$action" in
+        status)
+            if [ -z "$p" ]; then
+                echo "vision: supported=no enabled=no profile=none"
+                return 0
+            fi
+            local sup=no en=yes
+            is_in "$VISION_CAPABLE" "$p" && sup=yes
+            [ -f "$(vision_override_path "$p")" ] || en=no
+            echo "vision: supported=$sup enabled=$en profile=$p"
+            ;;
+        on)
+            [ -n "$p" ] || { echo "no profile is active; start one first" >&2; return 3; }
+            if ! is_in "$VISION_CAPABLE" "$p"; then
+                echo "profile '$p' has no vision support (text-only model)" >&2
+                return 2
+            fi
+            if ! vision_staged "$p"; then
+                echo "vision drop-in for '$p' is not staged; run deploy/setup-fedora.sh" >&2
+                return 1
+            fi
+            if [ -f "$(vision_override_path "$p")" ]; then
+                echo "vision already on for '$p'"
+                return 0
+            fi
+            echo "enabling vision on '$p' (restarts the profile, drops the prompt cache)"
+            mkdir -p "$(dirname "$(vision_override_path "$p")")"
+            cp "$VISION_DIR/${UNIT[$p]}.conf" "$(vision_override_path "$p")"
+            systemctl --user daemon-reload
+            systemctl --user restart "${UNIT[$p]}"
+            if wait_healthy 60 && vision_health_enabled "$p"; then
+                echo "vision on for '$p'"
+                return 0
+            fi
+            # The engine did not come back with the tower (e.g. the contiguous
+            # block allocator could not fit it at this pool size). Put the
+            # text-only unit back so the machine keeps serving.
+            echo "vision did not come up on '$p'; rolling back to text-only" >&2
+            rm -f "$(vision_override_path "$p")"
+            systemctl --user daemon-reload
+            systemctl --user restart "${UNIT[$p]}"
+            return 1
+            ;;
+        off)
+            [ -n "$p" ] || { echo "no profile is active" >&2; return 3; }
+            if [ ! -f "$(vision_override_path "$p")" ]; then
+                echo "vision already off for '$p'"
+                return 0
+            fi
+            echo "turning vision off for '$p' (restarts the profile)"
+            rm -f "$(vision_override_path "$p")"
+            systemctl --user daemon-reload
+            systemctl --user restart "${UNIT[$p]}"
+            wait_healthy 60 || echo "warning: '$p' not healthy after the restart" >&2
+            echo "vision off for '$p'"
+            ;;
+        *)
+            echo "usage: $0 vision status|on|off" >&2
+            exit 2
+            ;;
+    esac
+}
+
 cmd_use() {
     local p="$1"
     [ -n "${UNIT[$p]:-}" ] || { echo "unknown profile '$p'" >&2; exit 2; }
@@ -344,6 +488,7 @@ case "${1:-}" in
         ;;
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
     api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
+    vision) cmd_vision "${2:-status}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|stop}" >&2; exit 2 ;;
 esac

@@ -103,8 +103,8 @@ machine:
 | profile | model | speed here (prose / code) | best for |
 |---|---|---|---|
 | `dense` | **Qwen3.8-27B**, dense, 27B parameters | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
-| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed |
-| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; its family can read images, but this profile is text only |
+| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed; can read images when vision is turned on |
+| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; can read images when vision is turned on |
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
 
 ![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -449,8 +449,8 @@ own directory, and the setup script and the switch know those paths.
 | profile | weights directory | files (size in bytes) | source |
 |---|---|---|---|
 | dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
-| flash | `~/superfast-flash` | `qwen38-flash-next-w4b.hgn` (124,068,083,904), `…overlay.hgn` (2,477,677,120), `…overlay-speed.hgn` (2,383,306,048) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-flash-next` |
-| gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
+| flash | `~/superfast-flash` | `qwen38-flash-next-w4b.hgn` (124,068,083,904), `…overlay.hgn` (2,477,677,120), `…overlay-speed.hgn` (2,383,306,048), `…vision.hgn` (897,916,416) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-flash-next` |
+| gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
 | deepseek | `~/deepseek-models` | `…ROCMFPx-Strix-Lean-2.58bpw.gguf` (91,547,243,200), `…DSpark-draft-4.25bpw.gguf` (10,897,111,840) | HF `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
 
@@ -922,7 +922,8 @@ pool. Batching trades away speculation for the streams that are not alone —
 see [Concurrency](#concurrency-and-the-one-trap) before changing it.
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
-streaming, tool calling, sampling with seeds, reasoning-effort control.
+streaming, tool calling, sampling with seeds, reasoning-effort control, and
+image input (vision) on the flash and gemma profiles.
 
 **Selectable drafters** — the dense engine has three (`dflash2` by default,
 plus `mtp` and `serial`), the Flash-Next engine two (`mtp` by default, plus
@@ -1582,7 +1583,12 @@ responsibility.
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
-- **Text only.** The model has a vision encoder; SUPERFAST does not use it.
+- **Vision is opt-in.** The flash and gemma models can read images: their
+  vision tower and projector are downloaded at setup but **not loaded by
+  default**, so the machine comes up text-only. Turn it on with
+  `superfast-switch vision on` (or the panel toggle), which restarts the
+  profile with the encoder; `off` puts text-only back. The dense and deepseek
+  profiles are text-only — no encoder exists in their repositories.
 - **Unassisted decode is not our strong point** — see the comparison above.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
@@ -1819,8 +1825,10 @@ indication only.
 
 It is the smallest and fastest profile (57 t/s here), and it is clearly a
 step below the paid frontier on the hardest benchmarks, while staying useful
-for everyday work. It is also the only profile of the four whose model family
-reads images; the vision part is not enabled in our profile.
+for everyday work. Its model family reads images, and this profile can too:
+the projector (`mmproj-BF16.gguf`) is downloaded at setup and loaded when you
+turn vision on with `superfast-switch vision on`. The flash profile is the
+other one that can read images; the dense and deepseek profiles are text-only.
 
 #### What to keep in mind
 
@@ -2347,10 +2355,63 @@ stopped until you switch it on.
 
 The same controls exist in two friendlier forms. On the desktop, a small GNOME
 panel menu (`gnome-shell-extension/`) shows what is serving and lets you switch
-model, toggle the orchestrator, and turn the API key on or off (set, copy or
-clear it) with a click. In a terminal — including over SSH — `superfast-tui`
-offers a minimal menu plus simple commands (`status`, `use`, `orchestrator`,
-`api-key`, `help`), and `superfast-switch` is the same set for scripts.
+model, toggle the orchestrator, toggle vision, and turn the API key on or off
+(set, copy or clear it) with a click. In a terminal — including over SSH —
+`superfast-tui` offers a minimal menu plus simple commands (`status`, `use`,
+`orchestrator`, `api-key`, `help`), and `superfast-switch` is the same set for
+scripts, plus `vision` (see below).
+
+### Vision (image input)
+
+Two profiles can read images: **flash** and **gemma**. The encoder is
+downloaded at setup but loaded only when you turn vision on, because it costs
+extra memory and restarts the profile. Turn it on for whichever profile is
+running:
+
+```bash
+superfast-switch vision on     # load the tower (flash) / projector (gemma); restarts the profile
+superfast-switch vision status # supported=yes|no, enabled=yes|no, and the active profile
+superfast-switch vision off    # back to text-only
+```
+
+On the desktop the same control is the **Vision** switch in the GNOME panel
+menu: greyed out on dense and deepseek, on/off on flash and gemma, and locked
+while the profile restarts. The dense and deepseek profiles have no encoder in
+their repositories, so the toggle is unavailable for them.
+
+Once it is on, send an image the standard OpenAI way — a content part with an
+`image_url` carrying the bytes as a base64 data URI. Through the gateway:
+
+```bash
+curl -s http://<machine-ip>:8741/v1/chat/completions \
+  -H "Authorization: Bearer <key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "<model-name-from-/health>",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "What is in this image?"},
+        {"type": "image_url",
+         "image_url": {"url": "data:image/png;base64,'"$(base64 -w0 pic.png)"'"}}
+      ]
+    }]
+  }'
+```
+
+The largest accepted image is `HALOGEN_VISION_MAX_PIXELS` (3,686,400 by
+default on flash; the effective value is reported in `/health`). Two things to
+know:
+
+- **Toggle between conversations, not mid-chat.** Turning vision on or off
+  restarts the profile and clears its prompt cache, so a conversation that was
+  warm goes cold.
+- **Text and image requests can run at the same time.** The prompt cache is
+  keyed on the token prefix, so an image request and a text chat keep separate
+  entries and do not collide. The encoder is a single shared component, so
+  several images prefilled at once serialize on it — more latency under
+  concurrency, no correctness issue. Text-only requests never touch the
+  encoder, so the text bitwise guarantees are unaffected.
 
 ### Locking it down (API key)
 

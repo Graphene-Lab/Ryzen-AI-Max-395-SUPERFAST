@@ -4,6 +4,28 @@
 
 ### Added
 
+- **Vision, as an opt-in per-profile toggle.** The flash and gemma models can
+  read images: the Flash-Next engine carries a vision tower
+  (`HALOGEN_VISION_TOWER`) and the gemma runtime takes a projector
+  (`--mmproj`). Both files are now downloaded at setup with the profile
+  (verified against the Hugging Face SHA-256), but **not loaded by default** —
+  the machine still comes up text-only. `superfast-switch vision on|off`
+  activates or removes a systemd drop-in (staged in
+  `~/.config/superfast/vision/`, moved into the unit's `.d/override.conf`)
+  and restarts that profile; `vision on` verifies the engine came back healthy
+  with the encoder and rolls back to text-only if it did not, so a tower that
+  will not fit the tight flash allocator never leaves the machine down. The
+  dense and deepseek profiles have no encoder in their repositories, so the
+  toggle is unavailable for them. The GNOME panel menu exposes the same
+  control: a switch that is greyed out and off on the text-only profiles,
+  on/off on flash and gemma, and insensitive while a restart is in flight.
+  Toggling restarts the profile and drops its prompt cache, so it is meant to
+  be used between conversations; the cache is keyed on the token prefix, so a
+  vision request and a concurrent text chat keep separate entries and do not
+  collide, and the text-only bitwise guarantees are unaffected. The gateway is
+  unchanged — it relays bytes untouched, so a remote client sends `image_url`
+  content through :8741 with the bearer key exactly as it would any request.
+
 - **README: where the cache is visible, and the two mistakes an OpenAI-compatible client makes
   here.** The prompt-cache section now names the two places the cache is measurable — `GET /cache`
   (counters, `prompt_tokens_saved` first) and the engine's per-request journal line
