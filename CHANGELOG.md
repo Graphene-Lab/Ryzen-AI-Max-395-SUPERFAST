@@ -26,6 +26,13 @@
   unchanged — it relays bytes untouched, so a remote client sends `image_url`
   content through :8741 with the bearer key exactly as it would any request.
 
+- **`docs/VISION.md`, a dedicated vision guide, linked from the README.** It
+  explains how the encoder loads at startup, why the memory cost is *not*
+  cumulative across profiles, the automatic rollback when the engine cannot
+  come back with the tower, the API request format and its `max_pixels` /
+  `size_multiple` limits, and how vision behaves with the prompt cache while a
+  text chat is in progress — all as measured on the prepared host.
+
 - **README: where the cache is visible, and the two mistakes an OpenAI-compatible client makes
   here.** The prompt-cache section now names the two places the cache is measurable — `GET /cache`
   (counters, `prompt_tokens_saved` first) and the engine's per-request journal line

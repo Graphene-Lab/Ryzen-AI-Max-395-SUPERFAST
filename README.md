@@ -2363,55 +2363,28 @@ scripts, plus `vision` (see below).
 
 ### Vision (image input)
 
-Two profiles can read images: **flash** and **gemma**. The encoder is
-downloaded at setup but loaded only when you turn vision on, because it costs
-extra memory and restarts the profile. Turn it on for whichever profile is
-running:
+Two profiles can read pictures: **flash** and **gemma**. You send an image
+with your question the standard OpenAI way — a base64 `image_url` content
+part — and the model looks at it and answers. Vision is **opt-in**: the
+encoder is downloaded at setup but loaded only when you turn it on, because
+loading it restarts the profile and costs extra memory. The **dense** and
+**deepseek** profiles have no image encoder and stay text-only.
 
 ```bash
-superfast-switch vision on     # load the tower (flash) / projector (gemma); restarts the profile
-superfast-switch vision status # supported=yes|no, enabled=yes|no, and the active profile
+superfast-switch vision on     # load the encoder; restarts the profile
+superfast-switch vision status # supported / enabled / active profile
 superfast-switch vision off    # back to text-only
 ```
 
-On the desktop the same control is the **Vision** switch in the GNOME panel
-menu: greyed out on dense and deepseek, on/off on flash and gemma, and locked
-while the profile restarts. The dense and deepseek profiles have no encoder in
-their repositories, so the toggle is unavailable for them.
+On the desktop the same control is the **Vision** switch in the GNOME panel:
+greyed out on the text-only models, on/off on flash and gemma, and locked
+while the profile restarts.
 
-Once it is on, send an image the standard OpenAI way — a content part with an
-`image_url` carrying the bytes as a base64 data URI. Through the gateway:
-
-```bash
-curl -s http://<machine-ip>:8741/v1/chat/completions \
-  -H "Authorization: Bearer <key>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "<model-name-from-/health>",
-    "messages": [{
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "What is in this image?"},
-        {"type": "image_url",
-         "image_url": {"url": "data:image/png;base64,'"$(base64 -w0 pic.png)"'"}}
-      ]
-    }]
-  }'
-```
-
-The largest accepted image is `HALOGEN_VISION_MAX_PIXELS` (3,686,400 by
-default on flash; the effective value is reported in `/health`). Two things to
-know:
-
-- **Toggle between conversations, not mid-chat.** Turning vision on or off
-  restarts the profile and clears its prompt cache, so a conversation that was
-  warm goes cold.
-- **Text and image requests can run at the same time.** The prompt cache is
-  keyed on the token prefix, so an image request and a text chat keep separate
-  entries and do not collide. The encoder is a single shared component, so
-  several images prefilled at once serialize on it — more latency under
-  concurrency, no correctness issue. Text-only requests never touch the
-  encoder, so the text bitwise guarantees are unaffected.
+**→ The full story — how the encoder loads, why the memory cost is *not*
+cumulative, the automatic rollback if the engine cannot come back, the API
+request format and its limits, and how vision behaves with the prompt cache
+while a chat is in progress — is in the dedicated
+[**Vision guide**](docs/VISION.md).**
 
 ### Locking it down (API key)
 
