@@ -25,9 +25,15 @@ ExecStartPre=-/usr/bin/podman rm -f superfast-flash
 #                      the arena halved; longer prompts are prefilled in
 #                      arena-sized pieces, which is what makes a large context
 #                      affordable in the first place.
-#   CACHE_ENTRIES=32   how many conversations keep their resumable state. The
-#                      image ships 8; 32 leaves headroom for a client that opens
-#                      subagents. Each entry costs ~111 MiB.
+#   CACHE_ENTRIES=64   how many conversations keep their resumable state. The
+#                      image ships 8. 64 (was 32) keeps ~12 conversations
+#                      resident instead of ~6, so resuming one after a pause
+#                      hits warm rather than re-prefilling its whole history.
+#                      Each entry costs ~111 MiB; 64 is ~7.2 GiB, inside the
+#                      host's headroom. The cache is LRU, never time-expiring:
+#                      a resume is slow only when its entry was evicted by
+#                      capacity (other conversations/subagents), which is
+#                      what raising this count reduces.
 #
 # WHY 786432 AND NOT 1048576, measured 2026-09-13: with 1048576 and FIT=0 the
 # engine no longer starts on a host that has been running for a while. It
@@ -65,7 +71,7 @@ ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731
   -e HALOGEN_KV_POOL_POSITIONS=786432 \
   -e HALOGEN_KV_POOL_FIT=0 \
   -e HALOGEN_MAX_TOK=16384 \
-  -e HALOGEN_CACHE_ENTRIES=32 \
+  -e HALOGEN_CACHE_ENTRIES=64 \
   -e HALOGEN_QUEUE_TIMEOUT=3600 \
   -e HALOGEN_MAX_TOKENS_CAP=65536 \
   -v __FLASH_DIR__:/models:ro \

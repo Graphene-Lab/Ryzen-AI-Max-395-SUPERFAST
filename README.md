@@ -1157,7 +1157,7 @@ below uses as the slowest measured prefill. The next line is the same
 conversation one turn later, once its KV was back in place: 4.65 seconds.
 
 The Flash-Next unit ships a pool of 786,432 positions,
-`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`.
+`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=64`.
 Measured on the reference host with four agents asking **at the same time**,
 each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
 positions of KV between them, more than the 524,288 the image's pool holds and
@@ -1183,12 +1183,25 @@ is why this went unnoticed — four agents at 90,000 tokens are 360,000 position
 and fit — and why it starts to hurt on longer sessions.
 
 The engine prints the cache it armed at startup — `prompt cache ON,
-resume-anywhere (8 entries, …)` on the image defaults, `(32 entries, …)` from
+resume-anywhere (8 entries, …)` on the image defaults, `(64 entries, …)` from
 this unit, 111 MiB each at the native context. `/cache` counts something
 narrower than that allowance: the snapshots currently stored and their
 per-entry size, which is why it can report `entries: 1, cap_bytes: 116 MB` on
 a machine that is allowed eight — read the startup line, not that field, for
 the number of entries.
+
+A live read on the running host confirms this, and shows what the cache does
+not change. With 64 entries, a resumed conversation of about 120,000 tokens
+that is still cached prefills in 1 to 6 seconds — only its new tokens. The
+same conversation with its entry evicted prefills in 79 to 237 seconds. That
+cold number is the multi-minute wait on resume. More entries keep more
+conversations warm, so fewer resumes pay it.
+
+The entry count does **not** change output speed. Decode stays at about 33 to
+46 tokens/s, warm or cold, the same as the figures above. A warm resume feels
+faster because the first token arrives sooner, not because tokens stream
+faster. Raise the entry count to cut the wait before the first token, not to
+chase tokens per second.
 
 Four things to know if you tune it:
 

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- **Flash prompt-cache allowance raised from 32 to 64 entries.** A live read of
+  `/cache` on the host showed the cache working (≈80% hit rate, 922M prompt
+  tokens saved) but cycling hard — `evicted` ≈ `stores` — so a conversation
+  resumed after a pause often found its entry already evicted by other
+  conversations/subagents and re-prefilled its whole history: the multi-minute
+  latency on resume. The cache is LRU and never time-expiring, so there is no
+  idle timeout to lengthen; the lever is the entry count. 64 keeps ~12
+  conversations resident instead of ~6, at ~7.2 GiB (111 MiB each), inside the
+  host's headroom. Applied in the flash unit, the vision drop-in, and the docs.
+
 ### Added
 
 - **Vision, as an opt-in per-profile toggle.** The flash and gemma models can
