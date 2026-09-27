@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **Vision is now on by default.** The setup installs the vision drop-in active
+  for `flash` and `gemma`, so a fresh machine comes up able to read images for
+  the models that carry an encoder. Set `VISION_DEFAULT=0` at setup for the old
+  text-only default. `superfast-switch vision on|off` still changes it per
+  profile, and the rollback when the engine cannot come back with the tower is
+  unchanged. The README client-config example now shows `"vision": true` (with
+  `"agent": true`) so a Qwen Code client sends image content to the model
+  directly.
+
 - **Flash prompt-cache allowance raised from 32 to 64 entries.** A live read of
   `/cache` on the host showed the cache working (≈80% hit rate, 922M prompt
   tokens saved) but cycling hard — `evicted` ≈ `stores` — so a conversation

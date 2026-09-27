@@ -2,10 +2,10 @@
 
 Vision lets the machine **read pictures**, not just text. You send an image
 along with your question — the same way you would to a cloud service — and the
-model looks at it and answers. On this project vision is **opt-in**: it is
-installed with the machine but switched off by default, so the machine you get
-after setup behaves exactly as it did before this feature, text-only, until you
-turn it on.
+model looks at it and answers. On this project vision is **on by default** for
+the models that can carry it: the setup installs the vision drop-in active for
+`flash` and `gemma`, so the machine you get after setup can already read
+images. Set `VISION_DEFAULT=0` at setup to keep a text-only machine instead.
 
 This page explains how vision works on the machine this project prepares: which
 models can see, what turning it on actually does, what it costs in memory, how
@@ -27,9 +27,9 @@ control is unavailable for them (greyed out in the panel, refused by the CLI).
 
 ## What turning it on actually does
 
-The encoder file is **downloaded at setup** together with its profile, but it is
-**not loaded** by default. The reason is that the engine reads the encoder path
-only once, at startup:
+The encoder file is **downloaded at setup** together with its profile and is
+**loaded by default** (unless you set `VISION_DEFAULT=0`). The engine reads the
+encoder path only once, at startup:
 
 - flash: the `HALOGEN_VISION_TOWER` environment variable points the engine at
   the tower file;
@@ -42,11 +42,13 @@ warm goes cold. This is the one rule to remember: **toggle vision between
 conversations, not in the middle of one.**
 
 Mechanically the toggle is a systemd drop-in. Setup stages the prepared drop-in
-**inactive** under `~/.config/superfast/vision/`. When you turn vision on, the
-switch copies it into the unit's override directory
-(`~/.config/systemd/user/<unit>.d/override.conf`) and restarts the unit; when
-you turn it off, it removes the override and restarts. The default machine has
-no override in place, so it runs text-only.
+under `~/.config/superfast/vision/` and, by default, also installs it **active**
+into the unit's override directory
+(`~/.config/systemd/user/<unit>.d/override.conf`), so the profile starts with
+vision. `superfast-switch vision off` removes that override and restarts the
+unit; `vision on` puts it back. With `VISION_DEFAULT=0` the setup only stages
+the drop-in and leaves the override out, so the machine comes up text-only and
+you turn vision on yourself.
 
 ### It rolls itself back if the engine does not come up
 
@@ -166,5 +168,7 @@ The flow was exercised end-to-end on the prepared host:
 - `vision off` → the override was removed and the profile came back
   text-only (`vision.enabled: false`).
 
-So the toggle works both ways, the remote image path works with authentication,
-and the default machine stays text-only until you choose otherwise.
+So the toggle works both ways and the remote image path works with
+authentication. By default the machine comes up with vision already on for
+`flash` and `gemma`; `VISION_DEFAULT=0` gives a text-only machine you can turn
+on later.

@@ -54,6 +54,11 @@
 #                     quiet: `systemctl --user start superfast-download@<p>`
 #                     fetches them later.
 #   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
+#   VISION_DEFAULT=0  keep the text-only default: stage the vision drop-in but
+#                     leave it inactive. Unset or 1 (the default) installs the
+#                     vision drop-in active for flash and gemma, so the
+#                     machine comes up with vision on for the models that can
+#                     carry it. Change it later with `superfast-switch vision`.
 #   SMOKE=1           also run the small container device test
 #   UNATTENDED=1      never wait for a human: passwordless sudo required, the
 #                     script must be on disk, and it reboots by itself once the
@@ -668,15 +673,17 @@ phase_profiles() {
         fi
     done
 
-    # 4b. Vision drop-ins, staged INACTIVE. The tower (flash) and projector
-    #     (gemma) are downloaded with the profile, but the engine loads them
-    #     only when a systemd drop-in is present in the unit's .d/ directory.
-    #     Here we only stage the prepared drop-in under
-    #     ~/.config/superfast/vision/ so `superfast-switch vision on` can
-    #     move it into .d/ without a second download. We deliberately do NOT
-    #     put it in .d/ here: the default machine stays text-only, exactly as
-    #     before this feature. Only the two profiles whose engine can carry a
-    #     vision component are staged, and only when they were requested (so
+    # 4b. Vision drop-ins. The tower (flash) and projector (gemma) are
+    #     downloaded with the profile, but the engine loads them only when a
+    #     systemd drop-in is present in the unit's .d/ directory. The drop-in
+    #     is always staged under ~/.config/superfast/vision/ so
+    #     `superfast-switch vision on|off` can move it in and out without a
+    #     second download. By default (VISION_DEFAULT=1) it is ALSO installed
+    #     active into the unit's .d/override.conf, so a fresh machine comes up
+    #     with vision on for the profiles that can carry it. Set
+    #     VISION_DEFAULT=0 to keep the text-only default and leave the drop-in
+    #     staged but inactive. Only the two profiles whose engine can carry a
+    #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
     for pair in "flash superfast-flash" "gemma gemma"; do
@@ -686,7 +693,6 @@ phase_profiles() {
         vtmpl="$PROF_DIR/${vu}.service.vision.conf"
         if [ -f "$vtmpl" ]; then
             install_template "$vtmpl" "$HOME/.config/superfast/vision/${vu}.service.conf"
-            log "vision drop-in staged for $vp (inactive; enable with 'superfast-switch vision on')"
         else
             log "$vtmpl missing; the vision toggle will be unavailable for $vp"
             continue
@@ -705,6 +711,17 @@ phase_profiles() {
             log "$vp: vision file missing; fetching it via superfast-download@$vp.service"
             systemctl --user enable --now "superfast-download@$vp.service" \
                 || log "$vp: could not start the downloader; run it later with: systemctl --user start superfast-download@$vp.service"
+        fi
+        # Enable by default: install the same drop-in active into the unit's
+        # .d/ so the profile starts with vision. phase_profiles does not
+        # restart a running profile, so this takes effect on the next start;
+        # the daemon-reload later in this phase picks it up.
+        if [ "${VISION_DEFAULT:-1}" = "1" ]; then
+            mkdir -p "$HOME/.config/systemd/user/${vu}.service.d"
+            install_template "$vtmpl" "$HOME/.config/systemd/user/${vu}.service.d/override.conf"
+            log "vision enabled by default for $vp (drop-in in ${vu}.service.d/override.conf; opt out with VISION_DEFAULT=0)"
+        else
+            log "vision drop-in staged for $vp (inactive; enable with 'superfast-switch vision on')"
         fi
     done
 

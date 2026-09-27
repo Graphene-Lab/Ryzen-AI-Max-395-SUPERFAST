@@ -103,8 +103,8 @@ machine:
 | profile | model | speed here (prose / code) | best for |
 |---|---|---|---|
 | `dense` | **Qwen3.8-27B**, dense, 27B parameters | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
-| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed; can read images when vision is turned on |
-| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; can read images when vision is turned on |
+| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed; reads images by default |
+| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
 
 ![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -1596,12 +1596,12 @@ responsibility.
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
-- **Vision is opt-in.** The flash and gemma models can read images: their
-  vision tower and projector are downloaded at setup but **not loaded by
-  default**, so the machine comes up text-only. Turn it on with
-  `superfast-switch vision on` (or the panel toggle), which restarts the
-  profile with the encoder; `off` puts text-only back. The dense and deepseek
-  profiles are text-only — no encoder exists in their repositories.
+- **Vision is on by default.** The flash and gemma models read images: their
+  vision tower and projector are downloaded at setup and **loaded by default**,
+  so the machine comes up able to see. `VISION_DEFAULT=0` keeps it text-only.
+  `superfast-switch vision on|off` (or the panel toggle) changes it later,
+  which restarts the profile with or without the encoder. The dense and
+  deepseek profiles are text-only — no encoder exists in their repositories.
 - **Unassisted decode is not our strong point** — see the comparison above.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
@@ -2192,6 +2192,7 @@ it.
         "name": "[SUPERFAST] flash profile (MoE 125B) - coding",
         "baseUrl": "http://<machine-ip>:8741/v1",
         "envKey": "SUPERFAST_API_KEY",
+        "capabilities": { "vision": true, "agent": true },
         "generationConfig": {
           "timeout": 6000000,
           "streamIdleTimeoutMs": 4200000,
@@ -2205,6 +2206,12 @@ it.
   }
 }
 ```
+
+`"vision": true` tells Qwen Code the model accepts images, so it sends image
+content straight to it instead of refusing it or routing it elsewhere.
+`"agent": true` lets the same model run as the full-turn agent with vision on.
+Add `"vision": true` to the `gemma` entry too; leave it off for `dense` and
+`deepseek`, which have no image encoder.
 
 Add the other profiles as further objects in the same array, using the values in
 the table below, and keep only the ones you use. Two entries that share both an
@@ -2378,10 +2385,11 @@ scripts, plus `vision` (see below).
 
 Two profiles can read pictures: **flash** and **gemma**. You send an image
 with your question the standard OpenAI way — a base64 `image_url` content
-part — and the model looks at it and answers. Vision is **opt-in**: the
-encoder is downloaded at setup but loaded only when you turn it on, because
-loading it restarts the profile and costs extra memory. The **dense** and
-**deepseek** profiles have no image encoder and stay text-only.
+part — and the model looks at it and answers. Vision is **on by default** for
+these two: the setup installs the encoder active, so the machine can already
+read images. Set `VISION_DEFAULT=0` at setup for a text-only machine. Turning
+vision on or off later restarts the profile and costs extra memory. The
+**dense** and **deepseek** profiles have no image encoder and stay text-only.
 
 ```bash
 superfast-switch vision on     # load the encoder; restarts the profile
