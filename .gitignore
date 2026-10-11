@@ -4,6 +4,11 @@
 __pycache__/
 .DS_Store
 
+# Qwen Code's own session directory: it appears here whenever that tool runs
+# with the repository as its working directory, and it is scratch space for the
+# assistant, not part of the project.
+.qwen/
+
 # host-specific validation log (kept local, not published)
 docs/fedora-44-setup.md
 
