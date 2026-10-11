@@ -69,8 +69,9 @@ adds the encoder to whichever profile is already running:
 - gemma + projector: the ~1.1 GiB projector sits on top of the running gemma
   profile.
 
-Measured on this host: with the flash profile at the shipped **786,432-position
-KV pool**, turning vision on brought the engine back healthy — the tower fits.
+Measured on this host: with the flash profile at its then-shipped
+**786,432-position KV pool** (the unit ships 655,360 today), turning vision on
+brought the engine back healthy — the tower fits.
 This is the same pool that already fixed the earlier startup hang (at the old
 1,048,576-position pool the base profile could not even start; see the
 project's notes on the block allocator). With flash and its tower loaded the
@@ -161,7 +162,8 @@ alongside image requests kept its own cache entries untouched.
 The flow was exercised end-to-end on the prepared host:
 
 - `vision on` → `/health` reported `vision.enabled: true`, the engine came back
-  healthy with the tower loaded at the 786,432 pool (no hang, no rollback);
+  healthy with the tower loaded at the 786,432-position pool it shipped then (no
+  hang, no rollback; the unit ships 655,360 today);
 - an image sent through the gateway `:8741` with the Bearer key returned a
   correct description of the picture (a red circle and a blue square, with
   their positions);

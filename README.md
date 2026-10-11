@@ -1020,12 +1020,15 @@ and one that does not fit **waits**. The image default is twice the context,
 least `HALOGEN_CTX`, or the engine refuses it (`at least --ctx 262144, a
 multiple of 256, at most 16777216`), and a larger one is shrunk at startup
 unless `HALOGEN_KV_POOL_FIT=0`. The unit in `deploy/profiles/` ships a
-**786,432**-position pool with `HALOGEN_MAX_TOK=16384` — the prefill arena,
-which has to halve for a pool that size to fit. 786,432 is not a tuning
-preference: it is the largest value measured to start **reliably**, because
-1,048,576 livelocks the engine at startup on a host that has been running for a
-while. See [Many agents at once](#many-agents-at-once) for that measurement and
-for how to put the image defaults back.
+**655,360**-position pool with `HALOGEN_MAX_TOK=16384` — the prefill arena,
+which has to halve for a pool that size to fit. Two measured limits decide that
+number: 786,432 is the largest value that starts **reliably** (1,048,576
+livelocks the engine at startup on a host that has been running for a while),
+and the shipped value is one step below it, because the pool is the only part of
+the engine's footprint a host can give back and 786,432 was measured to leave
+too little for the rest of the system to survive a day of use. See [Many agents
+at once](#many-agents-at-once) for both measurements and for how to put the
+image defaults back.
 
 On both engines the drafter speculates only while a stream is alone: with
 several streams live, decode is batched instead. That is why a single user
@@ -1183,7 +1186,7 @@ is why this went unnoticed — four agents at 90,000 tokens are 360,000 position
 and fit — and why it starts to hurt on longer sessions.
 
 The engine prints the cache it armed at startup — `prompt cache ON,
-resume-anywhere (8 entries, …)` on the image defaults, `(64 entries, …)` from
+resume-anywhere (8 entries, …)` on the image defaults, `(32 entries, …)` from
 this unit, 111 MiB each at the native context. `/cache` counts something
 narrower than that allowance: the snapshots currently stored and their
 per-entry size, which is why it can report `entries: 1, cap_bytes: 116 MB` on
@@ -1191,17 +1194,19 @@ a machine that is allowed eight — read the startup line, not that field, for
 the number of entries.
 
 A live read on the running host confirms this, and shows what the cache does
-not change. With 64 entries, a resumed conversation of about 120,000 tokens
-that is still cached prefills in 1 to 6 seconds — only its new tokens. The
-same conversation with its entry evicted prefills in 79 to 237 seconds. That
-cold number is the multi-minute wait on resume. More entries keep more
-conversations warm, so fewer resumes pay it.
+not change. With the 64-entry allowance the unit shipped at the time (32
+today), a resumed conversation of about 120,000 tokens that is still cached
+prefills in 1 to 6 seconds — only its new tokens. The same conversation with
+its entry evicted prefills in 79 to 237 seconds. That cold number is the
+multi-minute wait on resume. More entries keep more conversations warm, so
+fewer resumes pay it.
 
 The entry count does **not** change output speed. Decode stays at about 33 to
 46 tokens/s, warm or cold, the same as the figures above. A warm resume feels
 faster because the first token arrives sooner, not because tokens stream
 faster. Raise the entry count to cut the wait before the first token, not to
-chase tokens per second.
+chase tokens per second — and only if the machine has memory to give, which is
+why the unit ships 32 and not 64.
 
 Four things to know if you tune it:
 
@@ -1216,11 +1221,12 @@ Four things to know if you tune it:
   32768). Raising the pool without checking the arena is one way to get a
   profile that will not start.
 - **A bigger pool costs memory the model also wants, and can cost the engine
-  itself.** 786,432 positions is ~21.6 GiB against ~14.9 GiB for the image
-  default (the engine prints both figures in its own pre-flight line), and
+  itself.** The shipped 655,360 positions is ~18 GiB, against ~14.9 GiB for the
+  image default and ~21.6 GiB for the 786,432 this unit shipped until
+  2026-10-11 (the engine prints its own figure in the pre-flight line), and
   1,048,576 is ~29 GiB which, measured on 2026-09-13, no longer starts on this
-  host. If you want a pool larger than 786,432, change it, restart, and read the
-  startup line: do not assume it comes up.
+  host. If you want a larger pool, change it, restart, and read the startup
+  line: do not assume it comes up.
 - **Do not reach for the disk.** `HALOGEN_CACHE_FILE` exists, but only with
   `HALOGEN_CACHE_INPLACE=0`, where each entry copies the whole KV (~26 KiB per
   position, ~6.5 GB at the native context). On this machine the host RAM is the
@@ -1231,10 +1237,11 @@ Four things to know if you tune it:
 To go back to the image defaults, delete the six `-e HALOGEN_*` lines from the
 `ExecStart` in `~/.config/systemd/user/superfast-flash.service` and run
 `systemctl --user daemon-reload && systemctl --user restart superfast-flash`;
-the engine then sizes everything itself, including the pool. To keep the fix but
-use less memory, lower `HALOGEN_KV_POOL_POSITIONS`: 524,288 measured the same
-throughput as 786,432 (35.5 against 33.8 t/s aggregate) and costs about 7 GiB
-less, at the price of holding three 150K-token conversations instead of four.
+the engine then sizes everything itself, including the pool. To use even less
+memory, lower `HALOGEN_KV_POOL_POSITIONS`: 524,288 measured the same throughput
+as the 786,432 the unit shipped then (35.5 against 33.8 t/s aggregate) and costs
+about 3.6 GiB less than the shipped 655,360, at the price of holding two
+full-length conversations instead of two and a half.
 
 #### What a real fleet looks like on this pool
 
