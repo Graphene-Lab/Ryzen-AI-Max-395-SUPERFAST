@@ -1373,16 +1373,17 @@ has been running for a while**:
 |---|---|---|
 | 1048576 | 0 | reaches `model ready`, then `reserving 3 more serving slot(s)`, then spins at 80–90% of a core **forever**: no listening socket, no error, three attempts |
 | 1048576 | 1 | serves in 75 s, and the engine arms **524288** — it halved the request |
-| 786432 | 0 | serves, arms 786432: three verified starts, and what the unit now ships |
+| 786432 | 0 | serves, arms 786432: three verified starts — what the unit shipped until 2026-10-11 |
 | 786432 | 1 | arms 786432 when it starts; one attempt livelocked and exited after 594 s |
+| **655360** | 0 | **what the unit ships now**: one step below the largest that starts, because the pool is the only part of the engine's footprint a host can give back — see [when the host runs out of memory](#when-the-host-runs-out-of-memory-and-how-to-recover-without-rebooting) |
 
 The startup log explains it: after reserving the pool, only 140–312 MiB of the
 engine's contiguous 2 MiB blocks are left, and the three remaining serving slots
 want ~333 MiB (4 × 111 MiB). The engine does not fail when it cannot find them —
 it spins, so `Restart=on-failure` never fires and the machine simply stops
 serving. Two lessons are in the shipped unit because of this: ask for a pool the
-host can back (786432), and check the startup line rather than the port, because
-a hung engine holds the port's process without ever listening on it.
+host can back, and check the startup line rather than the port, because a hung
+engine holds the port's process without ever listening on it.
 
 **A second way to hang, which does recover.** Later the same night, after many
 profile restarts while these measurements were being taken, the same 786432 unit
@@ -1416,6 +1417,52 @@ armed with the pool the unit asks for. With `HALOGEN_KV_POOL_FIT=1` the engine
 may fit it smaller — a request for 1048576 came up as 524288 — and a machine
 that quietly holds half the conversations its unit promises is a slow machine
 nobody can explain. The installer says which of the two happened, by number.
+
+#### When the host runs out of memory, and how to recover without rebooting
+
+The pool is not only a start-up budget. The engine holds most of the machine — on
+the reference host it reports `68.0 GiB of weights locked in RAM, 18.0 GiB of KV
+pool, 12.3 GiB of working memory, 98.2 GiB in all` — and its 47.7 GiB lookup
+table is **not** held in RAM: it is read from disk through the page cache, which
+never fits in what is left. That works while the host has room. It stops working
+once the host's memory has accumulated. Measured 2026-10-11, after a few hours of
+use: the page cache and the zram swap had filled, the pool reservation consumed
+the last of the engine's contiguous 2 MiB blocks (59–80 left, 120–160 MiB), and
+the engine stalled for minutes at a time while a request was in flight.
+
+The engine says so itself, in the note it prints at every start-up:
+
+> this server now holds most of the machine … BOTH they and this server can stall
+> for minutes at a time at full CPU with no disk activity and no output, **which
+> is not a crash and needs no restart**
+
+The container's 180 s watchdog cannot tell that stall from a dead engine, so it
+killed the process, systemd restarted it, and the restart began with less room
+than the one before: 28 kills and 33 starts in one day, and the machine served
+almost nothing while it looped. **A host reboot clears it**, and this is why the
+shipped pool is one step below the largest that starts.
+
+What the step buys, measured on the same machine:
+
+| | pool 786432 | pool **655360** |
+|---|---|---|
+| engine footprint | 101.8 GiB | **98.2 GiB** |
+| contiguous blocks left after the pool reservation | 5559–5604 (11.1 GiB) | **8442 (16.5 GiB)** |
+| memory left for everything else | 13.5 GiB | **16.9 GiB** |
+
+When a machine does stall, a reboot is not the only way out:
+
+```bash
+superfast-switch recover
+```
+
+`tools/superfast-recover.sh` stops the profile, drops the page cache and compacts
+memory — the two things the kernel needs to hand the contiguous blocks back —
+starts the profile again, and reports the headroom the engine finds. Run it
+between conversations: stopping the profile drops its prompt cache. On the
+reference host it took the free 2 MiB blocks from 16 to 537 before the restart,
+and afterwards the engine reported `0 compaction stalls` and served again. If it
+does not come back, the tool says so and the answer is the host reboot.
 
 ### Benchmark several agents at once
 

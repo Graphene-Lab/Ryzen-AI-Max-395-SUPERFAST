@@ -4,6 +4,23 @@
 
 ### Changed
 
+- **The flash pool is 655360 positions, one step below the largest that starts**
+  (it was 786432 until today). The pool is the only part of the engine's footprint
+  a host can give back — the 68.0 GiB of pinned weights and the 12.3 GiB of
+  working memory are fixed — and at 786432 the engine left the rest of the system
+  about 13 GiB to live on. A host that had been running for a few hours then
+  filled its page cache and its zram swap, the pool reservation consumed the last
+  of the engine's contiguous 2 MiB blocks (59–80 left, 120–160 MiB), and the
+  engine stalled for minutes at a time while a request was in flight. The
+  container's 180 s watchdog reads that stall as a dead engine, so it killed the
+  process, systemd restarted it, and the restart began with less room than the one
+  before: 28 kills and 33 starts in one day, with the machine serving almost
+  nothing while it looped. Measured with the pool one step down, same machine:
+  footprint 101.8 → 98.2 GiB, contiguous blocks left after the reservation
+  5559–5604 (11.1 GiB) → 8442 (16.5 GiB), memory left for everything else
+  13.5 → 16.9 GiB, and a chat answered in 1.3 s. Changed in the flash unit and in
+  its vision drop-in, which mirrors the same ExecStart.
+
 - **Vision is now on by default.** The setup installs the vision drop-in active
   for `flash` and `gemma`, so a fresh machine comes up able to read images for
   the models that carry an encoder. Set `VISION_DEFAULT=0` at setup for the old
@@ -24,6 +41,17 @@
   host's headroom. Applied in the flash unit, the vision drop-in, and the docs.
 
 ### Added
+
+- **`tools/superfast-recover.sh`, and `superfast-switch recover`.** When the
+  engine stalls because the host has no contiguous memory left, this hands it back
+  without rebooting: it stops the profile, drops the page cache and compacts
+  memory — the two things the kernel needs to give the 2 MiB blocks back — starts
+  the profile again, and reports the headroom the engine then finds. Measured on
+  the reference host: the free 2 MiB blocks went from 16 to 537 before the restart,
+  and the engine came up with `0 compaction stalls` and served. It says so plainly
+  if the engine still does not come up, in which case the answer is a host reboot.
+  The installer puts it in `~/.local/bin` (the profiles phase refreshes it), and it
+  is listed in the README's recovery section.
 
 - **Vision, as an opt-in per-profile toggle.** The flash and gemma models can
   read images: the Flash-Next engine carries a vision tower

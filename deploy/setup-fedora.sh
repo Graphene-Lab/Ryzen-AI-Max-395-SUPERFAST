@@ -585,6 +585,19 @@ phase_profiles() {
         log "tools/superfast-switch.sh not found next to the script; skipping"
     fi
 
+    # 1b. The recovery tool. When the engine stalls because the host has no
+    # contiguous memory left, this hands it back without rebooting the machine;
+    # `superfast-switch recover` is the entry point. Installed here so the
+    # profiles phase refreshes it too.
+    RECOVER_SRC="$SCRIPT_DIR/../tools/superfast-recover.sh"
+    if [ -f "$RECOVER_SRC" ]; then
+        cp "$RECOVER_SRC" "$HOME/.local/bin/superfast-recover"
+        chmod +x "$HOME/.local/bin/superfast-recover"
+        log "installed superfast-recover to ~/.local/bin"
+    else
+        log "tools/superfast-recover.sh not found next to the script; skipping"
+    fi
+
     # 2. The GGUF runtime, needed by gemma, deepseek and the orchestrator.
     #    Prefer a published image; if none can be pulled (still private, or the
     #    machine is offline), build it from runtime/ instead.

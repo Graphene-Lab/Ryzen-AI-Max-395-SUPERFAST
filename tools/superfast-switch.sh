@@ -475,8 +475,21 @@ cmd_stop() {
     echo "no model running"
 }
 
+# Hand the host's contiguous memory back when the engine has stalled, without
+# rebooting. The work lives in tools/superfast-recover.sh, which the installer
+# puts in ~/.local/bin; this is the entry point from the switch.
+cmd_recover() {
+    local tool="$HOME/.local/bin/superfast-recover"
+    if [ ! -x "$tool" ]; then
+        echo "superfast-recover is not installed; re-run deploy/setup-fedora.sh" >&2
+        return 1
+    fi
+    exec "$tool"
+}
+
 case "${1:-}" in
     status) cmd_status ;;
+    recover) cmd_recover ;;
     list)   echo "profiles: ${PROFILES[*]}"; echo "auxiliary: orchestrator (on|off|status)" ;;
     use)
         if [ $# -ge 2 ]; then
@@ -490,5 +503,5 @@ case "${1:-}" in
     api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
     vision) cmd_vision "${2:-status}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|recover|stop}" >&2; exit 2 ;;
 esac
