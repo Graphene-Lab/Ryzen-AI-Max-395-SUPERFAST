@@ -1,6 +1,6 @@
 // SUPERFAST GNOME Shell extension — a small panel menu to pick the model
-// profile, toggle the orchestrator and manage the LAN API key, by calling the
-// superfast-switch CLI.
+// profile, toggle the orchestrator, manage the LAN API key and recover a
+// stalled engine, by calling the superfast-switch CLI.
 //
 // It deliberately keeps no state: every refresh reads the CLI output, so the
 // menu always reflects what the machine is really doing, including changes
@@ -178,6 +178,28 @@ class SuperfastMenu extends PanelMenu.Button {
 
         this.menu.addMenuItem(this._keySub);
 
+        // Recovery, for the case where the machine runs out of contiguous
+        // memory: the engine stops answering while it reads its way through
+        // the model, the container's own watchdog then kills and restarts it
+        // in a loop, and the machine serves almost nothing.
+        // `superfast-switch recover` stops the profile, frees the memory the
+        // kernel can give back and starts it again, with no reboot. It does
+        // restart the profile, so the prompt cache is dropped and a
+        // conversation in flight is interrupted: the label says so, the status
+        // line says it is running, and the item is insensitive while another
+        // action is in flight.
+        this._recoverItem = new PopupMenu.PopupMenuItem('Recover the engine (restarts it)');
+        this._recoverItem.connect('activate', () => {
+            this._busy = true;
+            this._updateSensitivity();
+            this._statusItem.label.text = 'Recovering… (about a minute)';
+            runCli(['recover'], () => {
+                this._busy = false;
+                this.poll();
+            });
+        });
+        this.menu.addMenuItem(this._recoverItem);
+
         // Note: since GNOME 45, `menu.addMenuItem()` returns nothing, so the
         // item has to be created, connected and then added — chaining
         // `.connect()` on the return value throws and the whole extension goes
@@ -287,6 +309,8 @@ class SuperfastMenu extends PanelMenu.Button {
         }
         for (const it of this._modelItems)
             it.setSensitive(!this._busy);
+        if (this._recoverItem)
+            this._recoverItem.setSensitive(!this._busy);
     }
 });
 

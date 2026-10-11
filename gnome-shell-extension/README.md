@@ -1,9 +1,9 @@
 # SUPERFAST GNOME Shell extension
 
 A small control panel for the machine: pick which model profile is serving,
-toggle the small orchestrator, and see at a glance what is running. It is a
-thin wrapper around the `superfast-switch` command, so anything you set here
-is the same state you see over SSH.
+toggle the small orchestrator, recover a stalled engine, and see at a glance
+what is running. It is a thin wrapper around the `superfast-switch` command, so
+anything you set here is the same state you see over SSH.
 
 ## Install
 
@@ -36,6 +36,12 @@ For development, copy the folder to
   only with `Authorization: Bearer <key>`. Off = the gateway is stopped and
   there is no access from the network at all, because every profile binds its
   port to loopback on the host.
+- **Recover the engine:** for when the machine has run out of the memory the
+  engine needs. It stops the profile, frees what the kernel can give back, and
+  starts it again, with no reboot. It does restart the profile, so the prompt
+  cache is dropped and a conversation in flight is interrupted: the menu says so
+  in the status line, and it takes about a minute. Everything else in the menu
+  goes insensitive while it runs.
 - **Open terminal menu:** launches the text interface (`superfast-tui`) in the
   first terminal emulator found on the machine, in this order: `ptyxis`,
   `gnome-terminal`, `kgx`, `xterm`, `konsole`. The order matters: Fedora 44
