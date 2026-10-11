@@ -63,6 +63,17 @@
   The installer puts it in `~/.local/bin` (the profiles phase refreshes it), and it
   is listed in the README's recovery section.
 
+- **`tools/superfast-reclaim.sh`, the root helper that makes `recover`
+  passwordless.** The two writes `recover` needs are under `/proc/sys/vm`, so
+  they need root. The setup now installs a root-owned script that does exactly
+  those two writes and takes no arguments, plus a sudoers rule
+  (`/etc/sudoers.d/superfast-reclaim`) that allows that one script and nothing
+  else. Arguments are forbidden with `""`, because a rule that let them through
+  would be a rule that can run anything. The rule is validated with `visudo -c`
+  before it is installed, since a broken file in `/etc/sudoers.d` can lock
+  everyone out of sudo. If either step fails, the setup carries on: `recover`
+  still works, it just asks for the password.
+
 - **Vision, as an opt-in per-profile toggle.** The flash and gemma models can
   read images: the Flash-Next engine carries a vision tower
   (`HALOGEN_VISION_TOWER`) and the gemma runtime takes a projector

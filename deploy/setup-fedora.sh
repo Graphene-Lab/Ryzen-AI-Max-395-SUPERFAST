@@ -598,6 +598,35 @@ phase_profiles() {
         log "tools/superfast-recover.sh not found next to the script; skipping"
     fi
 
+    # 1c. The reclaim helper and the narrow sudoers rule that goes with it.
+    # `superfast-recover` has to write two files under /proc/sys/vm, and this is
+    # the smallest way to allow that: one root-owned script that takes no
+    # arguments, and a rule that permits that one script and nothing else. A
+    # rule allowing arguments to a root command would be a way to run anything,
+    # so the arguments are forbidden with "".
+    RECLAIM_SRC="$SCRIPT_DIR/../tools/superfast-reclaim.sh"
+    if [ -f "$RECLAIM_SRC" ]; then
+        if sudo install -D -m 0755 -o root -g root "$RECLAIM_SRC" /usr/local/sbin/superfast-reclaim 2>/dev/null; then
+            rule="$(mktemp)"
+            printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/superfast-reclaim ""\n' "$TARGET_USER" > "$rule"
+            # Validate before installing: a broken file in /etc/sudoers.d can lock
+            # everyone out of sudo, and it is a bad thing to find out afterwards.
+            if sudo visudo -c -f "$rule" >/dev/null 2>&1; then
+                sudo install -m 0440 -o root -g root "$rule" /etc/sudoers.d/superfast-reclaim
+                log "installed the reclaim helper; $TARGET_USER may run it without a password"
+            else
+                log "the sudoers rule for the reclaim helper did not validate; leaving it out"
+                log "  (recover still works, it just asks for the password)"
+            fi
+            rm -f "$rule"
+        else
+            log "could not install /usr/local/sbin/superfast-reclaim (needs root); skipping"
+            log "  (recover still works, it just asks for the password)"
+        fi
+    else
+        log "tools/superfast-reclaim.sh not found next to the script; skipping"
+    fi
+
     # 2. The GGUF runtime, needed by gemma, deepseek and the orchestrator.
     #    Prefer a published image; if none can be pulled (still private, or the
     #    machine is offline), build it from runtime/ instead.

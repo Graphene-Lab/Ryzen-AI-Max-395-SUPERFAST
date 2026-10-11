@@ -1464,6 +1464,14 @@ reference host it took the free 2 MiB blocks from 16 to 537 before the restart,
 and afterwards the engine reported `0 compaction stalls` and served again. If it
 does not come back, the tool says so and the answer is the host reboot.
 
+Those two writes are in `/proc/sys/vm`, so they need root. The setup installs a
+root-owned helper, `/usr/local/sbin/superfast-reclaim`, together with a sudoers
+rule that allows **exactly that script**, without arguments, so `recover` does
+not ask for a password. The helper is the narrowest form of the permission: a
+rule that allowed arguments to a root command would be a rule that can run
+anything. Without the rule the tool asks for the password, and if it cannot ask
+it says so and restarts the profile anyway, so the machine is never left down.
+
 ### Benchmark several agents at once
 
 `tools/bench-concurrent.py` is the instrument behind the tables above. It runs

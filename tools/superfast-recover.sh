@@ -102,12 +102,18 @@ note "after the stop, free 2 MiB blocks: $(numfmt_blocks)"
 # 2. Reclaim: the page cache is what the engine does not need, and compaction is
 #    what turns scattered free pages back into the 2 MiB blocks it allocates.
 say ""
-reclaim() { sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory; }
 STEPS="sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory"
+HELPER=/usr/local/sbin/superfast-reclaim
 reclaimed=0
 if [ "$(id -u)" = "0" ]; then
-    reclaim && reclaimed=1
-    [ "$reclaimed" = "1" ] && note "dropped the page cache and compacted memory (running as root)"
+    sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory
+    reclaimed=1
+    note "dropped the page cache and compacted memory (running as root)"
+elif [ -x "$HELPER" ] && sudo -n "$HELPER" 2>/dev/null; then
+    # The installer puts this root-owned script in place with a sudoers rule that
+    # allows it, and only it, without a password. It takes no arguments.
+    reclaimed=1
+    note "dropped the page cache and compacted memory (via $HELPER, no password)"
 elif sudo -n true 2>/dev/null; then
     sudo -n sh -c "$STEPS" && reclaimed=1
     [ "$reclaimed" = "1" ] && note "dropped the page cache and compacted memory (passwordless sudo)"
@@ -120,8 +126,10 @@ if [ "$reclaimed" != "1" ]; then
     say ""
     say "the reclaim step needs root for /proc/sys/vm/*, and this run cannot ask for"
     say "a password. The restart below still helps a little, but the reclaim is what"
-    say "gives the memory back, so run it by hand and expect to need it:"
+    say "gives the memory back, so run one of these by hand:"
     say "  sudo sh -c '$STEPS'"
+    say "  (or install the helper: sudo install -Dm0755 tools/superfast-reclaim.sh \\"
+    say "     /usr/local/sbin/superfast-reclaim, plus a sudoers rule that allows it)"
 fi
 note "after the reclaim, free 2 MiB blocks: $(numfmt_blocks)"
 
