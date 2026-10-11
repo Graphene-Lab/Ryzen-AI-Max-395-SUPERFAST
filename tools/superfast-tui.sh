@@ -8,6 +8,7 @@
 #   superfast-tui orchestrator on|off turn the small router on/off
 #   superfast-tui api-key on|off|show|set|clear
 #   superfast-tui ports               show the ports in use
+#   superfast-tui recover             engine stalled: free the memory it needs
 #   superfast-tui help                this help
 #
 # With no arguments it opens a minimal menu.
@@ -50,7 +51,7 @@ ports() {
 }
 
 help() {
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 menu() {
@@ -62,6 +63,7 @@ menu() {
         echo "  3) orchestrator on/off"
         echo "  4) api key"
         echo "  5) ports"
+        echo "  6) recover  (engine stalled: free the memory it needs, no reboot)"
         echo "  h) help   q) quit"
         printf '> '
         read -r c
@@ -71,6 +73,7 @@ menu() {
             3) printf 'orchestrator on/off: '; read -r o; "$SW" orchestrator "$o" ;;
             4) printf 'api-key on/off/show/set/clear: '; read -r a b; api_key "$a" "$b" ;;
             5) ports ;;
+            6) "$SW" recover ;;
             h|help) help ;;
             q|quit) break ;;
             *) echo "unknown choice" ;;
@@ -90,6 +93,7 @@ case "${1:-menu}" in
     orchestrator) "$SW" orchestrator "${2:-status}" ;;
     api-key|apikey) api_key "${@:2}" ;;
     ports) ports ;;
+    recover) "$SW" recover ;;
     help|-h|--help) help ;;
     menu) menu ;;
     *) echo "unknown command '$1'"; help; exit 2 ;;
