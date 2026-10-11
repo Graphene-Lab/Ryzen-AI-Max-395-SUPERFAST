@@ -21,6 +21,16 @@
   13.5 → 16.9 GiB, and a chat answered in 1.3 s. Changed in the flash unit and in
   its vision drop-in, which mirrors the same ExecStart.
 
+- **The prompt cache keeps 32 conversations, not 64.** Each entry is ~111 MiB, so
+  64 was 7.2 GiB of the host's headroom and 32 is 3.5 GiB. At startup the
+  footprint is identical either way — the entries are not preallocated, which was
+  measured — but the allowance is what a fleet of conversations can claim under
+  load, and on a machine holding 98.2 GiB of 124 the difference decides what the
+  host has left. The value was 64 in this release for resume speed; the pool
+  change above pays for that same headroom, so the two are back in balance. The
+  unit, its vision drop-in (which mirrors the same ExecStart), `docs/FLAGS.md` and
+  `deploy/profiles/README.md` all carry 32.
+
 - **Vision is now on by default.** The setup installs the vision drop-in active
   for `flash` and `gemma`, so a fresh machine comes up able to read images for
   the models that carry an encoder. Set `VISION_DEFAULT=0` at setup for the old

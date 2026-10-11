@@ -26,15 +26,17 @@ ExecStartPre=-/usr/bin/podman rm -f superfast-flash
 #                      the arena halved; longer prompts are prefilled in
 #                      arena-sized pieces, which is what makes a large context
 #                      affordable in the first place.
-#   CACHE_ENTRIES=64   how many conversations keep their resumable state. The
-#                      image ships 8. 64 (was 32) keeps ~12 conversations
-#                      resident instead of ~6, so resuming one after a pause
-#                      hits warm rather than re-prefilling its whole history.
-#                      Each entry costs ~111 MiB; 64 is ~7.2 GiB, inside the
-#                      host's headroom. The cache is LRU, never time-expiring:
-#                      a resume is slow only when its entry was evicted by
-#                      capacity (other conversations/subagents), which is
-#                      what raising this count reduces.
+#   CACHE_ENTRIES=32   how many conversations keep their resumable state. The
+#                      image ships 8. 32 keeps ~6 conversations resident, so
+#                      resuming one after a pause hits warm rather than
+#                      re-prefilling its whole history. Each entry costs ~111
+#                      MiB, so 32 is ~3.5 GiB where 64 would be ~7.2 GiB: it was
+#                      64 until 2026-10-11, when the host's headroom was measured
+#                      and 7.2 GiB turned out to be too much of it. The cache is
+#                      LRU, never time-expiring: a resume is slow only when its
+#                      entry was evicted by capacity (other conversations or
+#                      subagents), which is what this count trades against memory.
+#                      Raise it only if the machine has room to give.
 #
 # WHY 786432 AND NOT 1048576, measured 2026-09-13: with 1048576 and FIT=0 the
 # engine no longer starts on a host that has been running for a while. It
@@ -69,9 +71,9 @@ ExecStartPre=-/usr/bin/podman rm -f superfast-flash
 # one before. Same machine, measured after the change: footprint 101.8 -> 98.2
 # GiB, contiguous blocks left after the pool reservation 5559-5604 (11.1 GiB) ->
 # 8442 (16.5 GiB), memory left for everything else 13.5 -> 16.9 GiB, and a chat
-# answered in 1.3 s. The second lever, if a machine still runs short, is
-# CACHE_ENTRIES: each entry is 111 MiB, so 32 instead of 64 gives back 3.6 GiB
-# under load at the cost of holding half as many conversations resident.
+# answered in 1.3 s. The cache allowance is the second lever, and it is set to 32
+# for the same reason: each entry is 111 MiB, so 32 rather than 64 keeps 3.6 GiB
+# free under load, at the cost of holding half as many conversations resident.
 # tools/superfast-recover.sh hands the blocks back without a reboot.
 #
 # The last two are the request policy, and they are explicit for the same
@@ -91,7 +93,7 @@ ExecStart=/usr/bin/podman run --name superfast-flash --rm -p 127.0.0.1:8731:8731
   -e HALOGEN_KV_POOL_POSITIONS=655360 \
   -e HALOGEN_KV_POOL_FIT=0 \
   -e HALOGEN_MAX_TOK=16384 \
-  -e HALOGEN_CACHE_ENTRIES=64 \
+  -e HALOGEN_CACHE_ENTRIES=32 \
   -e HALOGEN_QUEUE_TIMEOUT=3600 \
   -e HALOGEN_MAX_TOKENS_CAP=65536 \
   -v __FLASH_DIR__:/models:ro \

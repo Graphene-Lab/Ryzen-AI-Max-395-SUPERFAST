@@ -1156,14 +1156,14 @@ seconds — about 1,260 tokens per second, against the 709 the timeout table
 below uses as the slowest measured prefill. The next line is the same
 conversation one turn later, once its KV was back in place: 4.65 seconds.
 
-The Flash-Next unit ships a pool of 786,432 positions,
-`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=64`.
+The Flash-Next unit ships a pool of 655,360 positions,
+`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`.
 Measured on the reference host with four agents asking **at the same time**,
 each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
 positions of KV between them, more than the 524,288 the image's pool holds and
-inside the 786,432 that ships today:
+inside the 655,360 that ships today:
 
-| four concurrent agents, 139.5K tokens each | image defaults, pool 524288 | this unit's pool (786,432, and the 1,048,576 this was first measured on) |
+| four concurrent agents, 139.5K tokens each | image defaults, pool 524288 | the pool this was measured with (786,432, and 1,048,576 before that) |
 |---|---|---|
 | first turn, all four | 533.8 s | 419.2 s |
 | follow-up turn, all four | 229.5 s | **2.2 s** |
@@ -1171,7 +1171,7 @@ inside the 786,432 that ships today:
 | prefill of the follow-up, per agent | 0.44 s twice, then 119.53 s and 108.53 s | 0.44 s four times |
 
 So on the defaults two of the four agents pay for their whole history again,
-and none does with the larger pool — and 786,432 is enough for it, because four
+and none does with the larger pool — and 655,360 is enough for it, because four
 agents at 139.5K with an 8,192-token budget reserve 590,932 positions, and
 623,700 with the 16,384-token budget the client table recommends. What the
 pool cannot do is hold four conversations of 200,000 tokens or more: that would
