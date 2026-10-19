@@ -2,7 +2,7 @@
 
 [![Install: one script, unattended](https://img.shields.io/badge/install-one%20script%2C%20unattended-2ea44f?logo=linux&logoColor=white)](#install-a-machine)
 [![Target: Fedora 44, Strix Halo gfx1151](https://img.shields.io/badge/target-Fedora%2044%20%C2%B7%20gfx1151-8957e5)](#install-a-machine)
-[![Engines: halogen dense + Flash-Next](https://img.shields.io/badge/engines-halogen%20dense%20%2B%20Flash--Next-1f6feb)](docs/FLAGS.md)
+[![Engines: halogen dense + llama.cpp Vulkan](https://img.shields.io/badge/engines-halogen%20dense%20%2B%20llama.cpp%20Vulkan-1f6feb)](docs/FLAGS.md)
 [![Runtime image build](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml/badge.svg)](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml)
 [![License](https://img.shields.io/badge/license-see%20LICENSE.md-lightgrey)](LICENSE.md)
 
@@ -147,10 +147,12 @@ document quotes somebody else's figures, it says so next to the table.
 
 ### A note on names
 
-The project is called SUPERFAST. The container images and the model
+The project is called SUPERFAST. The dense engine image and its model
 repository were published before the rename, so they still use the old name
 `halogen`. The commands below use that name, because it is the name that
-exists today.
+exists today. The flash profile no longer uses it: since 2026-10-20 it runs a
+GGUF quant of the same model on llama.cpp with the Vulkan backend, whose
+names follow the GGUF conventions.
 
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
@@ -450,7 +452,7 @@ own directory, and the setup script and the switch know those paths.
 | profile | weights directory | files (size in bytes) | source |
 |---|---|---|---|
 | dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
-| flash | `~/superfast-flash` | `qwen38-flash-next-w4b.hgn` (124,068,083,904), `…overlay.hgn` (2,477,677,120), `…overlay-speed.hgn` (2,383,306,048), `…vision.hgn` (897,916,416) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-flash-next` |
+| flash | `~/superfast-flash` | `Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-0000{1,2,3}-of-00003.gguf` (44,944,112,832 + 44,688,348,576 + 16,121,070,688) and `Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf` (3,818,043,776) — 109,571,575,872 in total | HF `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF` and `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` |
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
 | deepseek | `~/deepseek-models` | `…ROCMFPx-Strix-Lean-2.58bpw.gguf` (91,547,243,200), `…DSpark-draft-4.25bpw.gguf` (10,897,111,840) | HF `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
@@ -634,7 +636,7 @@ note):
 |---|---|---|---|---|
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
-| Qwen3.8-Flash-Next MoE w4b | halogen-flash | **37.7 t/s** | **46.4 t/s** | ~709 t/s |
+| Qwen3.8-Flash-Next MoE, Q4_0 ROCmFP4 GGUF | llama.cpp (Vulkan) | — | **33.0 t/s** | — |
 | DeepSeek-V4-Flash ROCmFPX (~2.6 bpw) | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
 
 DeepSeek-V4-Flash deserves its own note, because it needed a change to the
@@ -784,38 +786,34 @@ parameters on a desktop machine that sits at home, at the speed the table
 above reports**, is what makes running this class of model yourself practical
 rather than a demonstration.
 
-The published checkpoints for the engine support this with three files. The
-main one is the 4-bit MoE checkpoint. Beside it there is a quality overlay,
-which re-quantizes the most sensitive tensors with extra care and measures on
-par with full precision for those rows; removing it costs several percent on
-perplexity. The third file, the optional speed arm, is a different trade: it
-swaps that calibration for a quantization that decodes about two percent
-faster.
+The flash profile runs a GGUF quant of that checkpoint on llama.cpp with the
+Vulkan backend: three shards of a Q4_0 ROCmFP4 quant, 109.6 GB in total, and
+a separate MTP draft head (`Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf`).
+The head is what makes speculation work here: the unit passes `--spec-type
+draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6`, so six tokens are
+drafted per step and kept only where the full model agrees.
 
-Running Flash-Next needs the full 124 GB of unified memory as one pool,
-because the checkpoint alone is about 115 GB. On the reference host that meant
-setting the BIOS UMA frame buffer to its minimum, so that the firmware stops
-reserving a fixed slice of memory for the GPU; the engine then draws what it
-needs from the shared pool. This is the configuration AMD describes for large
-models on these APUs.
+The engine also reads the model's large per-layer-embedding table from the
+GGUF instead of holding it in memory (`--ple-disk`, with a 4 GB block cache),
+and that single flag is why the profile now runs in **50.3 GB** of the pool
+instead of the 98.2 GiB the previous engine needed: 35.8 GB of table stay on
+the NVMe and the kernel page cache serves the blocks the model asks for. It
+costs about three percent of decode and requires `--no-mmap`.
 
-The measured comparison between the dense checkpoint and Flash-Next on this
-machine is in the table above: Flash-Next answers at **37.7 tokens per second
-on prose and 46.4 on code** end to end, against 21.0 and 26.1 for the dense
-profile in the same memory layout — about **1.8 times faster** — while using
-45 GB of memory instead of 36, and holding a 262,144-token context. Its cold
-load from disk to a healthy endpoint took about forty seconds.
+This is the layout AMD describes for large models on these APUs: the BIOS UMA
+frame buffer stays at its minimum, so the firmware does not reserve a fixed
+slice for the GPU, and llama.cpp draws what it needs from the shared pool.
 
-**Speculative decoding was already on, and the reading that said otherwise was
-wrong.** The MTP head lives in the checkpoint and the engine drafts with it by
-default, with no configuration. `/health` used to report
-`drafter_weights_loaded: false` on every build of the server, this profile's
-included: it was a reporting bug, not a fact, and the server's 0.5.6 changelog
-documents the fix. The numbers above are therefore measured **with**
-speculation. The same release line also made long prompts prefill faster: on
-this machine, moving from the shipped 0.5.2 to 0.5.6 raised prefill from 1,097
-to 1,180 tokens per second at an 8K prompt and from 1,239 to 1,339 at 32K
-(byte-identical output), while decode stayed where it was.
+Measured on the reference machine with the same prompt and procedure as the
+table above: **33.0 tokens per second** of decode, warm, with MTP accepting
+about 74% of its drafts. That is a wash against the 31.9 of the engine it
+replaced, at half the memory. Against the dense
+profile's 21.0 and 26.1 it is 1.3 to 1.6 times faster, with the same
+262,144-token context.
+
+**Text only.** The GGUF carries no vision projector, so the profile serves no
+image input; `superfast-switch vision on` refuses it by design, and the
+`gemma` and `ornith` profiles are the ones that carry it.
 
 ---
 
@@ -888,13 +886,13 @@ reason given above. That request is not a licensing condition.
 
 ## What every profile inherits from the engine
 
-All profiles run on one of two purpose-built engines: the Qwen profiles on the
-halogen engine (a dense build and a Flash-Next build), the Gemma, DeepSeek and
-orchestrator profiles on the ROCmFPX llama.cpp runtime. The properties below
-belong to the Qwen engines; `/health` reports what the running profile
-supports. Every engine setting is named `HALOGEN_*` — the `SUPERFAST_*` names
-belong to this project's own tools, and
-[`docs/FLAGS.md`](docs/FLAGS.md) says which is which.
+All profiles run on one of three engines. The dense Qwen3.8-27B runs on the
+halogen engine; the flash profile runs llama.cpp with the Vulkan backend on a
+GGUF quant; and the Gemma, DeepSeek, Ornith and orchestrator profiles run on
+the ROCmFPX llama.cpp runtime. Only the dense profile reads `HALOGEN_*`
+settings — the other two take command-line flags. `SUPERFAST_*` names belong
+to this project's own tools, and [`docs/FLAGS.md`](docs/FLAGS.md) says which
+is which.
 
 **Byte-identical speculative decoding.** Draft-then-verify commits only the
 tokens the full model would have produced, so the output is bit-for-bit
@@ -908,27 +906,29 @@ Gated DeltaNet carries O(1) state, so 48 of 64 layers have no KV cache at all.
 
 **Prompt cache** — a follow-up turn in a long conversation resumes instead of
 re-prefilling, worth roughly 20× on time-to-first-token at 32K. Byte-identity
-of a warm answer depends on the profile, and the engine says which: the dense
+of a warm answer depends on the profile, and each engine reports it: the dense
 profile aligns its snapshots and its log states "warm decode is BITWISE
-identical to cold", while the Flash-Next profile keeps the KV in place and
-reports the opposite on purpose ("a warm answer is NOT bitwise the cold one").
-Both resume the conversation; only the dense profile promises byte-identity.
+identical to cold", while llama.cpp keeps the cached prefix and makes no such
+promise. Both resume the conversation; only the dense profile guarantees
+byte-identity.
 
 **Batched decode** — several sequences decoded together, each byte-identical
 to running alone. The dense engine serves one request at a time by default
 (`HALOGEN_KV_SLOTS=1`) and reaches 8 concurrent sequences at 4.87× aggregate
 (it goes from 9.98 t/s for one request to 48.6 t/s for eight) when you raise
-it; the Flash-Next engine ships 4 slots over one shared KV
-pool. Batching trades away speculation for the streams that are not alone —
-see [Concurrency](#concurrency-and-the-one-trap) before changing it.
+it; the flash profile ships `--parallel 1` in its unit, which is what keeps a
+session's prefix in its own slot. Batching trades away speculation for the
+streams that are not alone — see
+[Concurrency](#concurrency-and-the-one-trap) before changing it.
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control, and
-image input (vision) on the flash and gemma profiles.
+image input (vision) on the gemma and ornith profiles.
 
 **Selectable drafters** — the dense engine has three (`dflash2` by default,
-plus `mtp` and `serial`), the Flash-Next engine two (`mtp` by default, plus
-`serial`). Choose per request; the output is identical, only the speed changes.
+plus `mtp` and `serial`); the flash profile runs MTP with six drafts per step,
+configured in the unit rather than per request. The output is identical,
+only the speed changes.
 
 ---
 
@@ -947,18 +947,18 @@ its own tuned defaults and reports them through `/health`.
 | `HALOGEN_API_PORT` | `8731` | the published port |
 | `HALOGEN_DRAFTER` | `2` (DFlash2, dense) | default drafter: `0` serial, `1` MTP, `2` DFlash2 |
 | `HALOGEN_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — above it is a **400**, never a silent truncation |
-| `HALOGEN_QUEUE_TIMEOUT` | `7200` (dense), `3600` (flash) | seconds a queued request will wait — **coupled to the cap**, see below |
-| `HALOGEN_CACHE_ENTRIES` | `8` (flash) | conversations whose resumable state the prompt cache keeps — see [Many agents at once](#many-agents-at-once) |
-| `HALOGEN_KV_SLOTS` | `4` (flash) | concurrent resident sequences — see below |
-| `HALOGEN_CTX` | `262144` (flash) | the most context one request may use — see below |
-| `HALOGEN_KV_POOL_POSITIONS` | `2 × HALOGEN_CTX` (flash) | positions resident across **all** conversations — see below |
+| `HALOGEN_QUEUE_TIMEOUT` | `7200` (dense) | seconds a queued request will wait — **coupled to the cap**, see below |
+| `HALOGEN_KV_SLOTS` | `1` (dense) | concurrent resident sequences — see below |
+| `HALOGEN_SLOT_CTX` | `262144` (dense) | context each dense slot holds — see below |
 
-The prefix is part of the name: the engines read `HALOGEN_*`, while
+The prefix is part of the name: the dense engine reads `HALOGEN_*`, while
 `SUPERFAST_*` belongs to this project's own tools (the installer, the switch,
 the TUI, the gateway, the benchmarks) and to the client's `envKey`. **An engine
-setting written as `SUPERFAST_*` is read by nobody** — neither image contains
-that string, so the engine keeps its default and says nothing. The complete
-list, with which image reads what, is in [`docs/FLAGS.md`](docs/FLAGS.md).
+setting written as `SUPERFAST_*` is read by nobody** — no image contains that
+string, so the engine keeps its default and says nothing. The other profiles
+take no environment variables at all: their settings are the flags in their
+systemd units. The complete list, with which engine reads what, is in
+[`docs/FLAGS.md`](docs/FLAGS.md).
 
 Per-request settings — drafter, temperature, top_p, seed, reasoning effort,
 tools — go in the JSON body and override the server defaults.
@@ -1012,26 +1012,14 @@ below the native context:
 A prompt longer than `HALOGEN_SLOT_CTX` is a hard error naming the limit. It is
 never silently truncated.
 
-**The Flash-Next profile serves four sequences at once from one shared KV
-pool**, so its sizes are settings rather than a product.
-`HALOGEN_KV_POOL_POSITIONS` is how many attention positions are resident
-across *all* conversations; each request reserves `prompt + max_tokens` of it,
-and one that does not fit **waits**. The image default is twice the context,
-524,288 — two full-length conversations, or four at 131K. The pool must be at
-least `HALOGEN_CTX`, or the engine refuses it (`at least --ctx 262144, a
-multiple of 256, at most 16777216`), and a larger one is shrunk at startup
-unless `HALOGEN_KV_POOL_FIT=0`. The unit in `deploy/profiles/` ships a
-**655,360**-position pool with `HALOGEN_MAX_TOK=16384` — the prefill arena,
-which has to halve for a pool that size to fit. Two measured limits decide that
-number: 786,432 is the largest value that starts **reliably** (1,048,576
-livelocks the engine at startup on a host that has been running for a while),
-and the shipped value is one step below it, because the pool is the only part of
-the engine's footprint a host can give back and 786,432 was measured to leave
-too little for the rest of the system to survive a day of use. See [Many agents
-at once](#many-agents-at-once) for both measurements and for how to put the
-image defaults back.
+**The flash profile runs llama.cpp with `--parallel 1`**, so one KV cache and
+one queue: a second request waits for the first, and a session always finds
+its own cached prefix. Its context is a single `-c 262144`. Raising the slot
+count (`--parallel N`) splits that window into N slots, which is the trap the
+GGUF profiles already paid for — see
+[Many agents at once](#many-agents-at-once).
 
-On both engines the drafter speculates only while a stream is alone: with
+The dense and flash engines both speculate only while a stream is alone: with
 several streams live, decode is batched instead. That is why a single user
 gets the fastest numbers, and why parallel agents each run slower than one
 agent would.
@@ -1065,12 +1053,12 @@ the GPU.
 dense unit sets `HALOGEN_QUEUE_TIMEOUT=6000`, not the image's 7,200: it is
 above the queue wait that unit was sized for (4,980 s — see
 [the queue-timeout note](#timeouts-and-why-they-are-what-they-are)) and below
-the 6,550 s this table derives for a full-length 65,536-token request. The
-flash unit's 3,600 s is further below it still. Both are sized for the queue
-wait their profile actually produces (4,980 s with one slot, 2,386 s with
-four), not for the 109-minute worst case the cap allows, so a request that
-does run that long can 503 whatever is queued behind it. Raising the timeout
-to match the cap is the other way to read the same table; it is a choice about
+the 6,550 s this table derives for a full-length 65,536-token request. It is
+sized for the queue wait its profile actually produces with one slot, not for
+the 109-minute worst case the cap allows, so a request that does run that long
+can 503 whatever is queued behind it. On flash there is no such setting: the
+Vulkan unit runs one slot with `--timeout 1800`. Raising the dense timeout to
+match the cap is the other way to read the same table; it is a choice about
 who waits, not about correctness.
 
 Asking for more than the cap returns a **400** naming the limit. It is never
@@ -1093,12 +1081,14 @@ the prefix already is the name. The front-end's source says so in one line:
   available memory at startup. Pin it only with a value large enough to matter:
   a single full-context entry is about 18.4 GB at 262K, so a small explicit
   budget produces a cache that reports itself enabled and never hits.
-- **Flash-Next:** the KV stays where it is and each cached conversation costs
-  ~111 MiB of O(1) state, counted by `HALOGEN_CACHE_ENTRIES`. The image ships
-  **8**, and the Flash-Next unit raises it to 32 so a client that opens
-  subagents has headroom. Warm answers are **not** byte-identical here —
-  `/health` reports `bitwise_identical_to_cold: false` — because the engine
-  snapshots at every request end instead of on an aligned boundary.
+- **Flash:** llama.cpp keeps the processed prefix in its slot cache, so a
+  follow-up turn resumes instead of re-prefilling. There is nothing to tune:
+  the unit ships `--parallel 1`, which is what keeps a session's prefix in the
+  slot it was built in; with several slots the engine may hand a turn to
+  another one and the prefix is read again (measured on ornith: 226,890 tokens
+  at 119 t/s against 5,479 at 475 t/s after pinning one slot). Warm answers
+  are **not** byte-identical to cold ones here — llama.cpp makes no such
+  promise, and its log does not claim it.
 
 **Where to read the cache.** The API response does not carry it: `usage` reports
 `prompt_tokens`, `completion_tokens` and `total_tokens`, and adds
@@ -1118,11 +1108,11 @@ Both go through the gateway unchanged, so a client on the network can read them 
 
 #### One slot, one queue: the GGUF profiles
 
-The gemma, deepseek and ornith profiles run on llama.cpp, and llama.cpp keeps
-one KV cache per slot. Their units ship `--parallel 1` so a session always
-finds its own cache. The client must help: if the harness opens subagents in
-parallel, their requests can land on another slot and the conversation loses
-its cached prefix.
+The gemma, deepseek, ornith and flash profiles run on llama.cpp, and llama.cpp
+keeps one KV cache per slot. Their units ship `--parallel 1` so a session
+always finds its own cache. The client must help: if the harness opens
+subagents in parallel, their requests can land on another slot and the
+conversation loses its cached prefix.
 
 Measured on ornith, on one real agent session: with several slots, a turn
 re-read **226,890 tokens at 119 t/s** — 31.7 minutes of prefill — and reported
@@ -1148,8 +1138,11 @@ size, and the size the engine chose for itself held about four conversations of
 131,072 tokens. Longer conversations went past it, so the engine had to forget
 one conversation in order to keep another, and the conversation that was
 forgotten read its whole history again. That is the pause of a minute or more.
-The flash profile now reserves room for four long conversations, so all of them
-stay remembered and a turn answers in about a second.
+The halogen engine that served flash until 2026-10-20 reserved room for four
+long conversations, so all of them stayed remembered and a turn answered in
+about a second. Flash now runs llama.cpp, which keeps the cached prefix in its
+single slot (`--parallel 1`); the pool tuning below belongs to that retired
+engine, which is kept as the rollback.
 
 The details, for anyone who wants to tune it:
 
@@ -1186,8 +1179,9 @@ seconds — about 1,260 tokens per second, against the 709 the timeout table
 below uses as the slowest measured prefill. The next line is the same
 conversation one turn later, once its KV was back in place: 4.65 seconds.
 
-The Flash-Next unit ships a pool of 655,360 positions,
-`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`.
+The halogen-flash unit shipped a pool of 655,360 positions,
+`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`
+before it was retired.
 Measured on the reference host with four agents asking **at the same time**,
 each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
 positions of KV between them, more than the 524,288 the image's pool holds and
@@ -1261,14 +1255,13 @@ Four things to know if you tune it:
   already have and pays NVMe reads for it. Raising the pool and the entry count
   is what pays.
 
-To go back to the image defaults, delete the six `-e HALOGEN_*` lines from the
-`ExecStart` in `~/.config/systemd/user/superfast-flash.service` and run
-`systemctl --user daemon-reload && systemctl --user restart superfast-flash`;
-the engine then sizes everything itself, including the pool. To use even less
-memory, lower `HALOGEN_KV_POOL_POSITIONS`: 524,288 measured the same throughput
-as the 786,432 the unit shipped then (35.5 against 33.8 t/s aggregate) and costs
-about 3.6 GiB less than the shipped 655,360, at the price of holding two
-full-length conversations instead of two and a half.
+The flash unit that ships today has none of these knobs: its settings are the
+flags in `deploy/profiles/superfast-flash-vk.service` (`-c 262144`,
+`--parallel 1`, `--ple-disk --ple-cache-mib 4096`, the MTP flags), and the
+engine sizes everything else itself. To go back to the halogen engine, copy
+`~/.config/systemd/user/superfast-flash.service.halogen` over
+`superfast-flash.service` (and restore its `override.conf.halogen` if vision
+was on), then `systemctl --user daemon-reload && superfast-switch use flash`.
 
 #### What a real fleet looks like on this pool
 
@@ -1398,8 +1391,12 @@ admission — it shows up as conversations that lose their prompt cache. A
 
 #### The pool also decides whether the engine starts
 
-The number that turned out to matter most is not a speed number at all. With
-`HALOGEN_KV_POOL_POSITIONS=1048576` and `HALOGEN_KV_POOL_FIT=0` — what this
+This section, like the pool tuning above, describes the halogen engine that
+served flash until 2026-10-20 and is kept as its rollback. The Vulkan unit
+that serves flash today has no pool: it is one llama.cpp process with
+`-c 262144` and `--parallel 1`.
+
+With `HALOGEN_KV_POOL_POSITIONS=1048576` and `HALOGEN_KV_POOL_FIT=0` — what this
 project shipped until 2026-09-13 — **the engine stops starting on a host that
 has been running for a while**:
 
@@ -1608,10 +1605,10 @@ so they are connected to this repository and appear in its Packages section.
 | artifact | registry | what it is |
 |---|---|---|
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
+| `localhost/superfast-flash-vk:1` | local, built by `deploy/build-vulkan-image.sh` | llama.cpp with the Vulkan backend, `--ple-disk` and MTP: the engine that serves the flash profile |
 | `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
-| `ghcr.io/peonist-ai/halogen-flash-server:0.5.6` | GHCR (upstream) | the engine that serves the Flash-Next MoE profile |
 | `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
-| `peonist-ai/halogen-qwen3.8-flash-next` | Hugging Face | the MoE checkpoint and both overlays |
+| `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF`, `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` | Hugging Face | the flash weights: three GGUF shards and the MTP draft head |
 | `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` | Hugging Face | the Gemma-4 weights used by the `gemma` profile |
 | `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` | Hugging Face | the DeepSeek-V4-Flash weights used by the `deepseek` profile |
 | `LiquidAI/LFM2.5-350M-GGUF`, `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` | Hugging Face | the small models used by the orchestrator |
@@ -2187,15 +2184,16 @@ reference machine:
 | profile | context | memory in use while serving | notes |
 |---|---|---|---|
 | Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
-| Qwen3.8-Flash-Next | 262,144 | ~45 GB | native maximum, and the fastest of the large profiles |
+| Qwen3.8-Flash-Next | 262,144 | ~50 GB | native maximum, served as a GGUF quant on llama.cpp Vulkan with the PLE table on disk |
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
 | DeepSeek-V4-Flash | 524,288 | ~102 GB | half of the model's native 1M, and the largest window that stays stable here — see below |
 
 Three properties that matter when a program uses this machine as its model:
 
-- **The KV cache is shared by the four server slots** (`kv_unified`), so one
-  session can use the whole window; four sessions share the same window
-  instead of getting one each.
+- **The KV cache follows the slot.** On the halogen engine one slot can use the
+  whole window; on llama.cpp each slot owns a private KV, which is why the
+  GGUF profiles ship one slot (`--parallel 1`): four sessions share the window,
+  and a session that lands on another slot loses its cached prefix.
 - **Tool calling works on the profile we could verify it on.** The GGUF
   profiles run with `--jinja`, so the model's own chat template handles tools.
   Verified on Gemma-4: asked for a tool call, and the answer was a proper
@@ -2435,13 +2433,12 @@ the work.
 Three consequences worth knowing:
 
 - **The engine's own timeout is set to match, and deliberately.**
-  `HALOGEN_QUEUE_TIMEOUT` is 6000 s on dense and 3600 s on flash: above the
-  longest queue wait estimated for each profile (4,980 s with one slot, 2,386 s
-  with four), and below what the table above allows in the absolute worst case,
-  where three worst-case requests ahead of you would exceed either value. It
-  exists to stop a client waiting forever, not to bound the queue. It should
-  never fire: a request that waits that long is one the machine cannot serve,
-  and a 503 wastes everything already queued.
+  `HALOGEN_QUEUE_TIMEOUT` is 6000 s on dense, above the longest queue wait
+  estimated for that profile (4,980 s with one slot) and below what the table
+  above allows in the absolute worst case, where three worst-case requests
+  ahead of you would exceed it. It exists to stop a client waiting forever,
+  not to bound the queue. On flash there is no queue to size: the Vulkan unit
+  runs `--parallel 1` with llama.cpp's own `--timeout 1800` on the socket.
 - **llama.cpp has a timeout of its own**, `--timeout`, 600 s by default, on the
   *socket*. The gemma and deepseek units raise it (1800 s and 3600 s) because
   their prefills are long enough to trip the default — see the comments in
