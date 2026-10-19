@@ -480,6 +480,15 @@ phase_smoke() {
 }
 
 phase_engine() {
+    # The flash profile runs on the Vulkan image built from runtime/Dockerfile.vulkan.
+    # That Dockerfile alone is not enough: the build needs the ROCmFPX source
+    # snapshot, which is not vendored here, so build-vulkan-image.sh clones it
+    # under ~/.cache and reuses it. Set VULKAN_FLASH=0 to skip the build.
+    if in_profiles flash && [ "${VULKAN_FLASH:-1}" = "1" ]; then
+        log "building the Vulkan engine for the flash profile (this takes a while)"
+        bash "$SCRIPT_DIR/build-vulkan-image.sh" \
+            || log "warning: Vulkan image build failed; the flash unit will not start until it exists"
+    fi
     log "== phase 8/10: engine service (systemd user unit) =="
     if ! in_profiles dense; then
         log "dense is not in PROFILES ($PROFILES); skipping its unit"
