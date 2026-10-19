@@ -1116,6 +1116,32 @@ Both go through the gateway unchanged, so a client on the network can read them 
 
 ### Many agents at once
 
+#### One slot, one queue: the GGUF profiles
+
+The gemma, deepseek and ornith profiles run on llama.cpp, and llama.cpp keeps
+one KV cache per slot. Their units ship `--parallel 1` so a session always
+finds its own cache. The client must help: if the harness opens subagents in
+parallel, their requests can land on another slot and the conversation loses
+its cached prefix.
+
+Measured on ornith, on one real agent session: with several slots, a turn
+re-read **226,890 tokens at 119 t/s** — 31.7 minutes of prefill — and reported
+zero cached tokens. After pinning one slot, the same session read **5,479
+tokens at 475 t/s**, and a turn went from tens of minutes to a few.
+
+Configure the harness to queue agents instead of running them in parallel. In
+Qwen Code, in `~/.qwen/settings.json`:
+
+```json
+"agents": { "maxParallelAgents": 1 }
+```
+
+`agents.maxParallelAgentsByModel` does the same per model when one machine
+serves several. With any other harness, set its subagent or agent concurrency
+to 1 if it has the option. The cost is that parallel agents wait their turn;
+the gain is that every turn reuses its cache instead of reading the whole
+history again, which on a long session is far more than the wait.
+
 **In plain words.** The engine remembers the start of every conversation it has
 already read, so the next turn does not read it again. That memory has a fixed
 size, and the size the engine chose for itself held about four conversations of
