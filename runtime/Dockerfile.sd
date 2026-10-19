@@ -2,7 +2,8 @@
 # image generator on :8733. Built on Fedora, run minimal, weights mounted from
 # the host (they are 16.7 GB and licensed separately — see docs/VISION.md).
 FROM registry.fedoraproject.org/fedora:43 AS build
-RUN dnf -y install git cmake gcc-c++ make glslc glslang python3 vulkan-loader-devel \
+RUN dnf -y install git cmake gcc-c++ make glslc glslang python3 \
+    vulkan-loader-devel vulkan-headers spirv-headers-devel spirv-tools-devel \
     && dnf -y clean all
 RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
     https://github.com/leejet/stable-diffusion.cpp /src
