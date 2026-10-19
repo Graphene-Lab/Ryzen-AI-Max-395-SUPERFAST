@@ -1,0 +1,18 @@
+# sd-server from stable-diffusion.cpp with the Vulkan backend: the optional
+# image generator on :8733. Built on Fedora, run minimal, weights mounted from
+# the host (they are 16.7 GB and licensed separately — see docs/VISION.md).
+FROM registry.fedoraproject.org/fedora:43 AS build
+RUN dnf -y install git cmake gcc-c++ make glslc glslang python3 vulkan-loader-devel \
+    && dnf -y clean all
+RUN git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp /src
+WORKDIR /src/build
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON \
+    && cmake --build . -j"$(nproc)"
+
+FROM registry.fedoraproject.org/fedora-minimal:43
+RUN microdnf -y install vulkan-loader mesa-vulkan-drivers libstdc++ \
+    && microdnf clean all
+COPY --from=build /src/build/bin/sd-server /usr/bin/sd-server
+# The Vulkan loader needs to find the AMD ICD inside the container.
+ENV VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.x86_64.json
+ENTRYPOINT ["/usr/bin/sd-server"]

@@ -1,0 +1,28 @@
+[Unit]
+Description=SUPERFAST image generator (Ideogram 4 on sd-server, port 8733)
+Documentation=file:///%h/.local/share/superfast/README.md
+After=network.target
+
+[Service]
+Type=simple
+# The generator is not a profile: it listens on its own loopback port and can
+# only run beside a model that leaves it enough memory. superfast-switch
+# `image on|off` owns that decision; this unit only starts the process.
+ExecStartPre=-/usr/bin/podman rm -f superfast-image
+ExecStart=/usr/bin/podman run --name superfast-image --rm -p 127.0.0.1:8733:8733 \
+  --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __IMAGE_DIR__:/models:ro \
+  localhost/superfast-image:1 \
+  --diffusion-model /models/ideogram4-Q4_0.gguf \
+  --uncond-diffusion-model /models/ideogram4_uncond-Q4_0.gguf \
+  --llm /models/Qwen3-VL-8B-Instruct-Q4_K_M.gguf \
+  --vae /models/flux2-vae.safetensors \
+  --listen-ip 0.0.0.0 --listen-port 8733
+ExecStop=/usr/bin/podman stop -t 20 superfast-image
+SuccessExitStatus=137 143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
