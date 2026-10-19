@@ -4,7 +4,8 @@
 FROM registry.fedoraproject.org/fedora:43 AS build
 RUN dnf -y install git cmake gcc-c++ make glslc glslang python3 vulkan-loader-devel \
     && dnf -y clean all
-RUN git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp /src
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
+    https://github.com/leejet/stable-diffusion.cpp /src
 WORKDIR /src/build
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON \
     && cmake --build . -j"$(nproc)"
