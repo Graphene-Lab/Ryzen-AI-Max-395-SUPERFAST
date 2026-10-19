@@ -96,7 +96,9 @@ RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast
 RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
 FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.6}"
 REBOOT_NEEDED=0
-PROFILES="${PROFILES:-dense}"
+# The reference machine runs all five profiles plus the small orchestrator;
+# a fresh install creates the same machine unless PROFILES says otherwise.
+PROFILES="${PROFILES:-dense flash gemma deepseek ornith small}"
 MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
 MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"

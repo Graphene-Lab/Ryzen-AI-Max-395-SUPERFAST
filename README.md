@@ -106,7 +106,7 @@ machine except where a row says otherwise:
 | `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | 37.7 / 46.4 t/s | the default: close to the dense quality, about 1.8× the speed; reads images by default |
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
-| `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | not measured yet | 256K context and vision at a quarter of the flash's memory |
+| `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
 
 ![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
 
