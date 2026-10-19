@@ -2236,7 +2236,7 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 
 | setting | what to do |
 |---|---|
-| model name | read it from `/health` (`"model"`). It changes with the active profile: `halogen-qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
+| model name | read it from `/health` (`"model"`). It changes with the active profile: `qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
 | context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
 | answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
 | sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
@@ -2287,7 +2287,7 @@ it.
   "modelProviders": {
     "openai": [
       {
-        "id": "halogen-qwen3.8-flash-next",
+        "id": "qwen3.8-flash-next",
         "name": "[SUPERFAST] flash profile (MoE 125B) - coding",
         "baseUrl": "http://<machine-ip>:8741/v1",
         "envKey": "SUPERFAST_API_KEY",
@@ -2322,7 +2322,7 @@ client sends as the model name, so it must match what `/health` reports, and
 
 | profile | `id` | context window | answer budget | `streamIdleTimeoutMs` | `timeout` | `temperature` | `extra_body` |
 |---|---|---|---|---|---|---|---|
-| Flash-Next | `halogen-qwen3.8-flash-next` | 262,144 | 16,384 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
+| Flash-Next | `qwen3.8-flash-next` | 262,144 | 16,384 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | 7,200,000 | 9,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | 3,600,000 | 4,800,000 | **0** | none, the profile ignores it |
 | DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | 8,400,000 | 10,800,000 | **0** | none, the profile ignores it |

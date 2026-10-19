@@ -137,7 +137,7 @@ Limits, reported by `/health`:
 - **`size_multiple`** — image dimensions are handled in multiples of 32.
 
 The model name to put in the request is the one `/health` reports (for flash,
-`halogen-qwen3.8-flash-next`).
+`qwen3.8-flash-next`).
 
 ## Vision and the prompt cache, mid-chat
 
