@@ -1,0 +1,49 @@
+# Vulkan build of the ROCmFPX fork, used for the ple-disk experiment on the
+# Flash-Next checkpoint (qwen4exp).
+#
+# Build context: a directory containing src/ = the fork source
+# (git archive of the branch), as in the strix-nebulosa recipe.
+#
+#   podman build -f runtime/Dockerfile.vulkan -t superfast-flash-vk:1 <context>
+#
+# The image installs llama-server into /usr/bin (cmake --install with
+# CMAKE_INSTALL_PREFIX=/usr), so the ENTRYPOINT points there. An earlier
+# hand-built image pointed at /usr/local/bin and every run died with
+# "executable file not found".
+#
+# Run (the ple-disk flags are the point of this image):
+#   podman run --rm -p 127.0.0.1:8734:8734 \
+#     --device /dev/kfd --device /dev/dri --group-add keep-groups \
+#     --security-opt seccomp=unconfined --ipc=host \
+#     -v ~/ple-models:/models:ro superfast-flash-vk:1 \
+#     -m /models/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00001-of-00003.gguf \
+#     -md /models/Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf \
+#     --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 \
+#     --host 0.0.0.0 --port 8734 -ngl 999 -c 16384 --no-mmap \
+#     --ple-disk --ple-cache-mib 4096 --jinja
+FROM registry.fedoraproject.org/fedora:43 AS builder
+RUN dnf -y --nodocs --setopt=install_weak_deps=False install \
+  make gcc cmake ninja-build lld clang clang-devel compiler-rt libcurl-devel rdma-core-devel \
+  vulkan-loader-devel vulkaninfo mesa-vulkan-drivers spirv-headers-devel glslc patch \
+  && dnf clean all && rm -rf /var/cache/dnf/*
+WORKDIR /opt/llama.cpp
+COPY src/ .
+RUN cmake -S . -B build -G Ninja \
+  -DGGML_VULKAN=ON -DGGML_HIP=OFF -DGGML_CUDA=OFF \
+  -DCMAKE_BUILD_TYPE=Release -DGGML_RPC=ON \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_EXAMPLES=ON \
+  -DLLAMA_BUILD_WEBUI=OFF -DLLAMA_USE_PREBUILT_WEBUI=OFF -DLLAMA_BUILD_TESTS=OFF \
+  && cmake --build build --config Release \
+  && cmake --install build --config Release
+RUN find /opt/llama.cpp/build -type f -name 'lib*.so*' -exec cp {} /usr/lib64/ \; && ldconfig
+
+FROM registry.fedoraproject.org/fedora-minimal:43
+RUN microdnf -y --nodocs --setopt=install_weak_deps=0 install \
+  bash ca-certificates libatomic libstdc++ libgcc libibverbs \
+  vulkan-loader mesa-vulkan-drivers vulkaninfo procps-ng \
+  && microdnf clean all && rm -rf /var/cache/dnf/*
+COPY --from=builder /usr/ /usr/
+RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf \
+  && echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local.conf && ldconfig
+ENTRYPOINT ["/usr/bin/llama-server"]
