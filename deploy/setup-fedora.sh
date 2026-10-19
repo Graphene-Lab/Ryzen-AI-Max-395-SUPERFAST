@@ -97,6 +97,7 @@ RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
 FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.6}"
 REBOOT_NEEDED=0
 PROFILES="${PROFILES:-dense}"
+MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
 MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"
 MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
@@ -254,6 +255,7 @@ profile_dir() {
         gemma)    echo "$MODELS_DIR_GEMMA" ;;
         deepseek) echo "$MODELS_DIR_DEEPSEEK" ;;
         small)    echo "$MODELS_DIR_SMALL" ;;
+        ornith)   echo "$MODELS_DIR_ORNITH" ;;
     esac
 }
 
@@ -281,6 +283,7 @@ install_template() { # src dst
         -e "s#__FLASH_DIR__#$MODELS_DIR_FLASH#g" \
         -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
+        -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
         -e "s#__DENSE_IMAGE__#$IMAGE#g" \
         -e "s#__FLASH_IMAGE__#$FLASH_IMAGE#g" "$1" > "$2"
@@ -689,7 +692,7 @@ phase_profiles() {
         fi
     fi
 
-    for p in flash gemma deepseek small; do
+    for p in flash gemma deepseek ornith small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
         if [ -f "$PROF_DIR/$u.service" ]; then
@@ -728,7 +731,7 @@ phase_profiles() {
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
-    for pair in "flash superfast-flash" "gemma gemma"; do
+    for pair in "flash superfast-flash" "gemma gemma" "ornith ornith"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
@@ -748,6 +751,7 @@ phase_profiles() {
         case "$vp" in
             flash) vfile="$MODELS_DIR_FLASH/qwen38-flash-next-vision.hgn" ;;
             gemma) vfile="$MODELS_DIR_GEMMA/mmproj-BF16.gguf" ;;
+            ornith) vfile="$MODELS_DIR_ORNITH/mmproj-Ornith-1.5-35B-BF16.gguf" ;;
         esac
         if [ ! -f "$vfile" ] && [ "${SKIP_WEIGHTS:-0}" != "1" ]; then
             log "$vp: vision file missing; fetching it via superfast-download@$vp.service"

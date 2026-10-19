@@ -14,10 +14,11 @@
 # Usage:
 #   superfast-switch status
 #   superfast-switch list
-#   superfast-switch use dense|flash|gemma|deepseek
+#   superfast-switch use dense|flash|gemma|deepseek|ornith
 #   superfast-switch stop
 #   superfast-switch api-key status|on|off|show|set [key]|clear
 #   superfast-switch vision status|on|off
+#   superfast-switch image status|on|off|check [standard|2k]
 #
 # The API key is enforced by the gateway (superfast-gateway.service) on :8741.
 # Every profile binds :8731 to loopback, so the gateway is the ONLY way in from
@@ -38,6 +39,7 @@ HEALTH="http://127.0.0.1:${PORT}/health"
 FLASH_DIR="${SUPERFAST_FLASH_DIR:-$HOME/superfast-flash}"
 GEMMA_DIR="${SUPERFAST_GEMMA_DIR:-$HOME/gemma-models}"
 DEEPSEEK_DIR="${SUPERFAST_DEEPSEEK_DIR:-$HOME/deepseek-models}"
+ORNITH_DIR="${SUPERFAST_ORNITH_DIR:-$HOME/ornith-models}"
 API_KEY_FILE="${SUPERFAST_KEY_FILE:-$HOME/.config/superfast/api.key}"
 GATEWAY_UNIT="${SUPERFAST_GATEWAY_UNIT:-superfast-gateway.service}"
 GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
@@ -47,14 +49,16 @@ declare -A UNIT=(
     [flash]="${SUPERFAST_FLASH_UNIT:-superfast-flash.service}"
     [gemma]="${SUPERFAST_GEMMA_UNIT:-gemma.service}"
     [deepseek]="${SUPERFAST_DEEPSEEK_UNIT:-deepseek.service}"
+    [ornith]="${SUPERFAST_ORNITH_UNIT:-ornith.service}"
 )
 declare -A LABEL=(
     [dense]="Qwen3.8-27B dense (halogen)"
     [flash]="Qwen3.8-Flash-Next MoE (halogen-flash)"
     [gemma]="Gemma-4-26B-A4B ROCmFP4 (llama-rocmfpx)"
     [deepseek]="DeepSeek-V4-Flash ROCmFPX (llama-rocmfpx)"
+    [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
 )
-PROFILES=(dense flash gemma deepseek)
+PROFILES=(dense flash gemma deepseek ornith)
 
 # The orchestrator is a small, fast model that runs ALONGSIDE a profile (it is
 # not a profile itself): clients may ask it to decide what to do, and it wakes
@@ -73,7 +77,7 @@ VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
 # Profiles whose engine can carry a vision component. dense and deepseek are
 # text-only: no encoder exists in their repositories, so the toggle is not
 # available for them.
-VISION_CAPABLE="flash gemma"
+VISION_CAPABLE="flash gemma ornith"
 
 # Is a word in a space-separated list?
 is_in() { # "list" word
@@ -132,6 +136,8 @@ weights_ready() {
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
         deepseek)
             [ -f "$DEEPSEEK_DIR/.download-complete" ] && deepseek_memory_ok ;;
+        ornith)
+            [ -f "$ORNITH_DIR/.download-complete" ] ;;
     esac
 }
 
@@ -163,6 +169,9 @@ cmd_status() {
         [ -f "$(vision_override_path "$vp")" ] && ven=yes
     fi
     echo "vision: supported=$vsup enabled=$ven profile=${vp:-none}"
+    # Same idea for the image generator: the panel and the TUI read this line
+    # instead of recomputing the memory table themselves.
+    image_check 2>/dev/null | head -n 1 || true
 }
 
 # Turn the LAN-facing API key on or off, and manage the key itself. `on` keeps
@@ -426,6 +435,7 @@ cmd_use() {
             m="$(model_name)"
             [ -n "$m" ] && m=" ($m)"
             echo "profile '$p' serving on :${PORT}${m} (after ~$((i * 5))s)"
+            image_reconcile
             return 0
         fi
         sleep 5
@@ -472,7 +482,114 @@ cmd_stop() {
             echo "stopped ${UNIT[$q]}"
         fi
     done
+    systemctl --user stop "$IMAGE_UNIT" 2>/dev/null || true
     echo "no model running"
+}
+
+# --- optional image generator ------------------------------------------------
+#
+# One more service beside the profile, on its own port, never a profile: it
+# does not take :8731 and it does not participate in the model switch. It is
+# enabled by default and can only run when the loaded model leaves it enough
+# memory, which is a property of the model, not of the moment: the gate below
+# subtracts the profile's resident footprint, the orchestrator and a system
+# reserve from physical memory, and compares the result with the generator's
+# own peak.
+#
+# The footprint table is measured, not copied from the engine's own table:
+# `flash` is 98.2 GiB resident by measurement while one README table says
+# ~45 GB, and trusting the second number would start a 24 GB render on a
+# machine with 17 GB free.
+IMAGE_UNIT="${SUPERFAST_IMAGE_UNIT:-superfast-image.service}"
+IMAGE_RUNTIME="${SUPERFAST_IMAGE_RUNTIME:-localhost/superfast-image:1}"
+IMAGE_STATE="${SUPERFAST_IMAGE_STATE:-$HOME/.config/superfast/image-generator}"
+IMAGE_PEAK_GB="${SUPERFAST_IMAGE_PEAK_GB:-24}"      # 1024 px, margin for a batch
+IMAGE_2K_GB="${SUPERFAST_IMAGE_2K_GB:-32}"          # 2K comfort
+SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
+ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
+
+declare -A PROFILE_GB=(
+    [dense]=36 [flash]=98 [gemma]=23 [deepseek]=102 [ornith]=25 [small]=2
+)
+
+image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }
+
+# The user's own choice, kept across models. Missing file = the shipped default.
+image_desired() { [ -s "$IMAGE_STATE" ] && cat "$IMAGE_STATE" || echo on; }
+
+image_runtime_ok() { podman image exists "$IMAGE_RUNTIME" >/dev/null 2>&1; }
+
+free_gb_for() { # profile
+    local p="$1" total orch=0
+    total="$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null)"
+    [ -n "$total" ] || total=124
+    if [ "$p" != "small" ] && unit_active "$ORCH_UNIT"; then orch="$ORCH_RESERVE_GB"; fi
+    echo $(( total - ${PROFILE_GB[$p]:-0} - orch - SYSTEM_RESERVE_GB ))
+}
+
+# One line, parsed by the TUI and the GNOME panel. Exit 0 when the generator
+# can start now, 1 when it cannot.
+image_check() { # standard|2k
+    local p peak free can=no rt=missing
+    p="$(active_profile)"
+    peak="$(image_peak_gb "${1:-standard}")"
+    free="$(free_gb_for "${p:-none}")"
+    image_runtime_ok && rt=ok
+    if [ -n "$p" ] && [ "$rt" = ok ] && [ "$free" -ge "$peak" ]; then can=yes; fi
+    echo "image: supported=$can desired=$(image_desired) peak=$peak free=$free runtime=$rt profile=${p:-none}"
+    [ "$can" = yes ]
+}
+
+cmd_image() {
+    local action="${1:-status}" size="${2:-standard}"
+    case "$action" in
+        status|check)
+            image_check "$size"
+            ;;
+        on)
+            mkdir -p "$(dirname "$IMAGE_STATE")"
+            echo on > "$IMAGE_STATE"
+            if ! image_check "$size" >/dev/null; then
+                image_check "$size"
+                echo "image generator not started: the loaded model leaves less than ${IMAGE_PEAK_GB} GB free," >&2
+                echo "or the runtime image ${IMAGE_RUNTIME} is not built yet. The choice is remembered." >&2
+                return 3
+            fi
+            systemctl --user start "$IMAGE_UNIT" 2>/dev/null || {
+                echo "could not start $IMAGE_UNIT; install it with deploy/setup-fedora.sh" >&2
+                return 1; }
+            for _ in $(seq 1 36); do
+                (exec 3<>/dev/tcp/127.0.0.1/8733) 2>/dev/null && { exec 3>&-; echo "image generator on :8733"; return 0; }
+                sleep 5
+            done
+            echo "image generator started but :8733 is not listening" >&2
+            return 1
+            ;;
+        off)
+            mkdir -p "$(dirname "$IMAGE_STATE")"
+            echo off > "$IMAGE_STATE"
+            systemctl --user stop "$IMAGE_UNIT" 2>/dev/null || true
+            echo "image generator off (choice remembered)"
+            ;;
+        *)
+            echo "usage: $0 image status|check|on|off [standard|2k]" >&2
+            exit 2
+            ;;
+    esac
+}
+
+# Called after a profile switch: honour the saved choice if the new model
+# leaves room, stop the generator if it does not.
+image_reconcile() {
+    if [ "$(image_desired)" != "on" ]; then
+        systemctl --user stop "$IMAGE_UNIT" 2>/dev/null || true
+        return 0
+    fi
+    if image_check >/dev/null 2>&1; then
+        systemctl --user start "$IMAGE_UNIT" 2>/dev/null || true
+    else
+        systemctl --user stop "$IMAGE_UNIT" 2>/dev/null || true
+    fi
 }
 
 # Hand the host's contiguous memory back when the engine has stalled, without
@@ -502,6 +619,7 @@ case "${1:-}" in
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
     api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
     vision) cmd_vision "${2:-status}" ;;
+    image)  cmd_image "${2:-status}" "${3:-standard}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|recover|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|image status|on|off|check|recover|stop}" >&2; exit 2 ;;
 esac

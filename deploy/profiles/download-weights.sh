@@ -28,8 +28,9 @@ case "$PROFILE" in
     flash)    DIR="__FLASH_DIR__";    TOKENIZER=1 ;;
     gemma)    DIR="__GEMMA_DIR__";    TOKENIZER=0 ;;
     deepseek) DIR="__DEEPSEEK_DIR__"; TOKENIZER=0 ;;
+    ornith)   DIR="__ORNITH_DIR__";   TOKENIZER=0 ;;
     small)    DIR="__SMALL_DIR__";    TOKENIZER=0 ;;
-    *) echo "usage: $0 dense|flash|gemma|deepseek|small" >&2; exit 2 ;;
+    *) echo "usage: $0 dense|flash|gemma|deepseek|ornith|small" >&2; exit 2 ;;
 esac
 
 LOG="$DIR/.download.log"
@@ -80,6 +81,15 @@ files() {
             ;;
         deepseek)
             echo "DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf|91547243200|a936e0a514385c8ae964c0f42263a4314a34fbc6efea9d9aced5320f320a3d54|https://huggingface.co/otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF/resolve/main/DeepSeek-V4-Flash-0731-Abliterated-ROCMFPx-Strix-Lean-2.58bpw.gguf"
+            ;;
+        ornith)
+            # 19.05 GB, Apache-2.0, 4.29 bits per weight, 262144 native context.
+            # The MTP head is inside the same file (a nextn block), so there is
+            # no second draft file to fetch. The mmproj is downloaded always so
+            # the vision toggle can use it without a second wait, but it is not
+            # loaded unless the vision drop-in is active.
+            echo "Ornith-1.5-35B-A3B-ROCmFP4.gguf|19052438944|0f907917a1bfe4e0ca0d281e5709dcf34b6277063e94fab29491bb5c80fda696|https://huggingface.co/julianmb/Ornith-1.5-35B-A3B-ROCmFP4-GGUF/resolve/main/Ornith-1.5-35B-A3B-ROCmFP4.gguf"
+            echo "mmproj-Ornith-1.5-35B-BF16.gguf|902822016|d9ce31026d1cb1f3f8d5152e2e2a014d9d2b302b6c93a7dc07bb0a0487f52837|https://huggingface.co/julianmb/Ornith-1.5-35B-A3B-ROCmFP4-GGUF/resolve/main/mmproj-Ornith-1.5-35B-BF16.gguf"
             ;;
         small)
             echo "LFM2.5-350M-Q4_K_M.gguf|229312224|7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4|https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q4_K_M.gguf"

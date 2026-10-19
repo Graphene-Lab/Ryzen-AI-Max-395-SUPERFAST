@@ -7,6 +7,7 @@
 #   superfast-tui use <profile>       activate a profile
 #   superfast-tui orchestrator on|off turn the small router on/off
 #   superfast-tui api-key on|off|show|set|clear
+#   superfast-tui image status|on|off   the optional image generator
 #   superfast-tui ports               show the ports in use
 #   superfast-tui recover             engine stalled: free the memory it needs
 #   superfast-tui help                this help
@@ -21,7 +22,7 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 SW="${SUPERFAST_SWITCH:-$HOME/.local/bin/superfast-switch}"
 CONF_DIR="${SUPERFAST_CONF_DIR:-$HOME/.config/superfast}"
 CONF="$CONF_DIR/superfast.conf"
-PROFILES="dense flash gemma deepseek"
+PROFILES="dense flash gemma deepseek ornith"
 
 mkdir -p "$CONF_DIR"
 [ -f "$CONF" ] || cat > "$CONF" <<'EOF'
@@ -47,11 +48,12 @@ api_key() { "$SW" api-key "$@"; }
 ports() {
     echo "main profile endpoint : ${SUPERFAST_PORT:-8731}"
     echo "orchestrator endpoint : ${SUPERFAST_ORCH_PORT:-8732}"
+    echo "image generator       : ${SUPERFAST_IMAGE_PORT:-8733} (optional, one at a time with a big model)"
     echo "auth gateway (if on)  : ${GATEWAY_PORT:-8741}"
 }
 
 help() {
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 menu() {
@@ -64,6 +66,7 @@ menu() {
         echo "  4) api key"
         echo "  5) ports"
         echo "  6) recover  (engine stalled: free the memory it needs, no reboot)"
+        echo "  7) image generator status / on / off"
         echo "  h) help   q) quit"
         printf '> '
         read -r c
@@ -74,6 +77,7 @@ menu() {
             4) printf 'api-key on/off/show/set/clear: '; read -r a b; api_key "$a" "$b" ;;
             5) ports ;;
             6) "$SW" recover ;;
+            7) printf 'image status/on/off: '; read -r i; "$SW" image "$i" ;;
             h|help) help ;;
             q|quit) break ;;
             *) echo "unknown choice" ;;

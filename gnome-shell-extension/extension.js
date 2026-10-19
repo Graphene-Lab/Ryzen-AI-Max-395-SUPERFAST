@@ -16,7 +16,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const PROFILES = ['dense', 'flash', 'gemma', 'deepseek'];
+const PROFILES = ['dense', 'flash', 'gemma', 'deepseek', 'ornith'];
 
 // How to start a terminal that runs a command. The first two use the
 // `program -- command args` form, the last two the older `-e` form. Ptyxis is
@@ -89,6 +89,8 @@ class SuperfastMenu extends PanelMenu.Button {
         this._syncing = false;
         this._visionSupported = false;
         this._visionEnabled = false;
+        this._imageSupported = false;
+        this._imageDesired = false;
         this._modelItems = [];
         this.add_child(new St.Icon({
             icon_name: 'utilities-system-monitor-symbolic',
@@ -124,6 +126,26 @@ class SuperfastMenu extends PanelMenu.Button {
         // Start insensitive: _visionSupported is false until the first
         // refresh confirms the running model can carry a vision component.
         this._updateSensitivity();
+
+        // The optional image generator. It runs beside the profile on :8733,
+        // so it is not a profile and does not take part in the switch. The
+        // switch is enabled by default and remembers the user's choice; it is
+        // greyed out (and shows OFF) while the loaded model leaves less memory
+        // than the generator needs, so it never claims ON when it cannot run.
+        // The decision, and the memory table, live in superfast-switch.
+        this._imageSwitch = new PopupMenu.PopupSwitchMenuItem('Image generator', false);
+        this._imageSwitch.connect('toggled', (item) => {
+            if (this._syncing)
+                return;
+            const target = item.state ? 'on' : 'off';
+            this._busy = true;
+            this._updateSensitivity();
+            runCli(['image', target], () => {
+                this._busy = false;
+                this.poll();
+            });
+        });
+        this.menu.addMenuItem(this._imageSwitch);
 
         this._orchItem = new PopupMenu.PopupMenuItem('Orchestrator: …');
         this._orchItem.connect('activate', () => {
@@ -293,6 +315,23 @@ class SuperfastMenu extends PanelMenu.Button {
             this._syncing = true;
             this._visionSwitch.setToggleState(this._visionEnabled);
             this._syncing = false;
+
+            // "image: supported=<yes|no> desired=<on|off> peak=<GB> free=<GB>
+            // runtime=<ok|missing> profile=<name>". supported=no when the
+            // loaded model leaves less than `peak`, or the runtime image is
+            // not built: the switch is then greyed out and shows OFF, but the
+            // saved choice is kept and comes back with a lighter model.
+            const im = out.match(
+                /^image: supported=(\w+) desired=(\w+) peak=(-?\d+) free=(-?\d+) runtime=(\w+)/m);
+            this._imageSupported = im ? im[1] === 'yes' : false;
+            this._imageDesired = im ? im[2] === 'on' : false;
+            this._imagePeak = im ? Number(im[3]) : 0;
+            this._imageFree = im ? Number(im[4]) : 0;
+            this._imageRuntimeOk = im ? im[5] === 'ok' : false;
+            this._syncing = true;
+            this._imageSwitch.setToggleState(this._imageSupported && this._imageDesired);
+            this._syncing = false;
+
             this._updateSensitivity();
         });
     }
@@ -309,6 +348,19 @@ class SuperfastMenu extends PanelMenu.Button {
         }
         for (const it of this._modelItems)
             it.setSensitive(!this._busy);
+        if (this._imageSwitch) {
+            this._imageSwitch.setSensitive(this._imageSupported && !this._busy);
+            // Two different reasons to be greyed out: the generator's runtime
+            // is not built yet, or the loaded model does not leave it enough
+            // memory. Saying which one is the difference between "install
+            // something" and "switch model".
+            let label = 'Image generator';
+            if (!this._imageRuntimeOk)
+                label = 'Image generator (runtime not built)';
+            else if (!this._imageSupported)
+                label = `Image generator (needs ${this._imagePeak} GB, ${this._imageFree} free)`;
+            this._imageSwitch.label.text = label;
+        }
         if (this._recoverItem)
             this._recoverItem.setSensitive(!this._busy);
     }
