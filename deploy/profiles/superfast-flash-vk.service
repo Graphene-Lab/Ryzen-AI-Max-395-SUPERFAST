@@ -1,0 +1,37 @@
+[Unit]
+Description=SUPERFAST flash profile (Qwen3.8-Flash-Next, Vulkan ple-disk, port 8731)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=__XDG__
+ExecStartPre=-/usr/bin/podman rm -f superfast-flash-vk
+ExecStart=/usr/bin/podman run --name superfast-flash-vk --rm -p 127.0.0.1:8731:8731 \
+  --entrypoint /usr/bin/llama-server \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __FLASH_DIR__:/models:ro \
+  localhost/superfast-flash-vk:1 \
+  -m /models/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00001-of-00003.gguf \
+  -md /models/Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf \
+  --spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6 \
+  --host 0.0.0.0 --port 8731 -ngl 999 -c 262144 --no-mmap \
+  --ple-disk --ple-cache-mib 4096 --jinja \
+  --alias qwen3.8-flash-next --timeout 1800
+# Requires localhost/superfast-flash-vk:1, built from runtime/Dockerfile.vulkan
+# against the ROCmFPX snapshot. The setup script does not build that image yet:
+# on a fresh machine, build it first or keep the halogen unit active.
+#
+# The 3.82 GB MTP head is a separate file (Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf),
+# downloaded with the shards. draft-n-max 6 is the value the strix-nebulosa lab
+# uses for code; at 2 the decode is markedly slower.
+#
+# This quant has no vision projector: the flash profile is text only here.
+ExecStop=/usr/bin/podman stop -t 30 superfast-flash-vk
+SuccessExitStatus=137 143
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target
