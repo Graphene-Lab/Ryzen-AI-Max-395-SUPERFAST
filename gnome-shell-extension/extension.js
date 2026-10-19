@@ -147,6 +147,23 @@ class SuperfastMenu extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._imageSwitch);
 
+        // Who decides the profile. `pinned` keeps what is loaded and lets the
+        // client's model field be decoration; `auto` lets the gateway switch
+        // to the model a request names, but only while the engine is idle —
+        // otherwise the request gets 409 and nothing is restarted.
+        this._modeSwitch = new PopupMenu.PopupSwitchMenuItem('Switch by client request', false);
+        this._modeSwitch.connect('toggled', (item) => {
+            if (this._syncing)
+                return;
+            this._busy = true;
+            this._updateSensitivity();
+            runCli(['mode', item.state ? 'auto' : 'pinned'], () => {
+                this._busy = false;
+                this.poll();
+            });
+        });
+        this.menu.addMenuItem(this._modeSwitch);
+
         this._orchItem = new PopupMenu.PopupMenuItem('Orchestrator: …');
         this._orchItem.connect('activate', () => {
             const on = this._orchestratorActive;
@@ -332,6 +349,12 @@ class SuperfastMenu extends PanelMenu.Button {
             this._imageSwitch.setToggleState(this._imageSupported && this._imageDesired);
             this._syncing = false;
 
+            // "mode: pinned" or "mode: auto", printed by `status`.
+            this._modeAuto = /^mode:\s*auto$/m.test(out);
+            this._syncing = true;
+            this._modeSwitch.setToggleState(this._modeAuto);
+            this._syncing = false;
+
             this._updateSensitivity();
         });
     }
@@ -363,6 +386,12 @@ class SuperfastMenu extends PanelMenu.Button {
         }
         if (this._recoverItem)
             this._recoverItem.setSensitive(!this._busy);
+        if (this._modeSwitch) {
+            this._modeSwitch.setSensitive(!this._busy);
+            this._modeSwitch.label.text = this._modeAuto
+                ? 'Auto switch: on (client picks)'
+                : 'Auto switch: off (menu picks)';
+        }
     }
 });
 

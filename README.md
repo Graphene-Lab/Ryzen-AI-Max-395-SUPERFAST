@@ -2154,6 +2154,7 @@ superfast-switch use dense       # Qwen3.8-27B (halogen engine)
 superfast-switch use flash       # Qwen3.8-Flash-Next MoE
 superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
 superfast-switch use deepseek    # DeepSeek-V4-Flash ROCmFPX
+superfast-switch mode auto       # let the client's model field pick the profile
 superfast-switch stop            # stop everything
 superfast-switch api-key on      # require the API key from the LAN (:8741)
 superfast-switch api-key status  # is the gateway on, is a key set

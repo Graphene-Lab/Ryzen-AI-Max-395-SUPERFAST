@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- **The profile can follow the client's `model` field, when and only when the
+  engine is idle.** `superfast-switch mode auto` — also in the TUI and in the
+  GNOME panel — makes the gateway read the request body, map the id to a
+  profile with an alias table in the switch, and switch only from an idle
+  engine: on halogen `busy:false` and `queued:0`, on llama.cpp no slot with
+  `is_processing`. While a request is running it answers `409` with `active`,
+  `requested`, `state` and `retry_after` and touches nothing, because a switch
+  mid-session costs a full reload and drops the prompt cache. `pinned` is the
+  default, and a manual `use` returns to it. Checked against a stub engine and
+  a stub switch: 11 cases, including busy, queued, an unknown model (forwarded,
+  not switched), the request that names the loaded profile, and a bad key.
+
 ### Changed
 
 - **The flash profile runs on llama.cpp Vulkan with the PLE table on disk.**

@@ -15,10 +15,19 @@
 #   superfast-switch status
 #   superfast-switch list
 #   superfast-switch use dense|flash|gemma|deepseek|ornith
+#   superfast-switch mode pinned|auto
+#   superfast-switch state
+#   superfast-switch profile-for <model-id>
 #   superfast-switch stop
 #   superfast-switch api-key status|on|off|show|set [key]|clear
 #   superfast-switch vision status|on|off
 #   superfast-switch image status|on|off|check [standard|2k]
+#
+# `mode auto` lets the gateway pick the profile from the client's `model`
+# field: it maps the id to a profile and switches only when the engine is
+# idle, answering 409 otherwise. `mode pinned` (the default) keeps the loaded
+# profile whatever the client asks for, which is what a manual `use` implies.
+# `state` is the one-line, machine-readable snapshot the gateway gates on.
 #
 # The API key is enforced by the gateway (superfast-gateway.service) on :8741.
 # Every profile binds :8731 to loopback, so the gateway is the ONLY way in from
@@ -43,6 +52,7 @@ ORNITH_DIR="${SUPERFAST_ORNITH_DIR:-$HOME/ornith-models}"
 API_KEY_FILE="${SUPERFAST_KEY_FILE:-$HOME/.config/superfast/api.key}"
 GATEWAY_UNIT="${SUPERFAST_GATEWAY_UNIT:-superfast-gateway.service}"
 GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
+MODE_FILE="${SUPERFAST_MODE_FILE:-$HOME/.config/superfast/mode}"
 
 declare -A UNIT=(
     [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
@@ -59,6 +69,18 @@ declare -A LABEL=(
     [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
 )
 PROFILES=(dense flash gemma deepseek ornith)
+
+# Served model id -> profile, for `mode auto`. These are the ids the units
+# answer with (`--alias`, or HALOGEN's own model name), never the display
+# labels: a client sends what its configuration lists, and a display name is
+# not a contract. A client that sends the profile name itself is accepted too.
+declare -A ALIAS=(
+    [qwen3.8-27b]=dense
+    [qwen3.8-flash-next]=flash
+    [gemma-4-26b-a4b]=gemma
+    [deepseek-v4-flash]=deepseek
+    [ornith-1.5-35b-a3b]=ornith
+)
 
 # The orchestrator is a small, fast model that runs ALONGSIDE a profile (it is
 # not a profile itself): clients may ask it to decide what to do, and it wakes
@@ -159,6 +181,7 @@ cmd_status() {
     fi
     if [ -s "$API_KEY_FILE" ]; then k="set"; else k="not set"; fi
     echo "api key: $k, gateway $(unit_state "$GATEWAY_UNIT") (port ${GATEWAY_PORT}, the only LAN path)"
+    echo "mode: $(mode_value)"
     # Vision state of the active profile, on one line so the desktop menu can
     # read it from the same `status` call. supported=no for the text-only
     # profiles (dense, deepseek) and when nothing is running.
@@ -291,6 +314,87 @@ active_profile() {
         unit_active "${UNIT[$p]}" && { echo "$p"; return; }
     done
     echo ""
+}
+
+# --- who decides which profile serves ---------------------------------------
+#
+# `pinned` (the default) keeps the loaded profile whatever a client asks for:
+# the `model` field decorates the request and nothing else, which is what every
+# client got until now. `auto` lets the gateway map that field to a profile and
+# switch, but only from an idle engine, and 409 while it is serving — an agent
+# sends a turn every few seconds, so a switch mid-session costs a full reload
+# and drops the prompt cache.
+mode_value() {
+    local m=""
+    [ -s "$MODE_FILE" ] && m="$(head -n 1 "$MODE_FILE" | tr -d '[:space:]')"
+    [ "$m" = "auto" ] && echo auto || echo pinned
+}
+
+cmd_mode() {
+    case "${1:-status}" in
+        status)
+            echo "mode: $(mode_value)"
+            ;;
+        pinned|auto)
+            mkdir -p "$(dirname "$MODE_FILE")"
+            printf '%s\n' "$1" > "$MODE_FILE"
+            echo "mode: $1"
+            if [ "$1" = "auto" ]; then
+                echo "  the gateway reads the client's model field, switches only when the" >&2
+                echo "  engine is idle, and answers 409 while a request is running." >&2
+            fi
+            ;;
+        *)
+            echo "usage: $0 mode pinned|auto" >&2
+            exit 2
+            ;;
+    esac
+}
+
+# Served model id -> profile, for the gateway. Exit 1 when the id is not ours,
+# which is not an error: some clients send a placeholder and expect the engine
+# to answer.
+cmd_profile_for() {
+    local m="${1:-}"
+    if [ -n "$m" ] && [ -n "${UNIT[$m]:-}" ]; then
+        echo "$m"
+        return 0
+    fi
+    if [ -n "$m" ] && [ -n "${ALIAS[$m]:-}" ]; then
+        echo "${ALIAS[$m]}"
+        return 0
+    fi
+    return 1
+}
+
+# One line of key=value, read by the gateway before it touches anything.
+#
+# `busy` and `queued` come from HALOGEN's /health. llama.cpp — gemma, deepseek,
+# ornith and the Vulkan flash — does not report them, so there the signal is
+# the slot being processed: /slots says `is_processing` per slot. A request
+# waiting in llama.cpp's queue sits behind a processing slot, so `busy` covers
+# it; `queued` stays 0 because that count does not exist.
+cmd_state() {
+    local p h resp=0 busy=0 queued=0
+    p="$(active_profile)"
+    if http_ok; then
+        resp=1
+        h="$(curl -s --max-time 3 "$HEALTH" 2>/dev/null || true)"
+        case "$h" in
+            *'"busy"'*)
+                grep -q '"busy"[[:space:]]*:[[:space:]]*true' <<<"$h" && busy=1
+                queued="$(sed -n 's/.*"queued"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$h" | head -n1)"
+                queued="${queued:-0}"
+                ;;
+            *)
+                if curl -s --max-time 3 "http://127.0.0.1:${PORT}/slots" 2>/dev/null \
+                   | grep -q '"is_processing"[[:space:]]*:[[:space:]]*true'; then
+                    busy=1
+                fi
+                ;;
+        esac
+    fi
+    echo "active=${p:-none} responds=$resp busy=$busy queued=$queued"
 }
 
 # Wait for /health to answer 200, up to `rounds` tries of 5 s each.
@@ -436,6 +540,14 @@ cmd_use() {
             m="$(model_name)"
             [ -n "$m" ] && m=" ($m)"
             echo "profile '$p' serving on :${PORT}${m} (after ~$((i * 5))s)"
+            # A manual pick is a decision: the gateway must stop second-guessing
+            # it. `auto` writes this file itself, so it passes SUPERFAST_AUTO=1
+            # to keep the mode it set.
+            if [ "${SUPERFAST_AUTO:-0}" != "1" ] && [ "$(mode_value)" != "pinned" ]; then
+                mkdir -p "$(dirname "$MODE_FILE")"
+                printf 'pinned\n' > "$MODE_FILE"
+                echo "mode: pinned (a manual pick; 'mode auto' gives control back to the clients)"
+            fi
             image_reconcile
             return 0
         fi

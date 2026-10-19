@@ -8,6 +8,7 @@
 #   superfast-tui orchestrator on|off turn the small router on/off
 #   superfast-tui api-key on|off|show|set|clear
 #   superfast-tui image status|on|off   the optional image generator
+#   superfast-tui mode pinned|auto    who picks the profile: you, or the client's model field
 #   superfast-tui ports               show the ports in use
 #   superfast-tui recover             engine stalled: free the memory it needs
 #   superfast-tui help                this help
@@ -67,6 +68,7 @@ menu() {
         echo "  5) ports"
         echo "  6) recover  (engine stalled: free the memory it needs, no reboot)"
         echo "  7) image generator status / on / off"
+        echo "  8) switch mode (pinned: this menu decides / auto: the client's model field)"
         echo "  h) help   q) quit"
         printf '> '
         read -r c
@@ -78,6 +80,7 @@ menu() {
             5) ports ;;
             6) "$SW" recover ;;
             7) printf 'image status/on/off: '; read -r i; "$SW" image "$i" ;;
+            8) printf 'mode pinned/auto: '; read -r md; "$SW" mode "$md" ;;
             h|help) help ;;
             q|quit) break ;;
             *) echo "unknown choice" ;;
@@ -95,6 +98,7 @@ case "${1:-menu}" in
         fi
         ;;
     orchestrator) "$SW" orchestrator "${2:-status}" ;;
+    mode) "$SW" mode "${2:-status}" ;;
     api-key|apikey) api_key "${@:2}" ;;
     ports) ports ;;
     recover) "$SW" recover ;;
