@@ -18,6 +18,17 @@ engine bound `127.0.0.1` inside its own network namespace, where the front-end
 container could never reach it.
 
 Everything below is an engine setting unless the section says otherwise.
+
+**Since 2026-10-20 the flash profile is not a halogen container.** It runs
+llama.cpp on Vulkan with the PLE table on disk, so no `HALOGEN_*` variable
+reaches it any more. Its settings are command-line flags in the unit:
+`--ple-disk` (read the 35.8 GB PLE table from the GGUF instead of loading it),
+`--ple-cache-mib 4096` (block cache), `-ngl 999` (all layers on the GPU),
+`--no-mmap` (required with `--ple-disk`), `-c 262144`,
+`--spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6` (MTP
+speculation), and `--alias qwen3.8-flash-next`. The quant ships no vision
+projector, so the profile is text only; `superfast-switch vision on` refuses it
+by design.
 The engine carries additional kernel-tuning levers that are not listed: they
 select internal implementation variants, the shipped defaults are the measured
 winners, and changing what is not listed is not supported.

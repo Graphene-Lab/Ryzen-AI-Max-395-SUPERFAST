@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **The flash profile runs on llama.cpp Vulkan with the PLE table on disk.**
+  Measured head to head on the same 512-token prompt: 33.0 t/s warm against
+  31.93 for halogen, with a peak of 50.3 GB instead of 98.2 GiB resident. The
+  GGUF ships no vision projector, so flash is text only; halogen and its vision
+  drop-in are kept as `.halogen` for rollback, and the vision toggle no longer
+  lists flash. The installer still ships halogen until the Vulkan image can be
+  built from the repository.
+
 - **The flash pool is 655360 positions, one step below the largest that starts**
   (it was 786432 until today). The pool is the only part of the engine's footprint
   a host can give back — the 68.0 GiB of pinned weights and the 12.3 GiB of
