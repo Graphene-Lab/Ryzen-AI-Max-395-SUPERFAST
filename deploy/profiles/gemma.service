@@ -15,8 +15,8 @@ ExecStart=/usr/bin/podman run --name gemma-server --rm -p 127.0.0.1:8731:8731 \
   -m /models/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf \
   --host 0.0.0.0 --port 8731 \
   -c 262144 --alias gemma-4-26b-a4b --jinja \
-  --timeout 1800
-# --timeout is llama.cpp's socket read/write timeout, 600 s by default. The
+  --parallel 1 --timeout 1800
+# --parallel 1 --timeout is llama.cpp's socket read/write timeout, 600 s by default. The
 # server sends nothing at all while it prefills, so that default is a silent
 # cut waiting to happen: a 229,376-token prompt is 150 s of prefill here, but
 # llama.cpp also closes a connection that sits idle between turns. 1800 s
