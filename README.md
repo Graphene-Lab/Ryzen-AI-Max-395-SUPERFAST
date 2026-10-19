@@ -1709,6 +1709,9 @@ responsibility.
   HumanEval+ and several hours more on MBPP+ for the slower profiles, so it is
   a job for one night per model, not for an afternoon. The results and the
   command that produced them will be published here when they exist.
+  A second axis belongs in the same plan: the same batch of issues run on two
+  profiles, scored by issues closed per hour and by repeated tool calls. That
+  separates a weak model from a weak prompt, which a pass@1 table cannot do.
 - **The comparison table is cross-published, not head-to-head.** We have not
   run the other engines ourselves on our box under matched settings. When we
   do, we will publish whatever it says.
