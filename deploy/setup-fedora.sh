@@ -706,8 +706,12 @@ phase_profiles() {
     for p in flash gemma deepseek ornith small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
-        if [ -f "$PROF_DIR/$u.service" ]; then
-            install_template "$PROF_DIR/$u.service" "$HOME/.config/systemd/user/$u.service"
+        tpl="$PROF_DIR/$u.service"
+        if [ "$p" = "flash" ] && [ -f "$PROF_DIR/superfast-flash-vk.service" ]; then
+            tpl="$PROF_DIR/superfast-flash-vk.service"
+        fi
+        if [ -f "$tpl" ]; then
+            install_template "$tpl" "$HOME/.config/systemd/user/$u.service"
             if [ "$p" = "small" ]; then
                 log "$u.service installed (stopped; toggle with 'superfast-switch orchestrator on')"
             else
@@ -742,7 +746,7 @@ phase_profiles() {
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
-    for pair in "flash superfast-flash" "gemma gemma" "ornith ornith"; do
+    for pair in "gemma gemma" "ornith ornith"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
