@@ -182,7 +182,10 @@ def profile_for(model):
         # gateway is the plain relay it was before.
         return ""
     with _models_lock:
-        _models[model] = prof
+        # Only a hit is cached: caching a miss would keep the gateway blind to
+        # an id added to the settings after it started.
+        if prof:
+            _models[model] = prof
     return prof
 
 
