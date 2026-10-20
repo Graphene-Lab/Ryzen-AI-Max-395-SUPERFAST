@@ -27,8 +27,10 @@ reaches it any more. Its settings are command-line flags in the unit:
 `--no-mmap` (required with `--ple-disk`), `-c 262144`,
 `--spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6` (MTP
 speculation), and `--alias qwen3.8-flash-next`. The quant ships no vision
-projector, so the profile is text only; `superfast-switch vision on` refuses it
-by design.
+projector, so the profile starts text only; `superfast-switch vision on` adds
+`--mmproj /models/mmproj-Flash-Next-F16.gguf` through
+`superfast-flash-vk.service.vision.conf` (the projector comes from
+`unsloth/Qwen3.8-Flash-Next-GGUF`) and restarts it.
 The engine carries additional kernel-tuning levers that are not listed: they
 select internal implementation variants, the shipped defaults are the measured
 winners, and changing what is not listed is not supported.
