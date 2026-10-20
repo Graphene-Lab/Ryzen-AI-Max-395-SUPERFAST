@@ -928,7 +928,7 @@ streams that are not alone — see
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control, and
-image input (vision) on the gemma and ornith profiles.
+image input (vision) on the flash, gemma and ornith profiles.
 
 **Selectable drafters** — the dense engine has three (`dflash2` by default,
 plus `mtp` and `serial`); the flash profile runs MTP with six drafts per step,

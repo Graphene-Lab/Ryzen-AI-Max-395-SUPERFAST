@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Flash has vision again.** The STRIX_LEAN quant ships no projector, so the
+  profile starts text-only; `superfast-switch vision on` now copies
+  `deploy/profiles/superfast-flash-vk.service.vision.conf` into the unit, which
+  adds `--mmproj /models/mmproj-Flash-Next-F16.gguf` (from
+  `unsloth/Qwen3.8-Flash-Next-GGUF`, 904 MB) and restarts it. Verified on a real
+  screenshot: the model read the panel menu labels back. The downloader fetches
+  the projector with the flash weights and the installer stages the drop-in.
+
 - **The profile can follow the client's `model` field, when and only when the
   engine is idle.** `superfast-switch mode auto` — also in the TUI and in the
   GNOME panel — makes the gateway read the request body, map the id to a

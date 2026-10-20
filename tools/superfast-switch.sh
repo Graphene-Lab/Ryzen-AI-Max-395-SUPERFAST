@@ -732,9 +732,12 @@ case "${1:-}" in
         fi
         ;;
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
+    mode)   cmd_mode "${2:-status}" ;;
+    state)  cmd_state ;;
+    profile-for) cmd_profile_for "${2:-}" || exit 1 ;;
     api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
     vision) cmd_vision "${2:-status}" ;;
     image)  cmd_image "${2:-status}" "${3:-standard}" ;;
     stop)   cmd_stop ;;
-    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|image status|on|off|check|recover|stop}" >&2; exit 2 ;;
+    *) echo "usage: $0 {status|list|use <${PROFILES[*]}>|mode pinned|auto|state|profile-for <model>|orchestrator on|off|status|api-key status|on|off|show|set|clear|vision status|on|off|image status|on|off|check|recover|stop}" >&2; exit 2 ;;
 esac
