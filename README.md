@@ -452,7 +452,7 @@ own directory, and the setup script and the switch know those paths.
 | profile | weights directory | files (size in bytes) | source |
 |---|---|---|---|
 | dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
-| flash | `~/superfast-flash` | `Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-0000{1,2,3}-of-00003.gguf` (44,944,112,832 + 44,688,348,576 + 16,121,070,688) and `Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf` (3,818,043,776) — 109,571,575,872 in total | HF `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF` and `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` |
+| flash | `~/superfast-flash` | `Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-0000{1,2,3}-of-00003.gguf` (44,944,112,832 + 44,688,348,576 + 16,121,070,688), `Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf` (3,818,043,776) and the vision projector `mmproj-Flash-Next-F16.gguf` (904,004,000) — 110,475,579,872 in total | HF `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF`, `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` and `unsloth/Qwen3.8-Flash-Next-GGUF` (projector) |
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
 | deepseek | `~/deepseek-models` | `…ROCMFPx-Strix-Lean-2.58bpw.gguf` (91,547,243,200), `…DSpark-draft-4.25bpw.gguf` (10,897,111,840) | HF `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
@@ -2164,6 +2164,24 @@ superfast-switch stop            # stop everything
 superfast-switch api-key on      # require the API key from the LAN (:8741)
 superfast-switch api-key status  # is the gateway on, is a key set
 ```
+
+**Two optional extras, both off unless you ask.** `superfast-switch mode auto`
+moves the choice of profile to the clients: the gateway reads the `model`
+field, maps it to a profile and switches, but only while the engine is idle.
+While a request is running it answers `409` with `active`, `requested`,
+`state` and `retry_after`, because a switch mid-conversation costs a full
+reload and drops the prompt cache. `pinned` is the default, and a manual `use`
+returns to it.
+
+`superfast-switch image on` starts the optional image generator (Ideogram 4
+through `sd-server`) on its own loopback port, `8733`, beside whichever profile
+is loaded — it is not a profile and never takes `8731`. It starts only when the
+loaded model leaves it room: the switch subtracts that profile's measured
+footprint from the machine's memory and compares the result with the peak the
+generator needs (24 GB at 1024 px, measured; 32 GB declared for 2048 px), so
+with `flash` loaded the choice is refused and remembered for a lighter model.
+The four Ideogram files are not downloaded by the installer, because their
+licence is non-commercial: see [Get the weights](#get-the-weights).
 
 The tool stops the current profile, starts the requested one and waits until
 `/health` answers with **200**, so when `use` returns, the endpoint is ready.
