@@ -490,6 +490,15 @@ phase_engine() {
         bash "$SCRIPT_DIR/build-vulkan-image.sh" \
             || log "warning: Vulkan image build failed; the flash unit will not start until it exists"
     fi
+    # The optional image generator runs sd-server (stable-diffusion.cpp) on
+    # Vulkan. Its Dockerfile clones the source itself, so there is no upstream
+    # snapshot to fetch here. Set IMAGE_GENERATOR=0 to skip the build.
+    if [ "${IMAGE_GENERATOR:-1}" = "1" ] && ! podman image exists localhost/superfast-image:1; then
+        log "building the image generator runtime (this takes a while)"
+        podman build -t localhost/superfast-image:1 \
+            -f "$SCRIPT_DIR/../runtime/Dockerfile.sd" "$SCRIPT_DIR/../runtime" \
+            || log "warning: image generator build failed; 'superfast-switch image on' will refuse to start"
+    fi
     log "== phase 8/10: engine service (systemd user unit) =="
     if ! in_profiles dense; then
         log "dense is not in PROFILES ($PROFILES); skipping its unit"
