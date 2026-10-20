@@ -21,7 +21,10 @@ ExecStart=/usr/bin/podman run --name superfast-image --rm -p 127.0.0.1:8733:8733
   --listen-ip 0.0.0.0 --listen-port 8733
 ExecStop=/usr/bin/podman stop -t 20 superfast-image
 SuccessExitStatus=137 143
-Restart=on-failure
+# always, not on-failure: podman can stop the container cleanly when another
+# unit's transaction is in flight ("user.slice has 'stop' job queued"), and a
+# clean exit left the generator down until someone noticed.
+Restart=always
 RestartSec=10
 
 [Install]

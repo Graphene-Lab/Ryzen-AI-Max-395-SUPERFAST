@@ -499,6 +499,13 @@ phase_engine() {
             -f "$SCRIPT_DIR/../runtime/Dockerfile.sd" "$SCRIPT_DIR/../runtime" \
             || log "warning: image generator build failed; 'superfast-switch image on' will refuse to start"
     fi
+    # The Ideogram weights are not fetched here on purpose: they are published
+    # under a non-commercial licence, so accepting it is the operator's
+    # decision, not a side effect of an unattended install. The four files and
+    # their sources are in the README under "Get the weights".
+    if [ ! -f "$HOME/ideogram-models/ideogram4-Q4_0.gguf" ]; then
+        log "image generator: weights missing in ~/ideogram-models; see the README, section 'Get the weights'"
+    fi
     log "== phase 8/10: engine service (systemd user unit) =="
     if ! in_profiles dense; then
         log "dense is not in PROFILES ($PROFILES); skipping its unit"
