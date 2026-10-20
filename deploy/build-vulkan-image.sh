@@ -19,15 +19,19 @@ DOCKERFILE="${SUPERFAST_VK_DOCKERFILE:-$HERE/../runtime/Dockerfile.vulkan}"
 
 [ -f "$DOCKERFILE" ] || { echo "missing $DOCKERFILE" >&2; exit 1; }
 
-# The image is published: pull it and skip the clone and the build. A private
-# package fails here without a login, which is why the build is the fallback.
-PUBLISHED="${SUPERFAST_VK_PULL:-ghcr.io/graphene-lab/superfast-flash-vk:1}"
-if podman pull "$PUBLISHED" >/dev/null 2>&1; then
-    podman tag "$PUBLISHED" "$IMG"
-    echo "pulled $PUBLISHED as $IMG"
-    exit 0
-fi
-echo "could not pull $PUBLISHED (private package or no network); building instead"
+# The image is published under the project's package. The standalone package
+# stays as a second candidate while the migration is in progress; the build is
+# the fallback when neither pull works (private package or no network).
+for PUBLISHED in \
+    ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1 \
+    ghcr.io/graphene-lab/superfast-flash-vk:1; do
+    if podman pull "$PUBLISHED" >/dev/null 2>&1; then
+        podman tag "$PUBLISHED" "$IMG"
+        echo "pulled $PUBLISHED as $IMG"
+        exit 0
+    fi
+done
+echo "no published flash engine could be pulled; building instead"
 
 if [ ! -d "$SRC/rocmfpx" ]; then
     echo "cloning $REPO into $SRC"
