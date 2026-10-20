@@ -507,6 +507,15 @@ phase_engine() {
         log "image generator: weights missing in ~/ideogram-models; see the README, section 'Get the weights'"
     fi
     log "== phase 8/10: engine service (systemd user unit) =="
+    # The optional image generator is not a profile: it runs beside one on its
+    # own loopback port. Installed stopped, and placed before the group check
+    # below, because that check can end this phase early: the unit file must
+    # exist even when the engine itself cannot start yet.
+    if [ -f "$PROF_DIR/superfast-image.service" ]; then
+        install_template "$PROF_DIR/superfast-image.service" \
+            "$HOME/.config/systemd/user/superfast-image.service"
+        log "superfast-image.service installed (stopped; 'superfast-switch image on')"
+    fi
     # The dense unit is installed only when dense is requested, but the rest of
     # this phase must still run: an install with PROFILES=ornith used to return
     # here and install no unit at all.
@@ -717,15 +726,6 @@ phase_profiles() {
         else
             log "$PROF_DIR/dense.service missing; skipping the dense unit"
         fi
-    fi
-
-    # The optional image generator is not a profile: it runs beside one on its
-    # own loopback port. Installed stopped; superfast-switch image on starts it
-    # only when the loaded model leaves it enough memory.
-    if [ -f "$PROF_DIR/superfast-image.service" ]; then
-        install_template "$PROF_DIR/superfast-image.service" \
-            "$HOME/.config/systemd/user/superfast-image.service"
-        log "superfast-image.service installed (stopped; 'superfast-switch image on')"
     fi
 
     for p in flash gemma deepseek ornith small; do
