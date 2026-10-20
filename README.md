@@ -108,11 +108,12 @@ machine except where a row says otherwise:
 | `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | `deepseek-v4-flash` | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
 
-![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
+![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
 
-*The same four names, in the GNOME panel of the machine: click one to switch
+*The same names, in the GNOME panel of the machine: click one to switch
 profile. The filled circle marks what is running now, the entry below toggles
-the small orchestrator, and the last one opens the terminal menu.*
+the small orchestrator, and the last one opens the terminal menu. The
+screenshot predates the `ornith` entry.*
 
 One model at a time, on one OpenAI-compatible endpoint. On the machine itself
 that endpoint is `:8731`, on loopback; from your network it is the API-key
@@ -157,10 +158,11 @@ names follow the GGUF conventions.
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
-machine runs four profiles, in order of size: the dense Qwen3.8-27B (27B
+machine runs five profiles, in order of size: the dense Qwen3.8-27B (27B
 parameters), the Qwen3.8-Flash-Next mixture-of-experts (125B in total, 6B
-active per token), Gemma-4 (25.2B) and DeepSeek-V4-Flash (284B in total) —
-that is, up to a 284-billion-parameter model running entirely on the machine.
+active per token), Ornith-1.5-35B-A3B (35B in total, 3B active), Gemma-4
+(25.2B) and DeepSeek-V4-Flash (284B in total) — that is, up to a
+284-billion-parameter model running entirely on the machine.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
 
@@ -669,7 +671,7 @@ With both applied, the profile loads. Keeping part of the model's experts on
 the CPU was tried as a workaround before that, and it failed even for
 sub-gigabyte buffers under memory pressure, so it is not a substitute here.
 
-The DeepSeek profile is the slowest of the four, and that is expected: it has
+The DeepSeek profile is the slowest of the five, and that is expected: it has
 about 284 billion parameters, and even at ~2.6 bits per weight it reads far
 more per token than the 27B dense model. The row above is a 192-token budget;
 measured with a 512-token budget it is 10.9 t/s on prose and 11.0 on code, so
@@ -1777,7 +1779,7 @@ their measured numbers are in the table above.
 
 ### How they compare with paid models (public numbers)
 
-The four models this machine runs are open-weight models, and their vendors
+The five models this machine runs are open-weight models, and their vendors
 publish benchmark tables that include paid frontier models as columns. Those
 tables are the best available answer to the question this project cares
 about: how close is a model you run yourself to a model you rent. **The
@@ -1965,7 +1967,7 @@ other one that can read images; the dense and deepseek profiles are text-only.
    at 21 tokens per second and a 125B MoE at 38–46 tokens per second are the
    numbers this project contributes. Measure yours with
    [`tools/quick-bench.py`](tools/quick-bench.py).
-5. **One sentence:** two of the four profiles match or beat the paid frontier
+5. **One sentence:** two of the five profiles match or beat the paid frontier
    model on most coding and agent tasks in these tables (the dense 27B and
    the Flash-Next MoE), one is strong in long context and mathematics
    (DeepSeek-V4-Flash), and one is a fast, small and useful model (Gemma 4)
