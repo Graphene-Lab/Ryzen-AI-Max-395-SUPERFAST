@@ -36,10 +36,11 @@
 - **The two container images live in the project's package.** They are pushed
   as `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1` (2.41 GB) and
   `:image-1` (552 MB), next to the runtime's `:llama-rocmfpx-1`, so every
-  artifact of this repository sits under one name. The installer pulls them and
-  tags them as `localhost/superfast-flash-vk:1` and `localhost/superfast-image:1`,
-  building only when both published names fail. The older standalone packages
-  stay as a second candidate while the migration finishes.
+  artifact of this repository sits under one name. The package is public, and
+  both tags were pulled after a `podman logout` to prove it needs no
+  credentials. The installer pulls them and tags them as
+  `localhost/superfast-flash-vk:1` and `localhost/superfast-image:1`, building
+  only when the pull fails.
 
 - **The flash profile runs on llama.cpp Vulkan with the PLE table on disk.**
   Measured head to head on the same 512-token prompt: 33.0 t/s warm against
