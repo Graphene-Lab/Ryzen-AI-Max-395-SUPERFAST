@@ -2185,11 +2185,13 @@ is refused and remembered for a lighter model.
 The four Ideogram files are not downloaded by the installer, because their
 licence is non-commercial: see [Get the weights](#get-the-weights).
 
-**2048 × 2048 is not supported by this build.** A render at that size never
-returns: after 385 seconds the connection drops with no image and `sd-server`
-restarts, and it did the same with 91 GB free, so the cause is not memory. The
-gate still carries `IMAGE_PEAK_2K_GB=32`, declared and never measured. The
-generator ships for 1024 px, where it renders in 46.6 s with a 15.65 GB peak.
+**The largest resolution that works is 1536 × 1536.** A 1536 render returns in
+138.8 s with a 6.9 MB image; 2048 × 2048 never returns — after 385 s the
+connection drops with no image and `sd-server` restarts, and it did the same
+with 91 GB free, so the cause is the resolution and not memory. The gate still
+carries `IMAGE_PEAK_2K_GB=32`, declared and never measured: 2048 is not
+supported by this build. At 1024 px the generator renders in 46.6 s with a
+15.65 GB peak.
 
 The tool stops the current profile, starts the requested one and waits until
 `/health` answers with **200**, so when `use` returns, the endpoint is ready.

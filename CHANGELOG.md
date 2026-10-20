@@ -4,11 +4,12 @@
 
 ### Added
 
-- **The image generator is documented as 1024 px only.** A 2048 × 2048 render
-  never returns: after 385 s the connection drops with no image and `sd-server`
-  restarts, on a machine with 91 GB free, so it is the engine and not memory.
-  `IMAGE_PEAK_2K_GB=32` stays in the switch as a declared value that was never
-  measured; the README now says 2K is unsupported instead of promising it.
+- **The image generator tops out at 1536 × 1536.** Measured with `ornith`
+  loaded: a 1536 render returns in 138.8 s with a 6.9 MB image, while
+  2048 × 2048 never returns — after 385 s the connection drops with no image
+  and `sd-server` restarts, on a machine with 91 GB free, so it is the
+  resolution and not memory. `IMAGE_PEAK_2K_GB=32` stays in the switch as a
+  declared value that was never measured; the README no longer promises 2K.
 
 - **Flash has vision again.** The STRIX_LEAN quant ships no projector, so the
   profile starts text-only; `superfast-switch vision on` now copies
