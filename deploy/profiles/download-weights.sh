@@ -70,6 +70,10 @@ files() {
             echo "Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00002-of-00003.gguf|44688348576|05ce892c44b38f7cbdb3d5a48ebcce9cc4a956786c3a96f02f24c45bd9232954|https://huggingface.co/pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF/resolve/main/ROCmFP4-STRIX_LEAN/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00002-of-00003.gguf"
             echo "Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00003-of-00003.gguf|16121070688|7551add986ac6a46bc69cab644b8fc64313d79ad06423e1f7e0544f87ced74aa|https://huggingface.co/pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF/resolve/main/ROCmFP4-STRIX_LEAN/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00003-of-00003.gguf"
             echo "Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf|3818043776|fa30a89fa06cd1bcc40810dcf1fed73d69c5ff33afb2a08b76333c6f9629ea34|https://huggingface.co/pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF/resolve/main/Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf"
+            # Vision projector: the STRIX_LEAN quant ships none, so without this
+            # file the vision drop-in would point at nothing. Downloaded always,
+            # loaded only when that drop-in is active.
+            echo "mmproj-Flash-Next-F16.gguf|904004000||https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/mmproj-F16.gguf"
             ;;
         gemma)
             echo "gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf|14439364064|76559759aee76a4a29f233f3279c4470ce2c47c206fac3ec60f33d00e3daecdb|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf"
