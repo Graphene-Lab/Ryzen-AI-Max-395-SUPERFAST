@@ -2264,6 +2264,28 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 | sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
 | reasoning effort | on the Qwen profiles send `reasoning_effort` per request (`low` for chat and code, `medium` for hard problems): the vendor default over-thinks and that is the documented cause of long thinking loops. The GGUF profiles ignore the field |
 
+**The ids, and where each client keeps them.** The id is the `--alias` the
+profile serves, and it is also what `mode auto` resolves: a renamed id breaks
+the entry and the alias together.
+
+| profile | id to put in the client |
+|---|---|
+| flash | `qwen3.8-flash-next` |
+| ornith | `ornith-1.5-35b-a3b` |
+| gemma | `gemma-4-26b-a4b` |
+| deepseek | `deepseek-v4-flash` |
+| dense | `qwen3.8-27b` |
+
+| client | file | base URL | what enables images |
+|---|---|---|---|
+| Qwen Code, Windows and Fedora | `~/.qwen/settings.json` | `http://<machine-ip>:8741/v1`, or `http://127.0.0.1:8741/v1` on the machine itself | `generationConfig.modalities.image: true` — this is the one that gates images; `capabilities.vision` only changes the label |
+| PI coding agent | `~/.pi/agent/models.json` | same | `"input": ["text", "image"]` on the model entry |
+| OpenCode | `~/.config/opencode/opencode.json` | same | nothing to set: the id is the object key, selected as `<provider>/<id>` |
+| any other OpenAI client | — | same | send the image as an `image_url` content part |
+
+The PI and OpenCode providers that point at the Funnel carry a `-remote`
+suffix (`qwen3.8-flash-next-remote`); the local ones do not.
+
 Two limits that only show up in long agentic sessions:
 
 - **A client's own timeouts are shorter than this machine needs.** Qwen Code has
