@@ -811,9 +811,14 @@ replaced, at half the memory. Against the dense
 profile's 21.0 and 26.1 it is 1.3 to 1.6 times faster, with the same
 262,144-token context.
 
-**Text only.** The GGUF carries no vision projector, so the profile serves no
-image input; `superfast-switch vision on` refuses it by design, and the
-`gemma` and `ornith` profiles are the ones that carry it.
+**Vision, from a projector the quant does not ship.** The GGUF carries no
+`mmproj`, so the profile starts text-only. `superfast-switch vision on` copies
+`deploy/profiles/superfast-flash-vk.service.vision.conf` into the unit, which
+adds `--mmproj /models/mmproj-Flash-Next-F16.gguf` — the projector published by
+`unsloth/Qwen3.8-Flash-Next-GGUF` for the same model — and restarts it. It was
+verified on a real screenshot: the model read the panel menu labels back. Like
+the other profiles, the toggle restarts the engine and drops its prompt cache,
+so use it between conversations.
 
 ---
 

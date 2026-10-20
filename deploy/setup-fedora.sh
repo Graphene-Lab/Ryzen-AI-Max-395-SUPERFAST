@@ -746,7 +746,7 @@ phase_profiles() {
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
-    for pair in "gemma gemma" "ornith ornith"; do
+    for pair in "gemma gemma" "ornith ornith" "flash superfast-flash-vk"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
