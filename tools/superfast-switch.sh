@@ -624,8 +624,13 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 declare -A PROFILE_GB=(
-    [dense]=36 [flash]=98 [gemma]=23 [deepseek]=102 [ornith]=25 [small]=2
+    [dense]=36 [flash]=51 [gemma]=23 [deepseek]=102 [ornith]=25 [small]=2
 )
+# flash is 50.3 GB by measurement since the ple-disk engine (it was 98 with
+# halogen, the number this table carried until 2026-10-20). Keeping the old
+# value made the gate refuse the generator next to flash even when the room
+# was there: 124 - 51 - 12 leaves 61 GB, against the 24 GB a 1024 px render
+# needs.
 
 image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }
 

@@ -507,10 +507,9 @@ phase_engine() {
         log "image generator: weights missing in ~/ideogram-models; see the README, section 'Get the weights'"
     fi
     log "== phase 8/10: engine service (systemd user unit) =="
-    if ! in_profiles dense; then
-        log "dense is not in PROFILES ($PROFILES); skipping its unit"
-        return 0
-    fi
+    # The dense unit is installed only when dense is requested, but the rest of
+    # this phase must still run: an install with PROFILES=ornith used to return
+    # here and install no unit at all.
     # The container reaches /dev/kfd and /dev/dri through the video and render
     # groups, and a user added to them in phase 4 only gets them in a NEW
     # session. Without this check the first run on a fresh machine would start
