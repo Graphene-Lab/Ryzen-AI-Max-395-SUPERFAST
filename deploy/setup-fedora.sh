@@ -287,6 +287,7 @@ install_template() { # src dst
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
         -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
+        -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" \
         -e "s#__DENSE_IMAGE__#$IMAGE#g" \
         -e "s#__FLASH_IMAGE__#$FLASH_IMAGE#g" "$1" > "$2"
 }
@@ -701,6 +702,15 @@ phase_profiles() {
         else
             log "$PROF_DIR/dense.service missing; skipping the dense unit"
         fi
+    fi
+
+    # The optional image generator is not a profile: it runs beside one on its
+    # own loopback port. Installed stopped; superfast-switch image on starts it
+    # only when the loaded model leaves it enough memory.
+    if [ -f "$PROF_DIR/superfast-image.service" ]; then
+        install_template "$PROF_DIR/superfast-image.service" \
+            "$HOME/.config/systemd/user/superfast-image.service"
+        log "superfast-image.service installed (stopped; 'superfast-switch image on')"
     fi
 
     for p in flash gemma deepseek ornith small; do
