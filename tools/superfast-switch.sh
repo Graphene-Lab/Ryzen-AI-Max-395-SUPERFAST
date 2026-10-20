@@ -98,9 +98,11 @@ ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
 # Profiles whose engine can carry a vision component. dense and deepseek are
 # text-only: no encoder exists in their repositories, so the toggle is not
-# available for them. flash is text-only too since it moved to the Vulkan
-# ple-disk engine, whose GGUF has no mmproj.
-VISION_CAPABLE="gemma ornith"
+# available for them. flash runs the Vulkan ple-disk engine, whose GGUF ships
+# no projector of its own: the mmproj from unsloth/Qwen3.8-Flash-Next-GGUF is
+# loaded through superfast-flash-vk.service.vision.conf, which is why the
+# toggle works there and the projector is still an opt-in.
+VISION_CAPABLE="gemma ornith flash"
 
 # Is a word in a space-separated list?
 is_in() { # "list" word
