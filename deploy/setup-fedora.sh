@@ -494,10 +494,17 @@ phase_engine() {
     # Vulkan. Its Dockerfile clones the source itself, so there is no upstream
     # snapshot to fetch here. Set IMAGE_GENERATOR=0 to skip the build.
     if [ "${IMAGE_GENERATOR:-1}" = "1" ] && ! podman image exists localhost/superfast-image:1; then
-        log "building the image generator runtime (this takes a while)"
-        podman build -t localhost/superfast-image:1 \
-            -f "$SCRIPT_DIR/../runtime/Dockerfile.sd" "$SCRIPT_DIR/../runtime" \
-            || log "warning: image generator build failed; 'superfast-switch image on' will refuse to start"
+        # Pull first: the image is published. A private package needs a login,
+        # so a failed pull falls through to the build.
+        if podman pull ghcr.io/graphene-lab/superfast-image:1 >/dev/null 2>&1; then
+            podman tag ghcr.io/graphene-lab/superfast-image:1 localhost/superfast-image:1
+            log "image generator runtime pulled from ghcr.io/graphene-lab/superfast-image:1"
+        else
+            log "building the image generator runtime (this takes a while)"
+            podman build -t localhost/superfast-image:1 \
+                -f "$SCRIPT_DIR/../runtime/Dockerfile.sd" "$SCRIPT_DIR/../runtime" \
+                || log "warning: image generator build failed; 'superfast-switch image on' will refuse to start"
+        fi
     fi
     # The Ideogram weights are not fetched here on purpose: they are published
     # under a non-commercial licence, so accepting it is the operator's

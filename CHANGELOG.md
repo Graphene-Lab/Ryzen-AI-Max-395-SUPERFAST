@@ -33,6 +33,14 @@
 
 ### Changed
 
+- **The two container images are published on GHCR.**
+  `ghcr.io/graphene-lab/superfast-flash-vk:1` (2.41 GB) and
+  `ghcr.io/graphene-lab/superfast-image:1` (552 MB) are pushed, and the
+  installer now pulls them and tags them as `localhost/superfast-flash-vk:1`
+  and `localhost/superfast-image:1`, building only when the pull fails. Both
+  packages are private as of this entry, so a new machine needs
+  `podman login ghcr.io` until they are made public.
+
 - **The flash profile runs on llama.cpp Vulkan with the PLE table on disk.**
   Measured head to head on the same 512-token prompt: 33.0 t/s warm against
   31.93 for halogen, with a peak of 50.3 GB instead of 98.2 GiB resident. The

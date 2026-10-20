@@ -1612,7 +1612,8 @@ so they are connected to this repository and appear in its Packages section.
 | artifact | registry | what it is |
 |---|---|---|
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
-| `localhost/superfast-flash-vk:1` | local, built by `deploy/build-vulkan-image.sh` | llama.cpp with the Vulkan backend, `--ple-disk` and MTP: the engine that serves the flash profile |
+| `ghcr.io/graphene-lab/superfast-flash-vk:1` | GHCR (ours) | llama.cpp with the Vulkan backend, `--ple-disk` and MTP: the engine that serves the flash profile. The installer pulls it and tags it `localhost/superfast-flash-vk:1`, and builds it only if the pull fails |
+| `ghcr.io/graphene-lab/superfast-image:1` | GHCR (ours) | `sd-server` from stable-diffusion.cpp: the optional image generator on `:8733`. Pulled the same way, with the build from `runtime/Dockerfile.sd` as fallback |
 | `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
 | `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
 | `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF`, `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` | Hugging Face | the flash weights: three GGUF shards and the MTP draft head |
