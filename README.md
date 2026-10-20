@@ -100,13 +100,13 @@ progress and, at the end, what is running and what to check.
 What it runs — five open-weight models, everything below measured on this
 machine except where a row says otherwise:
 
-| profile | model | speed here (prose / code) | best for |
-|---|---|---|---|
-| `dense` | **Qwen3.8-27B**, dense, 27B parameters | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
-| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | — / 33.0 t/s | the default: llama.cpp on Vulkan with the 35.8 GB PLE table read from disk, 50.3 GB resident; text only in this quant |
-| `gemma` | **Gemma-4-26B-A4B**, 25.2B | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
-| `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
-| `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
+| profile | model | id for the client | speed here (prose / code) | best for |
+|---|---|---|---|---|
+| `dense` | **Qwen3.8-27B**, dense, 27B parameters | `qwen3.8-27b` | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
+| `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | `qwen3.8-flash-next` | — / 33.0 t/s | the default: llama.cpp on Vulkan with the 35.8 GB PLE table read from disk, 50.3 GB resident; vision with `--mmproj` |
+| `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
+| `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | `deepseek-v4-flash` | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
+| `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
 
 ![The GNOME panel menu: the four profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
 
@@ -2258,23 +2258,16 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 
 | setting | what to do |
 |---|---|
-| model name | read it from `/health` (`"model"`). It changes with the active profile: `qwen3.8-flash-next`, `halogen-qwen3.8-27b`, `gemma-4-26b-a4b`, `deepseek-v4-flash` |
+| model name | the `id for the client` column of the profile table at the top; it changes with the active profile, and it is what `/health` reports as `"model"` |
 | context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
 | answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
 | sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
 | reasoning effort | on the Qwen profiles send `reasoning_effort` per request (`low` for chat and code, `medium` for hard problems): the vendor default over-thinks and that is the documented cause of long thinking loops. The GGUF profiles ignore the field |
 
-**The ids, and where each client keeps them.** The id is the `--alias` the
-profile serves, and it is also what `mode auto` resolves: a renamed id breaks
-the entry and the alias together.
-
-| profile | id to put in the client |
-|---|---|
-| flash | `qwen3.8-flash-next` |
-| ornith | `ornith-1.5-35b-a3b` |
-| gemma | `gemma-4-26b-a4b` |
-| deepseek | `deepseek-v4-flash` |
-| dense | `qwen3.8-27b` |
+**Where each client keeps that id.** The `id for the client` column of the
+profile table at the top of this document is what goes in the `model` field,
+and it is also what `mode auto` resolves: renaming an id breaks the entry and
+the alias together.
 
 | client | file | base URL | what enables images |
 |---|---|---|---|
