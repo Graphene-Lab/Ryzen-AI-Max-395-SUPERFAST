@@ -12,7 +12,7 @@ RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON \
     && cmake --build . -j"$(nproc)"
 
 FROM registry.fedoraproject.org/fedora-minimal:43
-RUN microdnf -y install vulkan-loader mesa-vulkan-drivers libstdc++ \
+RUN microdnf -y install vulkan-loader mesa-vulkan-drivers libstdc++ libgomp \
     && microdnf clean all
 COPY --from=build /src/build/bin/sd-server /usr/bin/sd-server
 # The Vulkan loader needs to find the AMD ICD inside the container.
