@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Gemma comes up with vision on a fresh install.** `VISION_DEFAULT` has
+  defaulted to 1 since the drop-ins were added, so `setup-fedora.sh` installs
+  the vision drop-in active for gemma, ornith and flash; the file headers and
+  the table in `deploy/profiles/README.md` claimed the opposite — staged
+  inactive, a text-only machine — and were corrected. The reference machine
+  still had gemma's drop-in staged but never installed: installed on
+  2026-10-21, and the staged copy of flash's drop-in was refreshed so
+  `superfast-switch vision on` no longer drops `-ub 128` and the q8_0 KV cache.
+
 - **Flash spends 16 GB less on the same 262144-token window.** The unit now
   ships `-ctk q8_0 -ctv q8_0 -fa on`, `-ub 128` and `--parallel 1` (the slot
   flag was missing from the ple-disk unit while every other GGUF unit already
