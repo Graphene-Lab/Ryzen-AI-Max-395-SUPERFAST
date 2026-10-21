@@ -1263,8 +1263,9 @@ Four things to know if you tune it:
   is what pays.
 
 The flash unit that ships today has none of these knobs: its settings are the
-flags in `deploy/profiles/superfast-flash-vk.service` (`-c 262144`,
-`--parallel 1`, `--ple-disk --ple-cache-mib 4096`, the MTP flags), and the
+flags in `deploy/profiles/superfast-flash-vk.service` (`-c 262144`, `-ub 128`,
+`--parallel 1`, `-ctk q8_0 -ctv q8_0 -fa on`,
+`--ple-disk --ple-cache-mib 4096`, the MTP flags), and the
 engine sizes everything else itself. To go back to the halogen engine, copy
 `~/.config/systemd/user/superfast-flash.service.halogen` over
 `superfast-flash.service` (and restore its `override.conf.halogen` if vision

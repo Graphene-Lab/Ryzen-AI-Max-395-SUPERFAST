@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Flash spends 16 GB less on the same 262144-token window.** The unit now
+  ships `-ctk q8_0 -ctv q8_0 -fa on`, `-ub 128` and `--parallel 1` (the slot
+  flag was missing from the ple-disk unit while every other GGUF unit already
+  had it). Measured after the restart: GTT 97,2 → 81,1 GB, available RAM
+  31 → 45 GB, `n_slots = 1`, decode 34,5 t/s on a 512-token probe. The reason
+  is the crash of 2026-10-21: with an f16 cache the window alone reserved
+  ~45 GB, and a prompt-checkpoint copy then failed with `Not enough memory for
+  command submission`, taking the Vulkan device and the engine with it.
+
 - **The image generator tops out at 1536 × 1536.** Measured with `ornith`
   loaded: a 1536 render returns in 138.8 s with a 6.9 MB image, while
   2048 × 2048 never returns — after 385 s the connection drops with no image

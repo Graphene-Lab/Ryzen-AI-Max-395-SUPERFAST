@@ -18,6 +18,7 @@ ExecStart=/usr/bin/podman run --name superfast-flash-vk --rm -p 127.0.0.1:8731:8
   --spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6 \
   --host 0.0.0.0 --port 8731 -ngl 999 -c 262144 --no-mmap \
   --ple-disk --ple-cache-mib 4096 --jinja \
+  -ub 128 --parallel 1 -ctk q8_0 -ctv q8_0 -fa on \
   --alias qwen3.8-flash-next --timeout 1800
 # Requires localhost/superfast-flash-vk:1, built from runtime/Dockerfile.vulkan
 # against the ROCmFPX snapshot. The setup script does not build that image yet:
