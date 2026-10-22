@@ -1696,29 +1696,58 @@ JSON tool calls, answering reasoning questions exactly, and extracting facts fro
 documents — and each task is scored by its own checker, not by a judge model, into a 0-100
 composite with a tier band. It compares quality, not speed.
 
-The run of 2026-10-21 was driven from the Windows PC against the host over the LAN
-(`--provider local`, endpoint the gateway on `:8741`), one profile loaded at a time, with
-`--no-submit`, so nothing was published to the public leaderboard. The CLI prints a hardware
-warning during a run: it describes the Windows PC, not the host. One seed per profile.
-
-The four scores were all taken from a cold start, one profile loaded at a time. A warm-up control
-run on ornith — switch, three short calls until the latency settled, then the run — reproduced the
-same three task failures and scored 89.7 against 89.3, so those failures are not a cold-cache or
-network artefact.
+The runs of 2026-10-22 were made **on the host itself**, so the leaderboard page describes the
+machine that really serves the model. Each run switched the profile, warmed it with three short
+calls until the latency settled, and was submitted (`--user andrea-bruno`). One seed per profile.
 
 | profile | client model id | score | tier |
 |---|---|---|---|
-| ornith | `ornith-1.5-35b-a3b` | **89.3** | DRIP |
-| dense | `qwen3.8-27b` | 85.8 | MAINLINE |
-| gemma | `gemma-4-26b-a4b` | 81.1 | MAINLINE |
-| flash | `qwen3.8-flash-next` | 76.9 | MAINLINE |
+| ornith | `ornith-1.5-35b-a3b` | **90.1** | TRUNK |
+| dense | `qwen3.8-27b` | 85.9 | MAINLINE |
+| flash | `qwen3.8-flash-next` | 83.8 | MAINLINE |
+| gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
+| flash, original memory flags | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | deepseek | `deepseek-v4-flash` | not scored | — |
+
+The row *flash, original memory flags* is the same model served with the settings this project
+used before 2026-10-21 — four KV slots, ubatch 512, an f16 cache — instead of one slot, ubatch
+128 and a q8_0 cache. The three changes that bought 16 GB of memory back cost **3.1 points** of
+quality, which is the price of the quantized KV cache; the slot and ubatch changes cannot affect
+quality, only speed.
+
+Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8, gemma 81.1,
+flash 76.9) are kept as a note: they measured the same models under the same conditions and agree
+in ranking, but they were not published.
 
 `deepseek-v4-flash` is absent on purpose. Its run returned 0.0 with all 34 tasks failed, and the
 cause is the model, not the harness: asked one short question with a 2000-token budget, it spent
 every token in its reasoning channel (21,977 characters) and returned empty content with
 `finish_reason=length`. The per-task budget ends before it writes a word, so any score would
 measure the budget rather than the model.
+
+## Benchmark: MetriLLM
+
+MetriLLM is a second third-party benchmark with its own CLI (npm `metrillm` 0.2.6) and its own
+leaderboard, which reports **Hardware Fit**, **Quality** and **Global** on a 0-100 scale. Unlike
+PipelineScore it does not run against an OpenAI endpoint: it drives **Ollama or LM Studio** on the
+same machine, so the numbers it publishes describe the hardware that hosts the model.
+
+| profile | client model id | score | status |
+|---|---|---|---|
+| ornith | `ornith-1.5-35b-a3b` | — | not measured |
+| dense | `qwen3.8-27b` | — | not measured |
+| gemma | `gemma-4-26b-a4b` | — | not measured |
+| flash | `qwen3.8-flash-next` | — | not measured |
+| deepseek | `deepseek-v4-flash` | — | not measured |
+
+The MetriLLM runs are **not done**: the host has no Ollama, and this page is written rather than
+left out so the gap is visible. Two concrete blockers were hit on 2026-10-22. Ollama's installer
+downloads a ~1 GB tarball from ollama.com and this machine's link ran at 0.4% after several
+minutes, so the install never completed; and even with Ollama running, the profiles are llama.cpp
+GGUFs (`qwen35moe` with a ROCmFP4 quant), which Ollama would have to import, or a standard Ollama
+model would have to be downloaded at the same slow rate. The scores will be added here when a run
+on this machine exists, not estimated.
+
 
 ## Honest limits
 
