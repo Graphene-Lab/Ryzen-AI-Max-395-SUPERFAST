@@ -1740,13 +1740,15 @@ same machine, so the numbers it publishes describe the hardware that hosts the m
 | flash | `qwen3.8-flash-next` | — | not measured |
 | deepseek | `deepseek-v4-flash` | — | not measured |
 
-The MetriLLM runs are **not done**: the host has no Ollama, and this page is written rather than
-left out so the gap is visible. Two concrete blockers were hit on 2026-10-22. Ollama's installer
-downloads a ~1 GB tarball from ollama.com and this machine's link ran at 0.4% after several
-minutes, so the install never completed; and even with Ollama running, the profiles are llama.cpp
-GGUFs (`qwen35moe` with a ROCmFP4 quant), which Ollama would have to import, or a standard Ollama
-model would have to be downloaded at the same slow rate. The scores will be added here when a run
-on this machine exists, not estimated.
+The MetriLLM runs are **not done**, and the reason is measured rather than assumed. MetriLLM cannot
+drive our gateway: it speaks to Ollama or LM Studio only, so Ollama has to exist on the host
+first. On 2026-10-22 the official installer was retried with a resumable download (`curl -C -`, in
+a retry loop, so an interruption loses nothing): it moved from 3.699.168 to 4.166.432 bytes in
+30 seconds, about **15 KB/s**, which is roughly **20 hours** for the ~1 GB archive. The download is
+left running; the scores go in this table only when a run on this machine exists, never estimated.
+The model side needs no download: the GGUF already in `~/ornith-models` can be imported with a
+`Modelfile` (`FROM <path>.gguf`), so once Ollama is installed the import is local.
+
 
 
 ## Honest limits
