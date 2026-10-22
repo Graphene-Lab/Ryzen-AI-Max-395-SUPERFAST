@@ -1755,6 +1755,24 @@ left running; the scores go in this table only when a run on this machine exists
 The model side needs no download: the GGUF already in `~/ornith-models` can be imported with a
 `Modelfile` (`FROM <path>.gguf`), so once Ollama is installed the import is local.
 
+## Benchmark: assbench
+
+assbench is a third-party benchmark whose task is a single hard deliverable: one self-contained
+HTML file that renders an interactive 3D anatomical model inside a 400 x 400 container, with orbit,
+a poke deformation that behaves like tissue, and no external asset except a pinned Three.js. There
+is no numeric score. What is compared is the file each model produced from the same prompt, so the
+deliverables are published here and can be opened in a browser.
+
+The runs of 2026-10-22 used Qwen Code on a Windows PC against the model served by the host, one
+profile loaded at a time, the same prompt word for word, `--approval-mode yolo`, and Windows
+`cmd.exe` as the shell. Each profile worked in its own empty directory, so the single HTML file it
+left behind is the whole output. `deepseek` is not included: its reasoning channel consumes the
+answer budget before it writes anything, as measured in the PipelineScore section.
+
+<!-- assbench:start -->
+The results are published by a script as soon as the runs finish.
+<!-- assbench:end -->
+
 
 
 ## Honest limits
