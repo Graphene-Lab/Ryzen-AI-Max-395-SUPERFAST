@@ -1701,6 +1701,11 @@ The run of 2026-10-21 was driven from the Windows PC against the host over the L
 `--no-submit`, so nothing was published to the public leaderboard. The CLI prints a hardware
 warning during a run: it describes the Windows PC, not the host. One seed per profile.
 
+The four scores were all taken from a cold start, one profile loaded at a time. A warm-up control
+run on ornith — switch, three short calls until the latency settled, then the run — reproduced the
+same three task failures and scored 89.7 against 89.3, so those failures are not a cold-cache or
+network artefact.
+
 | profile | client model id | score | tier |
 |---|---|---|---|
 | ornith | `ornith-1.5-35b-a3b` | **89.3** | DRIP |
