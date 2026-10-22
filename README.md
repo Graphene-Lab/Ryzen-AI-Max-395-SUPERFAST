@@ -1266,7 +1266,13 @@ The flash unit that ships today has none of these knobs: its settings are the
 flags in `deploy/profiles/superfast-flash-vk.service` (`-c 262144`, `-ub 128`,
 `--parallel 1`, `-ctk q8_0 -ctv q8_0 -fa on`,
 `--ple-disk --ple-cache-mib 4096`, the MTP flags), and the
-engine sizes everything else itself. To go back to the halogen engine, copy
+engine sizes everything else itself. Those four flags were added on 2026-10-21
+after the engine died of GPU memory exhaustion, and they were measured twice:
+they take the footprint from 97.2 to 81.1 GB of GTT for the same 262144-token
+window, and they do **not** cost quality. Served with the previous settings —
+four slots, ubatch 512, an f16 cache — the same model scored **80.7** on
+PipelineScore against **83.8** with the flags in place (2026-10-22, one run
+each). To go back to the halogen engine, copy
 `~/.config/systemd/user/superfast-flash.service.halogen` over
 `superfast-flash.service` (and restore its `override.conf.halogen` if vision
 was on), then `systemctl --user daemon-reload && superfast-switch use flash`.
