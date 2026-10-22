@@ -26,7 +26,10 @@ reaches it any more. Its settings are command-line flags in the unit:
 `--ple-cache-mib 4096` (block cache), `-ngl 999` (all layers on the GPU),
 `--no-mmap` (required with `--ple-disk`), `-c 262144`, `-ub 128` (physical
 batch), `--parallel 1` (one slot), `-ctk q8_0 -ctv q8_0 -fa on` (quantized KV
-cache, which requires flash attention),
+cache, which requires flash attention; the four flags together hold the same
+262144-token window in 81.1 GB of GTT instead of 97.2 GB and cost no quality —
+83.8 on PipelineScore against 80.7 with the older settings, measured
+2026-10-22),
 `--spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6` (MTP
 speculation), and `--alias qwen3.8-flash-next`. The quant ships no vision
 projector, so the profile starts text only; `superfast-switch vision on` adds
