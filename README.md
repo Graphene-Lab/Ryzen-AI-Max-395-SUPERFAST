@@ -1688,6 +1688,33 @@ responsibility.
 
 ---
 
+## Benchmark: PipelineScore
+
+PipelineScore is a third-party benchmark run with its own CLI (`@pipelinescore/cli` 0.5.0). It
+has 34 deterministic tasks in four families — writing code that must pass unit tests, emitting
+JSON tool calls, answering reasoning questions exactly, and extracting facts from short
+documents — and each task is scored by its own checker, not by a judge model, into a 0-100
+composite with a tier band. It compares quality, not speed.
+
+The run of 2026-10-21 was driven from the Windows PC against the host over the LAN
+(`--provider local`, endpoint the gateway on `:8741`), one profile loaded at a time, with
+`--no-submit`, so nothing was published to the public leaderboard. The CLI prints a hardware
+warning during a run: it describes the Windows PC, not the host. One seed per profile.
+
+| profile | client model id | score | tier |
+|---|---|---|---|
+| ornith | `ornith-1.5-35b-a3b` | **89.3** | DRIP |
+| dense | `qwen3.8-27b` | 85.8 | MAINLINE |
+| gemma | `gemma-4-26b-a4b` | 81.1 | MAINLINE |
+| flash | `qwen3.8-flash-next` | 76.9 | MAINLINE |
+| deepseek | `deepseek-v4-flash` | not scored | — |
+
+`deepseek-v4-flash` is absent on purpose. Its run returned 0.0 with all 34 tasks failed, and the
+cause is the model, not the harness: asked one short question with a 2000-token budget, it spent
+every token in its reasoning channel (21,977 characters) and returned empty content with
+`finish_reason=length`. The per-task budget ends before it writes a word, so any score would
+measure the budget rather than the model.
+
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
