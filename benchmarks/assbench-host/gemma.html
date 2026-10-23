@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #e0e0e0;
+        }
+        #container {
+            width: 400px;
+            height: 400px;
+            position: relative;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        /**
+         * Configuration and Constants
+         */
+        const CONTAINER_SIZE = 400;
+        const SKIN_COLOR = 0xffdbac; 
+        const SWIMWEAR_COLOR = 0x222222;
+
+        const SPRING_K = 25.0;
+        const DAMPING = 0.4;
+        const DT = 1/60;
+
+        class ModelApp {
+            constructor() {
+                this.container = document.getElementById('container');
+                this.initScene();
+                this.initLights();
+                this.createModel();
+                this.initInteractions();
+                this.animate();
+                
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+
+            initScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0xe0e0e0);
+
+                this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+                this.camera.position.set(0, 1, 5);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(CONTAINER_SIZE, CONTAINER_SIZE);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.container.appendChild(this.renderer.domElement);
+
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableZoom = false;
+                this.controls.enablePan = false;
+                this.controls.minDistance = 2;
+                this.controls.maxDistance = 8;
+                this.controls.target.set(0, 0, 0);
+            }
+
+            initLights() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+                dirLight.position.set(5, 10, 5);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 1024;
+                dirLight.shadow.mapSize.height = 1024;
+                this.scene.add(dirLight);
+
+                const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+                fillLight.position.set(-5, 0, 2);
+                this.scene.add(fillLight);
+            }
+
+            createModel() {
+                this.group = new THREE.Group();
+                this.scene.add(this.group);
+
+                this.skinMaterial = new THREE.MeshPhysicalMaterial({
+                    color: SKIN_COLOR,
+                    roughness: 0.4,
+                    metalness: 0.0,
+                    clearcoat: 0.1,
+                    clearcoatRoughness: 0.1,
+                    sheen: 0.2,
+                    sheenColor: new THREE.Color(0xffe4e1),
+                });
+
+                this.swimwearMaterial = new THREE.MeshStandardMaterial({
+                    color: SWIMWEAR_COLOR,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+
+                this.bodyGeometry = this.generateBodyGeometry();
+                this.bodyMesh = new THREE.Mesh(this.bodyGeometry, this.skinMaterial);
+                this.bodyMesh.castShadow = true;
+                this.bodyMesh.receiveShadow = true;
+                this.group.add(this.bodyMesh);
+
+                this.legGeometry = this.generateLegGeometry();
+                this.leftLeg = new THREE.Mesh(this.legGeometry, this.skinMaterial);
+                this.leftLeg.position.set(-0.4, -1.2, 0);
+                this.leftLeg.castShadow = true;
+                this.leftLeg.receiveShadow = true;
+                this.group.add(this.leftLeg);
+
+                this.rightLeg = new THREE.Mesh(this.legGeometry, this.skinMaterial);
+                this.rightLeg.position.set(0.4, -1.2, 0);
+                this.rightLeg.castShadow = true;
+                this.rightLeg.receiveShadow = true;
+                this.group.add(this.rightLeg);
+
+                this.createSwimwear();
+
+                this.originalPositions = this.bodyGeometry.attributes.position.array.slice();
+                this.originalNormals = this.bodyGeometry.attributes.normal.array.slice();
+                this.deformations = [];
+            }
+
+            generateBodyGeometry() {
+                const segmentsU = 128;
+                const segmentsV = 64;
+                const geometry = new THREE.BufferGeometry();
+                const vertices = [];
+                const indices = [];
+
+                const height = 2.5;
+                const baseRadius = 0.85;
+
+                for (let v = 0; v <= segmentsV; v++) {
+                    const y = (v / segmentsV - 0.5) * height;
+                    const yNorm = (y + height / 2) / height; 
+                    
+                    for (let u = 0; u <= segmentsU; u++) {
+                        const theta = (u / segmentsU) * Math.PI * 2;
+                        let r = baseRadius;
+
+                        if (y > 0.7) {
+                            r *= (1.0 - (y - 0.7) * 0.6);
+                        }
+                        
+                        if (y < 0.5 && y > -1.2) {
+                            const bulge = Math.sin((y + 1.2) / 3.7 * Math.PI) * 0.35;
+                            r += bulge;
+                        }
+
+                        const backAngle = Math.PI;
+                        const angleDiff = Math.abs(theta - backAngle);
+                        const cleftWidth = 0.35;
+                        if (angleDiff < cleftWidth) {
+                            const dent = (cleftWidth - angleDiff) * 0.8;
+                            r -= dent;
+                        }
+
+                        const x = Math.cos(theta) * r;
+                        const z = Math.sin(theta) * r;
+
+                        vertices.push(x, y, z);
+                    }
+                }
+
+                for (let v = 0; v < segmentsV; v++) {
+                    for (let u = 0; u < segmentsU; u++) {
+                        const a = v * (segmentsU + 1) + u;
+                        const b = v * (segmentsU + 1) + (u + 1);
+                        const c = (v + 1) * (segmentsU + 1) + u;
+                        const d = (v + 1) * (segmentsU + 1) + (u + 1);
+                        indices.push(a, b, c);
+                        indices.push(b, d, c);
+                    }
+                }
+
+                geometry.setIndex(indices);
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geometry.computeVertexNormals();
+                return geometry;
+            }
+
+            generateLegGeometry() {
+                const segmentsU = 48;
+                const segmentsV = 32;
+                const geometry = new THREE.BufferGeometry();
+                const vertices = [];
+                const indices = [];
+
+                const height = 1.6;
+                const baseRadius = 0.38;
+
+                for (let v = 0; v <= segmentsV; v++) {
+                    const y = (v / segmentsV - 0.5) * height;
+                    const yNorm = (y + height / 2) / height; 
+                    
+                    for (let u = 0; u <= segmentsU; u++) {
+                        const theta = (u / segmentsU) * Math.PI * 2;
+                        let r = baseRadius * (1.0 - yNorm * 0.4);
+                        
+                        const x = Math.cos(theta) * r;
+                        const z = Math.sin(theta) * r;
+
+                        vertices.push(x, y, z);
+                    }
+                }
+
+                for (let v = 0; v < segmentsV; v++) {
+                    for (let u = 0; u < segmentsU; u++) {
+                        const a = v * (segmentsU + 1) + u;
+                        const b = v * (segmentsU + 1) + (u + 1);
+                        const c = (v + 1) * (segmentsU + 1) + u;
+                        const d = (v + 1) * (segmentsU + 1) + (u + 1);
+                        indices.push(a, b, c);
+                        indices.push(b, d, c);
+                    }
+                }
+
+                geometry.setIndex(indices);
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geometry.computeVertexNormals();
+                return geometry;
+            }
+
+            createSwimwear() {
+                const geometry = new THREE.CylinderGeometry(0.86, 0.86, 0.45, 64, 1, true);
+                geometry.rotateX(Math.PI / 2);
+                geometry.translate(0, -0.2, 0);
+
+                const swimwearMesh = new THREE.Mesh(geometry, this.swimwearMaterial);
+                this.group.add(swimwearMesh);
+            }
+
+            initInteractions() {
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+                this.deformations = [];
+
+                this.renderer.domElement.addEventListener('pointerdown', (event) => {
+                    const rect = this.renderer.domElement.getBoundingClientRect();
+                    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                    this.raycaster.setFromCamera(this.mouse, this.camera);
+                    const intersects = this.raycaster.intersectObject(this.bodyMesh);
+
+                    if (intersects.length > 0) {
+                        const hit = intersects[0];
+                        const localPoint = hit.point.clone().applyMatrix4(this.bodyMesh.matrixWorld.invert());
+                        
+                        this.deformations.push({
+                            point: localPoint,
+                            radius: 0.4,
+                            depth: 0.12, 
+                            velocity: 0
+                        });
+                    }
+                });
+            }
+
+            updatePhysics() {
+                const posAttr = this.bodyGeometry.attributes.position;
+                const positions = posAttr.array;
+                const normals = this.originalNormals;
+
+                for (let i = 0; i < this.deformations.length; i++) {
+                    const def = this.deformations[i];
+                    const springForce = -SPRING_K * def.depth;
+                    const dampingForce = -DAMPING * def.velocity;
+                    def.velocity += (springForce + dampingForce) * DT;
+                    def.depth += def.velocity * DT;
+
+                    if (Math.abs(def.depth) < 0.001 && Math.abs(def.velocity) < 0.001) {
+                        this.deformations.splice(i, 1);
+                        i--;
+                        continue;
+                    }
+                }
+
+                for (let i = 0; i < positions.length; i += 3) {
+                    let dx = 0, dy = 0, dz = 0;
+
+                    for (const def of this.deformations) {
+                        const vx = this.originalPositions[i];
+                        const vy = this.originalPositions[i+1];
+                        const vz = this.originalPositions[i+2];
+
+                        const dist = Math.sqrt(
+                            (vx - def.point.x) ** 2 + 
+                            (vy - def.point.y) ** 2 + 
+                            (vz - def.point.z) ** 2
+                        );
+
+                        if (dist < def.radius) {
+                            const influence = (1.0 - dist / def.radius) ** 2;
+                            const nx = normals[i];
+                            const ny = normals[i+1];
+                            const nz = normals[i+2];
+                            
+                            dx += nx * (-def.depth * influence);
+                            dy += ny * (-def.depth * influence);
+                            dz += nz * (-def.depth * influence);
+                        }
+                    }
+
+                    positions[i] = this.originalPositions[i] + dx;
+                    positions[i+1] = this.originalPositions[i+1] + dy;
+                    positions[i+2] = this.originalPositions[i+2] + dz;
+                }
+
+                posAttr.needsUpdate = true;
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.updatePhysics();
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            onWindowResize() {
+                const width = this.container.clientWidth;
+                const height = this.container.clientHeight;
+                this.camera.aspect = width / height;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(width, height);
+            }
+        }
+
+        new ModelApp();
+    </script>
+</body>
+</html>

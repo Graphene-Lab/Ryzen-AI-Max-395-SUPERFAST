@@ -1788,6 +1788,28 @@ handling in Qwen Code, not at a quality difference between the profiles, so no c
 them is published. The run stays here as a measured negative result: the task is a fair one, and a
 next attempt needs that stream failure understood first.
 
+### On the Fedora host, 2026-10-23
+
+The same prompt was run again on the host itself, to take the network and `cmd.exe` out of the path:
+Qwen Code **0.23.4** (the Windows PC runs 0.25.3), `bash`, endpoint `http://127.0.0.1:8741`, one
+profile loaded at a time with a warm-up before each run, and Playwright with Chromium already
+installed on the machine. One profile out of four delivered a file.
+
+| profile | client model id | exit | deliverable |
+|---|---|---|---|
+| ornith | `ornith-1.5-35b-a3b` | 0 | none: the turn was truncated at the 16,384-token output budget, all spent in reasoning, zero tool calls |
+| flash | `qwen3.8-flash-next` | 0 | none: `run.log` holds only the yolo warning |
+| gemma | `gemma-4-26b-a4b` | 0 | [gemma.html](benchmarks/assbench-host/gemma.html), 13,854 bytes |
+| dense | `halogen-qwen3.8-27b` | 1 | none |
+
+Two facts are worth keeping from this run. The network is not involved: the client talked to
+`localhost`, no Wi-Fi hop, and the host logged no disconnection. And **`exit=0` does not mean the
+work was done**: three of the four runs ended with code 0 and produced nothing, so only the
+presence of the file counts. The ornith case is understood — a model that reasons for 65,965
+characters needs a bigger output budget than 16,384 tokens, which is why the entry was raised to
+32,768 for a later run. The other two were not diagnosed.
+
+
 
 
 ## Honest limits
