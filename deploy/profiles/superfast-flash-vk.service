@@ -12,15 +12,15 @@ ExecStart=/usr/bin/podman run --name superfast-flash-vk --rm -p 127.0.0.1:8731:8
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
   -v __FLASH_DIR__:/models:ro \
-  localhost/superfast-flash-vk:1 \
+  localhost/superfast-vk:patch0012 \
   -m /models/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00001-of-00003.gguf \
   -md /models/Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf \
-  --spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.6 \
+  --spec-type draft-mtp --spec-draft-n-max 6 --spec-draft-p-min 0.75 --spec-draft-p-split 0.10 --spec-draft-ngl all -fit off \
   --host 0.0.0.0 --port 8731 -ngl 999 -c 262144 --no-mmap \
   --ple-disk --ple-cache-mib 4096 --jinja \
-  -ub 128 --parallel 1 -ctk q8_0 -ctv q8_0 -fa on \
+  -ub 128 --parallel 1 -ctk q5_1 -ctv q5_1 -fa on \
   --alias qwen3.8-flash-next --timeout 1800
-# Requires localhost/superfast-flash-vk:1, built from runtime/Dockerfile.vulkan
+# Requires localhost/superfast-vk:patch0012, built from runtime/Dockerfile.vulkan
 # against the ROCmFPX snapshot. The setup script does not build that image yet:
 # on a fresh machine, build it first or keep the halogen unit active.
 #
