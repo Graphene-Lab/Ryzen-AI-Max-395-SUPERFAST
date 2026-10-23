@@ -1746,7 +1746,25 @@ same machine, so the numbers it publishes describe the hardware that hosts the m
 | flash | `qwen3.8-flash-next` | — | not measured |
 | deepseek | `deepseek-v4-flash` | — | not measured |
 
-The MetriLLM runs are **not done**, and the reason is measured rather than assumed. MetriLLM cannot
+The MetriLLM runs are **not done**, and the reason is now measured rather than assumed. Ollama is
+installed on the host (client 0.40.10, server answering 200 on `127.0.0.1:11434`), and importing a
+profile was tried with a `Modelfile`:
+
+```
+FROM /home/user/gemma-models/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf
+$ ollama create gemma-test -f /tmp/MF
+gathering model components
+parsing GGUF
+Error: unsupported tensor "blk.0.attn_k.weight" size overflows
+```
+
+Ollama cannot read the `q4_0_rocmfp4` tensor type, the same reason flash and ornith cannot be
+loaded there, so MetriLLM cannot score the profiles this machine serves. Measuring a standard
+Ollama model instead would answer a different question, so no row is published. The download that
+made this possible was also corrupt once: a resumed transfer reached the exact Content-Length and
+`zstd -t` still answered "Data corruption detected", so it was deleted and fetched again from zero,
+which produced a valid archive.
+ MetriLLM cannot
 drive our gateway: it speaks to Ollama or LM Studio only, so Ollama has to exist on the host
 first. On 2026-10-22 the official installer was retried with a resumable download (`curl -C -`, in
 a retry loop, so an interruption loses nothing): it moved from 3.699.168 to 4.166.432 bytes in
