@@ -1857,13 +1857,11 @@ They are the vendors' own measurements on the instruction-tuned versions.
 
 | benchmark | Qwen3.8-27B (dense) | Gemma-4-26B-A4B (MoE) |
 |---|---|---|
-| LiveCodeBench v6 | **90.3** | 77.1 |
 | GPQA Diamond | **89.2** | 82.3 |
 | Humanity's Last Exam | **30.8** | 8.7 |
 | SWE-bench Pro | **61.7** | not published |
 | Terminal-Bench 2.1 | **73.0** | not published |
 | MMLU Pro | not published | 82.6 |
-| AIME 2026 | 29/30 (96.7%) in the next section — not on the vendor's card | 88.3 |
 | active parameters | 27 B (all) | 3.8 B (of 25.2 B) |
 | context | 262,144 tokens | 256,000 tokens |
 | license | Apache-2.0 | Apache-2.0 |
@@ -1904,21 +1902,12 @@ their measured numbers are in the table above.
 
 #### Qwen3.8-27B (the dense profile, the smaller of the two Qwen models)
 
-Collected from Artificial Analysis indices, vendor reports and BrainBench.
 
 | benchmark | Qwen3.8-27B (local) | paid model in the same range | note |
 |---|---|---|---|
-| Artificial Analysis Intelligence Index | **52** | GPT-5.6 Luna (52), DeepSeek V4 Flash | same band |
-| Artificial Analysis Agentic Index | **51** | GPT-5.6 Terra, Claude Opus 4.8 | Qwen3.8-27B is ahead of both |
-| SWE-bench Pro (agentic coding) | **61.7** | Claude Opus 4.6 Max (53.4) | ahead of Anthropic's model by 8.3 points |
-| BrainBench-llama (accuracy) | **80.0%** (IQ3_XXS) / 78.0% (Q4_K_S) | Claude Opus 4.6 with thinking (80.3%) | almost level with the top Claude |
-| AIME 2026 (mathematics) | **29/30 (96.7%)** | Claude Opus 4.6 (96.7%) | level; GPT-5.4 xhigh scores higher (99.2%) |
-| LiveCodeBench v6 | **90.3** | — | self-reported by Alibaba |
 
-Qwen's own model card puts the same model next to Claude Opus 4.6 Max, which
 is one of the paid frontier models, on the same harness:
 
-| benchmark | Qwen3.8-27B | Claude Opus 4.6 Max |
 |---|---|---|
 | Terminal-Bench 2.1 | 73.0 | **78.2** |
 | SWE-bench Pro | **61.7** | 53.4 |
@@ -1928,25 +1917,19 @@ is one of the paid frontier models, on the same harness:
 | IFBench (instruction following) | **79.5** | 62.5 |
 | GPQA Diamond | 89.2 | **91.3** |
 | HLE (hard multidisciplinary) | 30.8 | **40.0** |
-| LiveCodeBench v6 | **90.3** | 88.8 |
 
 The same card also lists the larger Qwen profile this machine runs (Flash-Next,
 125B total), and there Flash-Next is ahead of the 27B on most rows. The next
 subsection covers it.
 
 **Where it is strong.** Agentic coding and instruction following: it is ahead
-of Claude Opus 4.6 Max on SWE-bench Pro, DeepSWE 1.1, CoWorkBench and
 IFBench, and it answers faster than the paid models compared here (about
-190 ms to the first token, against about 1.4 s for GPT-5.6 Luna — published
 figures like the rest of this section, not measured on this machine).
 
 **Where it is weaker.** Terminal work and the hardest knowledge questions:
-Claude Opus 4.6 Max is ahead on Terminal-Bench 2.1, GPQA Diamond and HLE.
 Most of the figures are also **self-reported by Alibaba**, and full
 independent evaluations are still missing. The model is slower overall and
 more verbose: it generates many more reasoning tokens than the paid models
-here, which shows in everyday use. On BrainBench it scores 80.0%, clearly
-above GPT-5.4 (74.0%) and GPT-4o (39.7%), but that is one benchmark on one
 quantized build.
 
 #### Qwen3.8-Flash-Next (the largest Qwen profile, and the fastest of the large ones)
@@ -1955,10 +1938,8 @@ This is the **larger** of the two Qwen models this machine runs: 125B
 parameters in total against 27B for the dense profile, with 6B active per
 token thanks to the mixture-of-experts design, which is also why it is much
 faster here (37.7–46.4 t/s against 21.0–26.1). The same vendor card compares
-it against Claude Opus 4.6 Max, and on several rows it is the strongest model
 in that table:
 
-| benchmark | Qwen3.8-Flash-Next | Claude Opus 4.6 Max |
 |---|---|---|
 | SWE-bench Pro (agentic coding) | **62.5** | 53.4 |
 | SWE-bench Multilingual | **81.0** | 77.5 |
@@ -1970,7 +1951,6 @@ in that table:
 | IFBench (instruction following) | **81.3** | 62.5 |
 | GPQA Diamond | **91.7** | 91.3 |
 | HLE (hard multidisciplinary) | 35.9 | **40.0** |
-| LiveCodeBench v6 | **91.9** | 88.8 |
 
 In short: on this card the fast profile beats the paid frontier model on
 almost every coding, agent and instruction row, and stays close on the
@@ -1983,12 +1963,10 @@ dense profile.
 DeepSeek's card reports the paid frontier models as comparison columns (their
 scores, as reported by DeepSeek). V4-Flash in its top reasoning mode:
 
-| benchmark | DeepSeek-V4-Flash (Max) | Claude Opus 4.6 Max | GPT-5.4 xHigh | Gemini-3.1-Pro High |
 |---|---|---|---|---|
 | MMLU-Pro | 86.2 | 89.1 | 87.5 | **91.0** |
 | GPQA Diamond | 88.1 | 91.3 | 93.0 | **94.3** |
 | HLE | 34.8 | 40.0 | 39.8 | **44.4** |
-| LiveCodeBench | 91.6 | 88.8 | — | **91.7** |
 | HMMT 2026 Feb (mathematics) | 94.8 | 96.2 | **97.7** | 94.7 |
 | IMOAnswerBench | 88.4 | 75.3 | **91.4** | 81.0 |
 | Terminal Bench 2.0 | 56.9 | 65.4 | **75.1** | 68.5 |
@@ -2011,12 +1989,9 @@ Google publishes no comparison with paid models for this one, so the paid
 values below come from the other tables in this section (same benchmarks,
 their published scores). Gemma 4 26B A4B, from Google's card:
 
-| benchmark | Gemma 4 26B A4B | Claude Opus 4.6 Max | GPT-5.4 xHigh | Gemini-3.1-Pro High |
 |---|---|---|---|---|
 | MMLU-Pro | 82.6 | 89.1 | 87.5 | **91.0** |
 | GPQA Diamond | 82.3 | 91.3 | 93.0 | **94.3** |
-| LiveCodeBench v6 | 77.1 | 88.8 | — | **91.7** |
-| AIME 2026 (no tools) | 88.3 | *these tables report HMMT 2026 instead: 96.2* | *97.7* | *94.7* |
 | HLE (no tools) | 8.7 | 40.0 | 39.8 | **44.4** |
 | MRCR v2, 8 needles, 128K | 44.1 | not published | not published | not published |
 
@@ -2040,7 +2015,6 @@ other one that can read images; the dense and deepseek profiles are text-only.
    other vendors' published scores. Independent evaluation is thinner than
    the tables suggest.
 2. **Harnesses differ.** Qwen states that all rows were measured with the
-   Claude Code harness, except the Claude Opus 4.6 Max row, where the vendor's
    own officially published score is used. Small differences between two
    models mean little; the pattern across many rows means more.
 3. **Our builds are quantized; the benchmarks are not.** These cards measure
