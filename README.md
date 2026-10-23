@@ -1,4 +1,4 @@
-# SUPERFAST
+﻿# SUPERFAST
 
 [![Install: one script, unattended](https://img.shields.io/badge/install-one%20script%2C%20unattended-2ea44f?logo=linux&logoColor=white)](#install-a-machine)
 [![Target: Fedora 44, Strix Halo gfx1151](https://img.shields.io/badge/target-Fedora%2044%20%C2%B7%20gfx1151-8957e5)](#install-a-machine)
@@ -1731,48 +1731,6 @@ every token in its reasoning channel (21,977 characters) and returned empty cont
 `finish_reason=length`. The per-task budget ends before it writes a word, so any score would
 measure the budget rather than the model.
 
-## Benchmark: MetriLLM
-
-MetriLLM is a second third-party benchmark with its own CLI (npm `metrillm` 0.2.6) and its own
-leaderboard, which reports **Hardware Fit**, **Quality** and **Global** on a 0-100 scale. Unlike
-PipelineScore it does not run against an OpenAI endpoint: it drives **Ollama or LM Studio** on the
-same machine, so the numbers it publishes describe the hardware that hosts the model.
-
-| profile | client model id | score | status |
-|---|---|---|---|
-| ornith | `ornith-1.5-35b-a3b` | — | not measured |
-| dense | `qwen3.8-27b` | — | not measured |
-| gemma | `gemma-4-26b-a4b` | — | not measured |
-| flash | `qwen3.8-flash-next` | — | not measured |
-| deepseek | `deepseek-v4-flash` | — | not measured |
-
-The MetriLLM runs are **not done**, and the reason is now measured rather than assumed. Ollama is
-installed on the host (client 0.40.10, server answering 200 on `127.0.0.1:11434`), and importing a
-profile was tried with a `Modelfile`:
-
-```
-FROM /home/user/gemma-models/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf
-$ ollama create gemma-test -f /tmp/MF
-gathering model components
-parsing GGUF
-Error: unsupported tensor "blk.0.attn_k.weight" size overflows
-```
-
-Ollama cannot read the `q4_0_rocmfp4` tensor type, the same reason flash and ornith cannot be
-loaded there, so MetriLLM cannot score the profiles this machine serves. Measuring a standard
-Ollama model instead would answer a different question, so no row is published. The download that
-made this possible was also corrupt once: a resumed transfer reached the exact Content-Length and
-`zstd -t` still answered "Data corruption detected", so it was deleted and fetched again from zero,
-which produced a valid archive.
- MetriLLM cannot
-drive our gateway: it speaks to Ollama or LM Studio only, so Ollama has to exist on the host
-first. On 2026-10-22 the official installer was retried with a resumable download (`curl -C -`, in
-a retry loop, so an interruption loses nothing): it moved from 3.699.168 to 4.166.432 bytes in
-30 seconds, about **15 KB/s**, which is roughly **20 hours** for the ~1 GB archive. The download is
-left running; the scores go in this table only when a run on this machine exists, never estimated.
-The model side needs no download: the GGUF already in `~/ornith-models` can be imported with a
-`Modelfile` (`FROM <path>.gguf`), so once Ollama is installed the import is local.
-
 ## Benchmark: assbench
 
 assbench is a third-party benchmark whose task is a single hard deliverable: one self-contained
@@ -1943,45 +1901,6 @@ What this means for the machine: the dense and Flash-Next Qwen profiles are
 the quality-first defaults, running on the purpose-built engine at high
 precision. Gemma-4 and DeepSeek-V4-Flash are the speed-oriented profiles;
 their measured numbers are in the table above.
-
-### How they compare with paid models (public numbers)
-
-The five models this machine runs are open-weight models, and their vendors
-publish benchmark tables that include paid frontier models as columns. Those
-tables are the best available answer to the question this project cares
-about: how close is a model you run yourself to a model you rent. **The
-numbers in this section are not measured by us.** They come from the vendors'
-own model cards and from published comparisons, and they carry the caveats at
-the end of the section.
-
-First, the sizes, because these profiles are not the same class of model:
-
-| profile | total parameters | active per token | context | speed here | role |
-|---|---|---|---|---|---|
-| DeepSeek-V4-Flash | **284B** | 13B | 1M | 11.2 t/s | the largest model the machine runs |
-| Qwen3.8-Flash-Next | **125B** model, plus a 51B n-gram drafter table (not weights) | 6B | 262K | 37.7–46.4 t/s | the largest Qwen profile, and the fastest of the large ones |
-| Qwen3.8-27B dense | **27B** | 27B (all) | 262K | 21.0–26.1 t/s | the precision-first profile |
-| Gemma-4-26B-A4B | 25.2B | 3.8B | 256K | 57.3–57.6 t/s | the small, fast profile |
-
-*The context column is what the model supports. The window this project
-actually serves is in
-[What each profile ships](#what-each-profile-ships-context-tokens-tools) — for
-DeepSeek it is 512K rather than 1M, and the reason is measured.*
-
-So the Qwen model compared most often, the dense 27B, is the **smaller** of
-the two Qwen profiles this machine runs: beside it there is Flash-Next, a
-125B-parameter mixture-of-experts that is both larger and, on Qwen's own
-card, ahead on most rows. Both are compared below.
-
-**Read the model names carefully.** These families have similar names, and
-the numbers below are for the exact models this machine runs:
-
-| what we run here | what it is | what it is **not** |
-|---|---|---|
-| Qwen3.8-27B dense (~6.3 bpw) | Qwen3.8-27B, dense, 27B parameters, 262K context | not Qwen3.6-27B, not Qwen3.7-Plus |
-| Qwen3.8-Flash-Next w4b | Qwen3.8-Flash-Next MoE, 125B total / 6B active, 512 experts, 262K context | not Qwen3-Flash, not another "Flash" |
-| DeepSeek-V4-Flash 2.58 bpw | DeepSeek-V4-Flash, 284B total / 13B active, 1M context | not DeepSeek-V3.2, not DeepSeek-V4-Pro |
-| Gemma-4-26B-A4B ROCmFP4 | Gemma 4 26B A4B MoE, 25.2B total / 3.8B active, 128 experts (8 active), 256K context | not Gemma 3 27B, not Gemma 4 31B |
 
 #### Qwen3.8-27B (the dense profile, the smaller of the two Qwen models)
 
