@@ -1778,6 +1778,16 @@ answer budget before it writes anything, as measured in the PipelineScore sectio
 | dense | `halogen-qwen3.8-27b` | no file produced | - |
 <!-- assbench:end -->
 
+**No profile delivered a file, and the cause was the harness, not the models.** The two runs that
+worked for a long time — ornith (58 minutes) and gemma (110 minutes) — both died with
+`[API Error: Model stream ended after a tool result without visible progress]`, after repeated
+`Retrying provider attempt` lines. The other two, flash and dense, exited with code 0 after about
+19 minutes leaving only the 715-byte yolo warning in their logs: a clean exit that proves nothing
+was produced. Two different models failing the same way after a tool result points at the stream
+handling in Qwen Code, not at a quality difference between the profiles, so no comparison between
+them is published. The run stays here as a measured negative result: the task is a fair one, and a
+next attempt needs that stream failure understood first.
+
 
 
 ## Honest limits
