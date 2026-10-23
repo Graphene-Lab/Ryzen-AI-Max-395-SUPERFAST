@@ -1775,7 +1775,7 @@ answer budget before it writes anything, as measured in the PipelineScore sectio
 | ornith | `ornith-1.5-35b-a3b` | no file produced | - |
 | flash | `qwen3.8-flash-next` | no file produced | - |
 | gemma | `gemma-4-26b-a4b` | no file produced | - |
-| dense | `qwen3.8-27b` | no file produced | - |
+| dense | `halogen-qwen3.8-27b` | no file produced | - |
 <!-- assbench:end -->
 
 
