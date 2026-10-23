@@ -1805,9 +1805,12 @@ installed on the machine. One profile out of four delivered a file.
 Two facts are worth keeping from this run. The network is not involved: the client talked to
 `localhost`, no Wi-Fi hop, and the host logged no disconnection. And **`exit=0` does not mean the
 work was done**: three of the four runs ended with code 0 and produced nothing, so only the
-presence of the file counts. The ornith case is understood — a model that reasons for 65,965
-characters needs a bigger output budget than 16,384 tokens, which is why the entry was raised to
-32,768 for a later run. The other two were not diagnosed.
+presence of the file counts. The ornith case was chased to the end — a model that reasons for 65,965
+characters needs a bigger output budget than 16,384 tokens, so the entry was raised to 32,768 and
+the run repeated. It spent the whole new budget the same way: 139 KB of transcript, zero tool
+calls, no file. The budget was therefore not the cause, and the remaining lever is the server-side
+`--reasoning off` described in [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md), which our engine build
+does not expose. The flash and dense runs were not diagnosed.
 
 
 
