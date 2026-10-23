@@ -1812,6 +1812,26 @@ calls, no file. The budget was therefore not the cause, and the remaining lever 
 `--reasoning off` described in [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md), which our engine build
 does not expose. The flash and dense runs were not diagnosed.
 
+### With the patch 0012 engine, 2026-10-23
+
+The engine was rebuilt (`localhost/superfast-vk:patch0012`) so that `--reasoning` and
+`--spec-mtp-strict-qwen` exist, then the same prompt was run again on ornith and flash with
+`--reasoning off`. Neither delivered a file, but the failure changed shape.
+
+| profile | exit | deliverable | what happened |
+|---|---|---|---|
+| ornith | 1 | none | the thinking was off (`chat template, thinking = 0`) and the model finally used tools: **400 calls** (436 `run_shell_command`, 184 `edit`, 118 `read_file`). The harness loop detector stopped the run, `turn_tool_call_cap`, because the calls repeated |
+| flash | 0 | none | exit 0 with no file, as before |
+
+The two problems are now separate. `--reasoning off` fixes the reasoning runaway and is the right
+setting for this model: before it, the same prompt produced zero tool calls. What remains is
+repetition — 400 tool calls in one turn and still no deliverable means the model loops on
+edit-and-verify. `model.maxToolCallsPerTurn` is not set in `~/.qwen/settings.json`, so the adaptive
+default is what stopped it, and raising that cap would hide the loop instead of curing it. The next
+measurement for ornith belongs on the agentic axis, issues closed per cycle, not on another
+benchmark.
+
+
 
 
 
