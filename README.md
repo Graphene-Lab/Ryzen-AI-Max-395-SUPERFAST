@@ -1844,8 +1844,10 @@ What this does and does not say:
   are comparable to each other, not to the paper's.
 - **A one-task difference is not a ranking.** 3 of 12 against 2 of 11 is inside the noise of a
   sample this small, and the tasks all come from a single repository with its own conventions.
-- **flash is not measurable in this harness.** It spent all 8,192 completion tokens on reasoning
-  and returned no code, 477 s for the first task; that is a setting problem, not a C# judgement.
+- **flash has no score yet, and the cap was ours.** The runner asked for 8,192 completion tokens;
+  flash used every one of them on reasoning and never wrote the file (477 s for the first task,
+  33,800 characters saved, all of it reasoning). The profile's window is 262,144 tokens, so the
+  test that settles it is a higher cap, or `--reasoning off`, not a verdict on the model.
 - **The harness needed two environment fixes**, both outside the measurement: the .NET 8 SDK was
   installed with `dotnet-install.sh` instead of the Google Drive tarball the repository fetches, and
   `HUSKY=0` disables the pre-commit hook target that fails without the husky tool.
