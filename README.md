@@ -1145,11 +1145,10 @@ size, and the size the engine chose for itself held about four conversations of
 131,072 tokens. Longer conversations went past it, so the engine had to forget
 one conversation in order to keep another, and the conversation that was
 forgotten read its whole history again. That is the pause of a minute or more.
-The halogen engine that served flash until 2026-10-20 reserved room for four
-long conversations, so all of them stayed remembered and a turn answered in
-about a second. Flash now runs llama.cpp, which keeps the cached prefix in its
-single slot (`--parallel 1`); the pool tuning below belongs to that retired
-engine, which is kept as the rollback.
+Flash moved to llama.cpp on 2026-10-20 and keeps the cached prefix in its single
+slot (`--parallel 1`). The pool tuning below belongs to the halogen engine,
+which no longer serves flash but still serves the dense profile, where those
+knobs are live.
 
 The details, for anyone who wants to tune it:
 
@@ -1186,9 +1185,9 @@ seconds — about 1,260 tokens per second, against the 709 the timeout table
 below uses as the slowest measured prefill. The next line is the same
 conversation one turn later, once its KV was back in place: 4.65 seconds.
 
-The halogen-flash unit shipped a pool of 655,360 positions,
-`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`
-before it was retired.
+The halogen unit shipped a pool of 655,360 positions,
+`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32` while
+it served flash; the dense profile reads the same knobs today.
 Measured on the reference host with four agents asking **at the same time**,
 each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
 positions of KV between them, more than the 524,288 the image's pool holds and
@@ -1272,10 +1271,8 @@ they take the footprint from 97.2 to 81.1 GB of GTT for the same 262144-token
 window, and they do **not** cost quality. Served with the previous settings —
 four slots, ubatch 512, an f16 cache — the same model scored **80.7** on
 PipelineScore against **83.8** with the flags in place (2026-10-22, one run
-each). To go back to the halogen engine, copy
-`~/.config/systemd/user/superfast-flash.service.halogen` over
-`superfast-flash.service` (and restore its `override.conf.halogen` if vision
-was on), then `systemctl --user daemon-reload && superfast-switch use flash`.
+each). The halogen engine is no longer part of the flash profile: the templates ship
+llama.cpp for flash, and the installer never installs a halogen flash unit.
 
 #### What a real fleet looks like on this pool
 
@@ -1405,10 +1402,9 @@ admission — it shows up as conversations that lose their prompt cache. A
 
 #### The pool also decides whether the engine starts
 
-This section, like the pool tuning above, describes the halogen engine that
-served flash until 2026-10-20 and is kept as its rollback. The Vulkan unit
-that serves flash today has no pool: it is one llama.cpp process with
-`-c 262144` and `--parallel 1`.
+This section, like the pool tuning above, describes the halogen engine, which
+serves the dense profile. The Vulkan unit that serves flash has no pool: it is
+one llama.cpp process with `-c 262144` and `--parallel 1`.
 
 With `HALOGEN_KV_POOL_POSITIONS=1048576` and `HALOGEN_KV_POOL_FIT=0` — what this
 project shipped until 2026-09-13 — **the engine stops starting on a host that
@@ -1619,7 +1615,7 @@ so they are connected to this repository and appear in its Packages section.
 | artifact | registry | what it is |
 |---|---|---|
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
-| `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1` | GHCR (ours) | llama.cpp with the Vulkan backend, `--ple-disk` and MTP: the engine that serves the flash profile. The installer pulls it and tags it `localhost/superfast-flash-vk:1`, and builds it only if the pull fails |
+| `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1` | GHCR (ours) | llama.cpp with the Vulkan backend, `--ple-disk` and MTP. It predates patch 0012, so `deploy/build-vulkan-image.sh` tries it, checks that its `llama-server` knows `--reasoning`, and otherwise builds `localhost/superfast-vk:patch0012` from the `qwen4exp-conv-ring-slots` branch |
 | `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:image-1` | GHCR (ours) | `sd-server` from stable-diffusion.cpp: the optional image generator on `:8733`. Pulled the same way, with the build from `runtime/Dockerfile.sd` as fallback |
 | `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
 | `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
