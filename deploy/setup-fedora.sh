@@ -779,11 +779,18 @@ phase_profiles() {
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
-    for pair in "gemma gemma" "ornith ornith" "flash superfast-flash-vk"; do
+    # flash is installed as superfast-flash.service, because unit_for maps the
+    # profile to that name. Its drop-in must therefore be named after that unit
+    # too: staging it as superfast-flash-vk.service.conf would leave
+    # 'superfast-switch vision on' unable to find it, and the active copy would
+    # land in a .d/ directory of a unit that does not exist.
+    for pair in "gemma gemma" "ornith ornith" "flash superfast-flash"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
         vtmpl="$PROF_DIR/${vu}.service.vision.conf"
+        # The flash template keeps the name it had before the unit was renamed.
+        [ "$vp" = "flash" ] && vtmpl="$PROF_DIR/superfast-flash-vk.service.vision.conf"
         if [ -f "$vtmpl" ]; then
             install_template "$vtmpl" "$HOME/.config/superfast/vision/${vu}.service.conf"
         else
