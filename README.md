@@ -1811,6 +1811,28 @@ benchmark.
 
 
 
+## Benchmark: MultiPL-E (C#)
+
+[`nuprl/MultiPL-E`](https://huggingface.co/datasets/nuprl/MultiPL-E) config `humaneval-cs` ships 158
+C# problems, each a function to complete plus the tests that check it. The model receives the prompt
+with the signature and the opening brace already written and returns the body only; the file compiled
+is prompt + body + tests, built and run with `dotnet` against a net8.0 console project, and a failed
+`Debug.Assert` is a failed task. The generation budget is 512 tokens, the one the benchmark itself
+uses to score pass@1, so the numbers mean the same thing for every profile. No cap of ours is
+involved and no judge: the tests decide.
+
+| profile | tasks | passed | compiled | pass % | median s/task | total |
+|---|---|---|---|---|---|---|
+| ornith-1.5-35b-a3b | 158 | 70 | 116 | 44 | 3.2 | 0h08m |
+| gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.4 | 0h27m |
+| halogen-qwen3.8-27b | in corso | 12 | 19 | — | 10.6 | — |
+| qwen3.8-flash-next | in coda | — | — | — | — | — |
+
+The last two rows are still running in `mpe-full.service` on the Windows PC; they are left without a
+score instead of an estimate. Ornith is the only profile that both finishes fast and compiles most of
+what it writes; gemma spends its 512 tokens reasoning and returns a body that does not compile four
+times out of five.
+
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
