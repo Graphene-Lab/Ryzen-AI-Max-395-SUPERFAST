@@ -2269,6 +2269,14 @@ While a request is running it answers `409` with `active`, `requested`,
 reload and drops the prompt cache. `pinned` is the default, and a manual `use`
 returns to it.
 
+A profile that is still reading its weights is not treated as a failure: the
+gateway holds the request while the unit reports `loading` and forwards it as
+soon as `/health` answers 200, so a client that starts at the same moment as
+the engine waits tens of seconds instead of receiving `409` and giving up. The
+wait is bounded (`SUPERFAST_GATEWAY_LOAD_WAIT`, 600 s by default) and it only
+applies while a unit is actually starting; an engine that is down still gets
+the `409` at once, because there is nothing to wait for.
+
 `superfast-switch image on` starts the optional image generator (Ideogram 4
 through `sd-server`) on its own loopback port, `8733`, beside whichever profile
 is loaded — it is not a profile and never takes `8731`. It starts only when the

@@ -42,6 +42,14 @@ CONF = os.path.expanduser("~/.config/superfast")
 MAX_BODY = 16 * 1024 * 1024
 SWITCH_TIMEOUT = 900
 
+# A profile that is starting is not a failure: ornith reads its weights in about
+# 25 s and the ple-disk flash takes minutes with its drafter, so a request that
+# arrives in that window waits here instead of being told 409. The bound keeps a
+# truly stuck engine from holding a client for ever; after it the client gets the
+# same refusal it would have had at once.
+LOAD_WAIT = 600
+LOAD_POLL = 3
+
 SWITCH = "superfast-switch"
 MODE_FILE = os.path.join(CONF, "mode")
 SWITCH_LOG = os.path.join(CONF, "switch.log")
@@ -274,6 +282,32 @@ def switch_to(active, target):
         os.close(fd)
 
 
+def is_loading(profile):
+    """True while that profile's unit is up but its engine does not answer yet."""
+    try:
+        r = cli(["loading", profile], 20)
+    except Exception:
+        return False
+    return r.returncode == 0 and r.stdout.strip() == "1"
+
+
+def wait_for_load(target):
+    """Wait while `target` is starting, then return the state read afterwards."""
+    started = time.time()
+    while time.time() - started < LOAD_WAIT:
+        time.sleep(LOAD_POLL)
+        state = engine_state()
+        if state.get("responds") == "1" and state.get("active") == target:
+            log("waited %.0fs for %s to load" % (time.time() - started, target))
+            return state
+        if not is_loading(target):
+            break
+    state = engine_state()
+    log("gave up waiting for %s after %.0fs (active=%s responds=%s)"
+        % (target, time.time() - started, state.get("active"), state.get("responds")))
+    return state
+
+
 def decide(body):
     """None to forward the request, or the payload to answer with."""
     try:
@@ -287,10 +321,20 @@ def decide(body):
         return None
     state = engine_state()
     active = state.get("active", "none")
-    if target == active:
+    if target == active and state.get("responds") == "1":
         return None
-    if state.get("responds") != "1":
-        return refuse(active, target, "unavailable", 60)
+    if state.get("responds") != "1" or target == active:
+        # A profile that is starting is not a failure: the request waits for the
+        # load and then goes through, which is what a client that does not retry
+        # needs. An engine that is down gets the refusal at once, because there
+        # is nothing to wait for.
+        if not is_loading(target):
+            return refuse(active, target, "unavailable", 60)
+        state = wait_for_load(target)
+        active = state.get("active", active)
+        if state.get("responds") != "1" or target != active:
+            return refuse(active, target, "unavailable", 30)
+        return None
     if state.get("busy") != "0" or state.get("queued", "0") != "0":
         return refuse(active, target, "in_use", 40)
     return switch_to(active, target)

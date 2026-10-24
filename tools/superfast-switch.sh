@@ -139,6 +139,16 @@ unit_active() {
     [ "$(unit_state "$1")" = "active" ]
 }
 
+# Seconds since the unit entered its active state. The monotonic clock is used
+# so no timezone or DST arithmetic can move the answer.
+unit_age() { # unit
+    local enter now
+    enter="$(systemctl --user show -p ActiveEnterTimestampMonotonic --value "$1" 2>/dev/null)"
+    case "$enter" in ''|0) echo 0; return ;; esac
+    now="$(awk '{printf "%d", $1 * 1000000}' /proc/uptime)"
+    [ "$now" -gt "$enter" ] && echo "$(( (now - enter) / 1000000 ))" || echo 0
+}
+
 # The DeepSeek profile needs both shared-memory kernel parameters. Without
 # them llama.cpp cannot allocate the model and stops with "cudaMalloc failed:
 # out of memory" (see the README). The marker file is an escape hatch for a
@@ -397,6 +407,29 @@ cmd_state() {
         esac
     fi
     echo "active=${p:-none} responds=$resp busy=$busy queued=$queued"
+}
+
+# `loading <profile>` prints 1 while that profile's engine is starting: the unit
+# is up but /health does not answer 200 yet. The gateway uses this to tell a load
+# in progress (wait for it) from an engine that is down (refuse at once).
+# The age cap is what keeps a wedged container — unit active forever, never
+# listening — from looking like a load for good.
+LOADING_MAX="${SUPERFAST_LOADING_MAX:-900}"
+cmd_loading() {
+    local p="${1:-}" st
+    [ -n "${UNIT[$p]:-}" ] || { echo 0; return 0; }
+    st="$(unit_state "${UNIT[$p]}")"
+    case "$st" in
+        activating) echo 1; return 0 ;;
+        active) ;;
+        *) echo 0; return 0 ;;
+    esac
+    http_ok && { echo 0; return 0; }
+    if [ "$(unit_age "${UNIT[$p]}")" -lt "$LOADING_MAX" ]; then
+        echo 1
+    else
+        echo 0
+    fi
 }
 
 # Wait for /health to answer 200, up to `rounds` tries of 5 s each.
@@ -739,6 +772,7 @@ case "${1:-}" in
     orchestrator|orch) cmd_orchestrator "${2:-status}" ;;
     mode)   cmd_mode "${2:-status}" ;;
     state)  cmd_state ;;
+    loading) cmd_loading "${2:-}" ;;
     profile-for) cmd_profile_for "${2:-}" || exit 1 ;;
     api-key|apikey) cmd_apikey "${2:-status}" "${3:-}" ;;
     vision) cmd_vision "${2:-status}" ;;
