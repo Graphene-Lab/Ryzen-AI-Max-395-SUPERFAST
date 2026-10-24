@@ -1811,47 +1811,6 @@ benchmark.
 
 
 
-## Benchmark: RepoClassBench (C#)
-
-[`microsoft/RepoClassBench`](https://github.com/microsoft/RepoClassBench) is the class-level C#
-benchmark of the ICML DMLR 2024 workshop paper
-[`arXiv 2405.01573`](https://arxiv.org/abs/2405.01573). The shipped data has 61 tasks (the README
-says 60), all from one repository, `StabilityMatrix`: the model receives a prose description of a
-class and has to write the whole file, and the repository's own xUnit tests decide. The harness
-copies the repository, blanks the test sources in the working copy, injects the generated file and
-runs `dotnet build` followed by `dotnet test`. No human and no LLM judge takes part: the score is
-the tests.
-
-Protocol used for every profile, identical: .NET 8 SDK installed in WSL2 Debian, `HUSKY=0` (the
-repository's hook target is not part of the benchmark), a prompt carrying the class description plus
-the `using` directives of the other files in the same folder, and at most two attempts, the second
-with the compiler errors fed back. One profile at a time through the gateway.
-
-| profile | tasks | passed | compiled | pass % |
-|---|---|---|---|---|
-| ornith-1.5-35b-a3b | 12 | 3 | 3 | 25 |
-| gemma-4-26b-a4b | 11 | 2 | 2 | 18 |
-| halogen-qwen3.8-27b | 11 | 2 | 2 | 18 |
-| qwen3.8-flash-next | 1 | 0 | 0 | not measurable |
-
-Ornith also ran the whole set: **3 passed of 61** (4.9%). The complete per-task records are in
-[`benchmarks/repoclassbench/`](benchmarks/repoclassbench/).
-
-What this does and does not say:
-
-- **Only 12 tasks per profile.** The full set costs gemma and dense about 3.5 minutes per task, so
-  61 × 4 would have run past the night; the subset is the same for every profile and the numbers
-  are comparable to each other, not to the paper's.
-- **A one-task difference is not a ranking.** 3 of 12 against 2 of 11 is inside the noise of a
-  sample this small, and the tasks all come from a single repository with its own conventions.
-- **flash has no score yet, and the cap was ours.** The runner asked for 8,192 completion tokens;
-  flash used every one of them on reasoning and never wrote the file (477 s for the first task,
-  33,800 characters saved, all of it reasoning). The profile's window is 262,144 tokens, so the
-  test that settles it is a higher cap, or `--reasoning off`, not a verdict on the model.
-- **The harness needed two environment fixes**, both outside the measurement: the .NET 8 SDK was
-  installed with `dotnet-install.sh` instead of the Google Drive tarball the repository fetches, and
-  `HUSKY=0` disables the pre-commit hook target that fails without the husky tool.
-
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
