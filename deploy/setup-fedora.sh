@@ -949,6 +949,75 @@ EOF
     log "console tools: superfast-tui (menu), superfast-switch (CLI)"
 }
 
+# The reference machine runs the patch 0012 engine with a known set of flags.
+# A fresh install is checked against it here, so a drift shows up at the end of
+# the setup instead of the first time a client asks for a profile.
+phase_verify() {
+    local fails=0 spec profile want unit cmdline t
+    log "== verify: the machine matches the reference configuration =="
+
+    for spec in "ornith:--reasoning off" "ornith:--spec-mtp-strict-qwen" \
+                "ornith:--timeout 0" \
+                "flash:-ctk q5_1" "flash:-ctv q5_1" \
+                "flash:--spec-draft-p-split 0.10" "flash:--ple-disk" \
+                "flash:--timeout 0" \
+                "gemma:--parallel 1" "gemma:--timeout 0"; do
+        profile="${spec%%:*}"; want="${spec#*:}"
+        case "$profile" in
+            ornith) unit="ornith.service" ;;
+            flash)  unit="superfast-flash.service" ;;
+            gemma)  unit="gemma.service" ;;
+            *) continue ;;
+        esac
+        cmdline="$(XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user show "$unit" -p ExecStart --value 2>/dev/null)"
+        if [ -z "$cmdline" ]; then
+            log "  FAIL $unit is not installed"
+            fails=$((fails + 1))
+        elif printf '%s' "$cmdline" | grep -qF -- "$want"; then
+            log "  ok   $unit carries $want"
+        else
+            log "  FAIL $unit lacks $want"
+            fails=$((fails + 1))
+        fi
+    done
+
+    for t in amdgpu.gttsize=118784 ttm.pages_limit=31457280; do
+        if grep -q -- "$t" /proc/cmdline; then
+            log "  ok   kernel command line carries $t"
+        else
+            log "  FAIL kernel command line lacks $t (it applies after the reboot)"
+            fails=$((fails + 1))
+        fi
+    done
+
+    if podman image exists localhost/superfast-vk:patch0012 2>/dev/null; then
+        if podman run --rm --entrypoint /usr/bin/llama-server \
+             localhost/superfast-vk:patch0012 --help 2>&1 | grep -q -- '--reasoning'; then
+            log "  ok   engine has --reasoning (patch 0012)"
+        else
+            log "  FAIL engine has no --reasoning: rebuild it with VULKAN_FLASH=1"
+            fails=$((fails + 1))
+        fi
+    else
+        log "  --   engine image absent (VULKAN_FLASH=0, or the build failed)"
+    fi
+
+    for t in superfast-switch superfast-tui superfast-recover superfast-gateway.py; do
+        if [ -f "$HOME/.local/bin/$t" ]; then
+            log "  ok   tool $t"
+        else
+            log "  FAIL tool $t is missing"
+            fails=$((fails + 1))
+        fi
+    done
+
+    if [ "$fails" -eq 0 ]; then
+        log "verify: this machine matches the reference"
+    else
+        log "verify: $fails difference(s) from the reference, listed above"
+    fi
+}
+
 # Run one phase, unless ONLY names a different set of phases.
 run_phase() {
     local name="$1"
@@ -1030,6 +1099,7 @@ main() {
     run_phase engine
     run_phase profiles
     run_phase ui_auth
+    run_phase verify
     log "setup complete — profiles prepared: $PROFILES"
     log "start one with: superfast-switch use dense|flash|gemma|deepseek"
     log "control: superfast-tui (terminal) or the GNOME extension"

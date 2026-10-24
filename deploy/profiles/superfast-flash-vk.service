@@ -19,10 +19,11 @@ ExecStart=/usr/bin/podman run --name superfast-flash-vk --rm -p 127.0.0.1:8731:8
   --host 0.0.0.0 --port 8731 -ngl 999 -c 262144 --no-mmap \
   --ple-disk --ple-cache-mib 4096 --jinja \
   -ub 128 --parallel 1 -ctk q5_1 -ctv q5_1 -fa on \
-  --alias qwen3.8-flash-next --timeout 1800
+  --alias qwen3.8-flash-next --timeout 0
 # Requires localhost/superfast-vk:patch0012, built from runtime/Dockerfile.vulkan
-# against the ROCmFPX snapshot. The setup script does not build that image yet:
-# on a fresh machine, build it first or keep the halogen unit active.
+# against the ROCmFPX snapshot on the qwen4exp-conv-ring-slots branch. The setup
+# script builds it (deploy/build-vulkan-image.sh) and refuses an image whose
+# llama-server does not know --reasoning, because ornith needs that flag too.
 #
 # The 3.82 GB MTP head is a separate file (Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf),
 # downloaded with the shards. draft-n-max 6 is the value the strix-nebulosa lab

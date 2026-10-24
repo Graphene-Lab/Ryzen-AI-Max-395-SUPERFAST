@@ -15,7 +15,7 @@ ExecStart=/usr/bin/podman run --name ornith-server --rm -p 127.0.0.1:8731:8731 \
   -m /models/Ornith-1.5-35B-A3B-ROCmFP4.gguf \
   --host 0.0.0.0 --port 8731 \
   -c 262144 --alias ornith-1.5-35b-a3b --jinja \
-  --parallel 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --reasoning off --spec-mtp-strict-qwen --timeout 1800
+  --parallel 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --reasoning off --spec-mtp-strict-qwen --timeout 0
 # The MTP head is inside the weights file (a nextn block), and the model card
 # measures ~101 tok/s with it. It is NOT enabled here on purpose: the flag pair
 #   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6
@@ -24,8 +24,10 @@ ExecStart=/usr/bin/podman run --name ornith-server --rm -p 127.0.0.1:8731:8731 \
 # head does exactly that, see deploy/profiles/README.md). Add the pair here
 # after the first measured run, and record the number in the README.
 #
-# --timeout is the socket timeout, 600 s by default. A cold 262K prefill sends
-# nothing for minutes, so the default is a silent cut; 1800 s matches gemma.
+# --timeout is llama.cpp's socket read/write timeout, 600 s by default; 0 turns
+# it off. A cold 262K prefill plus a long decode can outlast any fixed value,
+# and the client and the gateway both bound the request themselves, so the
+# reference machine runs without one.
 ExecStop=/usr/bin/podman stop -t 30 ornith-server
 # podman run exits 143/137 when the container is stopped: accept those, so a
 # profile switch does not leave the unit in the "failed" state.
