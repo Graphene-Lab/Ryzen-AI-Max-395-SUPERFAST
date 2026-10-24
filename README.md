@@ -1824,14 +1824,26 @@ involved and no judge: the tests decide.
 | profile | tasks | passed | compiled | pass % | median s/task | total |
 |---|---|---|---|---|---|---|
 | ornith-1.5-35b-a3b | 158 | 70 | 116 | 44 | 3.2 | 0h08m |
-| gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.4 | 0h27m |
-| halogen-qwen3.8-27b | in corso | 12 | 19 | — | 10.6 | — |
-| qwen3.8-flash-next | in coda | — | — | — | — | — |
+| qwen3.8-flash-next | 158 | 51 | 79 | 32 | 13.6 | 0h34m |
+| halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
+| gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
 
-The last two rows are still running in `mpe-full.service` on the Windows PC; they are left without a
-score instead of an estimate. Ornith is the only profile that both finishes fast and compiles most of
-what it writes; gemma spends its 512 tokens reasoning and returns a body that does not compile four
-times out of five.
+Ornith is first on both counts: it passes the most tasks and it is four times faster per task than
+the other three. Flash is second and compiles far more of what it writes (79 against 25-28), so the
+gap between flash and the other two is wider than the pass rate alone suggests. Gemma and dense are
+within one task of each other and are not separated by this benchmark.
+
+What this does and does not say:
+
+- **Function level, not repository level.** 158 single functions from the HumanEval lineage, no
+  cross-file context, no tools. It ranks the profiles on code synthesis, not on agentic work; for
+  that axis the README reports PipelineScore (ornith 90,1 · dense 85,9 · flash 83,8 · gemma 81,2).
+- **512 tokens is the benchmark's budget, not a saving measure.** Without a cap the same models
+  generate tens of thousands of tokens for one body and never stop; gemma reached 900 s on the first
+  task, so the run could not finish.
+- **The median hides the tail.** Ornith's median is 3,2 s, but a few tasks cost minutes.
+- **The harness is ours.** The assembly was proved with a hand-written body (build and run both 0)
+  before any model ran; the per-task records live in `benchmarks/multipl-e/`.
 
 ## Honest limits
 
