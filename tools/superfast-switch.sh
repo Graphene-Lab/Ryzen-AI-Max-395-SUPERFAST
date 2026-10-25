@@ -638,7 +638,7 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 declare -A PROFILE_GB=(
-    [dense]=36 [flash]=51 [gemma]=23 [ornith]=25 [ornith122]=80 [small]=2
+    [dense]=36 [flash]=51 [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
 )
 # flash is 50.3 GB by measurement since the ple-disk engine (it was 98 with
 # halogen, the number this table carried until 2026-10-20). Keeping the old
