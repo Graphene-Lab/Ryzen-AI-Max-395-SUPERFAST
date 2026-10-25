@@ -16,7 +16,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const PROFILES = ['dense', 'flash', 'gemma', 'deepseek', 'ornith'];
+const PROFILES = ['dense', 'flash', 'gemma', 'ornith', 'ornith122'];
 
 // How to start a terminal that runs a command. The first two use the
 // `program -- command args` form, the last two the older `-e` form. Ptyxis is

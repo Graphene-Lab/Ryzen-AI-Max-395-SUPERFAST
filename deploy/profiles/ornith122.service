@@ -1,0 +1,39 @@
+[Unit]
+Description=SUPERFAST ornith122 profile (Ornith-1.5-122B MXFP4, port 8731)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=__XDG__
+ExecStartPre=-/usr/bin/podman rm -f ornith122-server
+ExecStart=/usr/bin/podman run --name ornith122-server --rm -p 127.0.0.1:8731:8731 \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __ORNITH122_DIR__:/models:ro \
+  localhost/superfast-vk:patch0012 \
+  -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
+  --host 0.0.0.0 --port 8731 \
+  -c 262144 --alias ornith-1.5-122b --jinja \
+  --parallel 1 --timeout 0 \
+  --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --spec-mtp-strict-qwen
+# --reasoning is deliberately absent: this model answers with the thinking on.
+# Measured on 2026-10-25 with PipelineScore, turning it off cost 10.5 points
+# (73.5 against 84.0) because the code tasks dropped from 100 to 75. The 35B
+# Ornith keeps the flag for its tool-call loop; this one does not need it.
+#
+# The MTP head is inside the weights file. On this engine it accepts 85% of the
+# drafts and lifts decode from 20.4 to 24.6 t/s in prose (27.6 in code).
+#
+# --timeout 0 disables llama.cpp's socket read/write timeout, as in the other
+# large profile: a cold 262K prefill can outlast any fixed value and the
+# gateway bounds the request itself.
+ExecStop=/usr/bin/podman stop -t 30 ornith122-server
+# podman run exits 143/137 when the container is stopped: accept those, so a
+# profile switch does not leave the unit in the "failed" state.
+SuccessExitStatus=137 143
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target

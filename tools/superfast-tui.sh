@@ -23,7 +23,7 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 SW="${SUPERFAST_SWITCH:-$HOME/.local/bin/superfast-switch}"
 CONF_DIR="${SUPERFAST_CONF_DIR:-$HOME/.config/superfast}"
 CONF="$CONF_DIR/superfast.conf"
-PROFILES="dense flash gemma deepseek ornith"
+PROFILES="dense flash gemma ornith ornith122"
 
 mkdir -p "$CONF_DIR"
 [ -f "$CONF" ] || cat > "$CONF" <<'EOF'

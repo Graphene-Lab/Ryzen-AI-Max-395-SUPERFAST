@@ -98,8 +98,9 @@ FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.
 REBOOT_NEEDED=0
 # The reference machine runs all five profiles plus the small orchestrator;
 # a fresh install creates the same machine unless PROFILES says otherwise.
-PROFILES="${PROFILES:-dense flash gemma deepseek ornith small}"
+PROFILES="${PROFILES:-dense flash gemma ornith ornith122 small}"
 MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
+MODELS_DIR_ORNITH122="${MODELS_DIR_ORNITH122:-$HOME/ornith122-models}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
 MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"
 MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
@@ -258,6 +259,7 @@ profile_dir() {
         deepseek) echo "$MODELS_DIR_DEEPSEEK" ;;
         small)    echo "$MODELS_DIR_SMALL" ;;
         ornith)   echo "$MODELS_DIR_ORNITH" ;;
+        ornith122) echo "$MODELS_DIR_ORNITH122" ;;
     esac
 }
 
@@ -286,6 +288,7 @@ install_template() { # src dst
         -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
         -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
+        -e "s#__ORNITH122_DIR__#$MODELS_DIR_ORNITH122#g" \
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
         -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" \
         -e "s#__DENSE_IMAGE__#$IMAGE#g" \
@@ -736,7 +739,7 @@ phase_profiles() {
         fi
     fi
 
-    for p in flash gemma deepseek ornith small; do
+    for p in flash gemma ornith ornith122 small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
         tpl="$PROF_DIR/$u.service"

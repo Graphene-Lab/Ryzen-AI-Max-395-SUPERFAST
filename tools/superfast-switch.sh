@@ -14,7 +14,7 @@
 # Usage:
 #   superfast-switch status
 #   superfast-switch list
-#   superfast-switch use dense|flash|gemma|deepseek|ornith
+#   superfast-switch use dense|flash|gemma|ornith|ornith122
 #   superfast-switch mode pinned|auto
 #   superfast-switch state
 #   superfast-switch profile-for <model-id>
@@ -47,8 +47,8 @@ PORT="${SUPERFAST_PORT:-8731}"
 HEALTH="http://127.0.0.1:${PORT}/health"
 FLASH_DIR="${SUPERFAST_FLASH_DIR:-$HOME/superfast-flash}"
 GEMMA_DIR="${SUPERFAST_GEMMA_DIR:-$HOME/gemma-models}"
-DEEPSEEK_DIR="${SUPERFAST_DEEPSEEK_DIR:-$HOME/deepseek-models}"
 ORNITH_DIR="${SUPERFAST_ORNITH_DIR:-$HOME/ornith-models}"
+ORNITH122_DIR="${SUPERFAST_ORNITH122_DIR:-$HOME/ornith122-models}"
 API_KEY_FILE="${SUPERFAST_KEY_FILE:-$HOME/.config/superfast/api.key}"
 GATEWAY_UNIT="${SUPERFAST_GATEWAY_UNIT:-superfast-gateway.service}"
 GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
@@ -58,17 +58,17 @@ declare -A UNIT=(
     [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
     [flash]="${SUPERFAST_FLASH_UNIT:-superfast-flash.service}"
     [gemma]="${SUPERFAST_GEMMA_UNIT:-gemma.service}"
-    [deepseek]="${SUPERFAST_DEEPSEEK_UNIT:-deepseek.service}"
     [ornith]="${SUPERFAST_ORNITH_UNIT:-ornith.service}"
+    [ornith122]="${SUPERFAST_ORNITH122_UNIT:-ornith122.service}"
 )
 declare -A LABEL=(
     [dense]="Qwen3.8-27B dense (halogen)"
     [flash]="Qwen3.8-Flash-Next MoE (halogen-flash)"
     [gemma]="Gemma-4-26B-A4B ROCmFP4 (llama-rocmfpx)"
-    [deepseek]="DeepSeek-V4-Flash ROCmFPX (llama-rocmfpx)"
     [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
+    [ornith122]="Ornith-1.5-122B MXFP4 (llama.cpp Vulkan)"
 )
-PROFILES=(dense flash gemma deepseek ornith)
+PROFILES=(dense flash gemma ornith ornith122)
 
 # Served model id -> profile, for `mode auto`. These are the ids the units
 # answer with (`--alias`, or HALOGEN's own model name), never the display
@@ -78,8 +78,8 @@ declare -A ALIAS=(
     [qwen3.8-27b]=dense
     [qwen3.8-flash-next]=flash
     [gemma-4-26b-a4b]=gemma
-    [deepseek-v4-flash]=deepseek
     [ornith-1.5-35b-a3b]=ornith
+    [ornith-1.5-122b]=ornith122
 )
 
 # The orchestrator is a small, fast model that runs ALONGSIDE a profile (it is
@@ -149,18 +149,6 @@ unit_age() { # unit
     [ "$now" -gt "$enter" ] && echo "$(( (now - enter) / 1000000 ))" || echo 0
 }
 
-# The DeepSeek profile needs both shared-memory kernel parameters. Without
-# them llama.cpp cannot allocate the model and stops with "cudaMalloc failed:
-# out of memory" (see the README). The marker file is an escape hatch for a
-# machine where those limits are raised some other way.
-deepseek_memory_ok() {
-    if grep -q 'amdgpu.gttsize=' /proc/cmdline 2>/dev/null \
-       && grep -q 'ttm.pages_limit=' /proc/cmdline 2>/dev/null; then
-        return 0
-    fi
-    [ -f "$DEEPSEEK_DIR/.deepseek-enabled" ]
-}
-
 weights_ready() {
     case "$1" in
         dense) return 0 ;;
@@ -169,10 +157,10 @@ weights_ready() {
                 && [ -f "$FLASH_DIR/.download-complete" ] ;;
         gemma)
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
-        deepseek)
-            [ -f "$DEEPSEEK_DIR/.download-complete" ] && deepseek_memory_ok ;;
         ornith)
             [ -f "$ORNITH_DIR/.download-complete" ] ;;
+        ornith122)
+            [ -f "$ORNITH122_DIR/.download-complete" ] ;;
     esac
 }
 
@@ -539,14 +527,7 @@ cmd_use() {
     [ -n "${UNIT[$p]:-}" ] || { echo "unknown profile '$p'" >&2; exit 2; }
     if ! weights_ready "$p"; then
         echo "profile '$p': not ready on this machine yet." >&2
-        if [ "$p" = "deepseek" ] && [ -f "$DEEPSEEK_DIR/.download-complete" ]; then
-            echo "  Its weights are complete, but the shared-memory kernel parameters are not set," >&2
-            echo "  so llama.cpp cannot allocate the model. As root, then reboot:" >&2
-            echo "    grubby --update-kernel=ALL --args=\"amdgpu.gttsize=118784 ttm.pages_limit=31457280\"" >&2
-            echo "  (or create $DEEPSEEK_DIR/.deepseek-enabled to skip this check)" >&2
-        else
-            echo "  Its weights are missing or still downloading; see the log in its directory." >&2
-        fi
+        echo "  Its weights are missing or still downloading; see the log in its directory." >&2
         exit 3
     fi
     for q in "${PROFILES[@]}"; do
@@ -657,7 +638,7 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 declare -A PROFILE_GB=(
-    [dense]=36 [flash]=51 [gemma]=23 [deepseek]=102 [ornith]=25 [small]=2
+    [dense]=36 [flash]=51 [gemma]=23 [ornith]=25 [ornith122]=80 [small]=2
 )
 # flash is 50.3 GB by measurement since the ple-disk engine (it was 98 with
 # halogen, the number this table carried until 2026-10-20). Keeping the old

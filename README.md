@@ -56,7 +56,7 @@ What it needs, and what it does:
 | | |
 |---|---|
 | a host | Fedora Workstation 44 on AMD Strix Halo (gfx1151). It refuses anything else, and it refuses to run as root |
-| disk | about 300 GB: the checkpoints are 35.9 GB (dense), 128.9 GB (Flash-Next, three files), 14.9 GB (Gemma-4), 102.4 GB (DeepSeek-V4-Flash) and 1.0 GB (the two orchestrator models), plus about 18 GB of container images |
+| disk | about 267 GB: the checkpoints are 35.9 GB (dense), 128.9 GB (Flash-Next, three files), 14.9 GB (Gemma-4), 69.7 GB (Ornith-1.5-122B) and 1.0 GB (the two orchestrator models), plus about 18 GB of container images |
 | time | hours, not minutes: the dense checkpoint alone is 35.9 GB, and the extra profiles download in the background |
 | sudo | used for the packages, the firewall, the SSH service, the groups and the kernel parameters. Passwordless for `UNATTENDED=1` |
 | it sets up | the packages and the kernel parameters, SSH, the firewalld rules (8741 open, 8731 closed), the model downloads with SHA-256 verification, the container images, the systemd units per profile, the switch, the terminal menu, the GNOME panel, and the API-key gateway |
@@ -105,7 +105,7 @@ machine except where a row says otherwise:
 | `dense` | **Qwen3.8-27B**, dense, 27B parameters | `qwen3.8-27b` | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
 | `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | `qwen3.8-flash-next` | — / 33.0 t/s | the default: llama.cpp on Vulkan with the 35.8 GB PLE table read from disk, 50.3 GB resident; vision with `--mmproj` |
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
-| `deepseek` | **DeepSeek-V4-Flash**, 284B in total, 13B active | `deepseek-v4-flash` | 11.2 / 11.3 t/s | a 512K context window and hard mathematics |
+| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 24.6 / 27.6 t/s | the largest model that still fits with room to spare: 262K context, MTP inside the weights, vision when the projector is added |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -160,20 +160,22 @@ every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
 machine runs five profiles, in order of size: the dense Qwen3.8-27B (27B
 parameters), the Qwen3.8-Flash-Next mixture-of-experts (125B in total, 6B
-active per token), Ornith-1.5-35B-A3B (35B in total, 3B active), Gemma-4
-(25.2B) and DeepSeek-V4-Flash (284B in total) — that is, up to a
-284-billion-parameter model running entirely on the machine.
+active per token), Ornith-1.5-122B (122B in total, ~6B active), Ornith-1.5-35B-A3B
+(35B in total, 3B active) and Gemma-4 (25.2B) — that is, up to a
+125-billion-parameter model running entirely on the machine.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
+
+DeepSeek-V4-Flash is no longer installed by default. Its 284B checkpoint and
+its unit are still in the repository as an optional extra for a 512K window;
+the measured comparison that moved it out of the fifth slot is in
+[`## Benchmark: PipelineScore`](#benchmark-pipelinescore).
 
 **Why one model at a time.** This is a deliberate architecture choice, not a
 limitation. A single model gets the whole machine: all of the unified memory
 for its weights and its KV cache, and therefore the largest context window the
-machine can hold for it — 262,144 tokens for the Qwen and Gemma profiles, and
-512K for DeepSeek-V4-Flash, which is half of its 1M because the full 1M leaves
-too little memory to stay stable (see
-[What each profile ships](#what-each-profile-ships-context-tokens-tools)).
-Running two large models at once would mean
+machine can hold for it — 262,144 tokens for the Qwen, Ornith and Gemma
+profiles. Running two large models at once would mean
 splitting that memory, and the first thing to shrink would be the context
 window — which is exactly what an agent needs most: a long window that holds
 the conversation, the tool definitions, and the files being worked on. That is
@@ -456,10 +458,11 @@ own directory, and the setup script and the switch know those paths.
 | dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
 | flash | `~/superfast-flash` | `Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-0000{1,2,3}-of-00003.gguf` (44,944,112,832 + 44,688,348,576 + 16,121,070,688), `Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf` (3,818,043,776) and the vision projector `mmproj-Flash-Next-F16.gguf` (904,004,000) — 110,475,579,872 in total | HF `pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF`, `pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF` and `unsloth/Qwen3.8-Flash-Next-GGUF` (projector) |
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
-| deepseek | `~/deepseek-models` | `…ROCMFPx-Strix-Lean-2.58bpw.gguf` (91,547,243,200), `…DSpark-draft-4.25bpw.gguf` (10,897,111,840) | HF `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` |
+| ornith122 | `~/ornith122-models` | `Ornith-1.5-122B.MXFP4_MOE.gguf` (69,666,316,288) | HF `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
 
-Two things the table does not show. The `gemma` and `deepseek` profiles need a
+Two things the table does not show. The `gemma` profile (and the optional
+`deepseek`) needs a
 second runtime, the GGUF server image built from
 [`runtime/`](runtime/README.md). It is published by this repository's workflow
 as `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1`, and the setup
@@ -639,7 +642,17 @@ note):
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Qwen3.8-Flash-Next MoE, Q4_0 ROCmFP4 GGUF | llama.cpp (Vulkan) | — | **33.0 t/s** | — |
-| DeepSeek-V4-Flash ROCmFPX (~2.6 bpw) | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
+| Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw) | llama.cpp (Vulkan) | **24.6 t/s** | **27.6 t/s** | ~460 t/s |
+| DeepSeek-V4-Flash ROCmFPX (~2.6 bpw), optional | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
+
+Ornith-1.5-122B is the fifth profile and it is a mixture-of-experts: 122B in
+total, about 6B active per token, 48 layers of which 12 use full attention.
+The checkpoint is 69.7 GB, so it leaves about 40 GB of the 124 GB pool for the
+KV cache and the rest of the system; 77 GB was resident with a 262,144-token
+window. The MTP head is inside the weights and the engine accepted 85% of its
+drafts, which is where the 24.6 and 27.6 come from: without speculation the
+same run measured 20.4 in prose and 20.6 in code. Its prefill is slower than
+the 35B's, so the first long prompt is the cost of the extra parameters.
 
 DeepSeek-V4-Flash deserves its own note, because it needed a change to the
 machine itself. The weights are 91.5 GB, of which the runtime wanted about
@@ -671,7 +684,7 @@ With both applied, the profile loads. Keeping part of the model's experts on
 the CPU was tried as a workaround before that, and it failed even for
 sub-gigabyte buffers under memory pressure, so it is not a substitute here.
 
-The DeepSeek profile is the slowest of the five, and that is expected: it has
+The optional DeepSeek profile is the slowest of the profiles, and that is expected: it has
 about 284 billion parameters, and even at ~2.6 bits per weight it reads far
 more per token than the 27B dense model. The row above is a 192-token budget;
 measured with a 512-token budget it is 10.9 t/s on prose and 11.0 on code, so
@@ -1708,8 +1721,8 @@ calls until the latency settled, and was submitted (`--user andrea-bruno`). One 
 | dense | `qwen3.8-27b` | 85.9 | MAINLINE |
 | flash | `qwen3.8-flash-next` | 83.8 | MAINLINE |
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
+| ornith122 | `ornith-1.5-122b` | **84.0** | MAINLINE |
 | flash, original memory flags | `qwen3.8-flash-next` | 80.7 | MAINLINE |
-| deepseek | `deepseek-v4-flash` | not scored | — |
 
 The row *flash, original memory flags* is the same model served with the settings this project
 used before 2026-10-21 — four KV slots, ubatch 512, an f16 cache — instead of one slot, ubatch
@@ -1721,91 +1734,11 @@ Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8,
 flash 76.9) are kept as a note: they measured the same models under the same conditions and agree
 in ranking, but they were not published.
 
-`deepseek-v4-flash` is absent on purpose. Its run returned 0.0 with all 34 tasks failed, and the
-cause is the model, not the harness: asked one short question with a 2000-token budget, it spent
-every token in its reasoning channel (21,977 characters) and returned empty content with
-`finish_reason=length`. The per-task budget ends before it writes a word, so any score would
-measure the budget rather than the model.
-
-## Benchmark: assbench
-
-assbench is a third-party benchmark whose task is a single hard deliverable: one self-contained
-HTML file that renders an interactive 3D anatomical model inside a 400 x 400 container, with orbit,
-a poke deformation that behaves like tissue, and no external asset except a pinned Three.js. There
-is no numeric score. What is compared is the file each model produced from the same prompt, so the
-deliverables are published here and can be opened in a browser.
-
-The runs of 2026-10-22 used Qwen Code on a Windows PC against the model served by the host, one
-profile loaded at a time, the same prompt word for word, `--approval-mode yolo`, and Windows
-`cmd.exe` as the shell. Each profile worked in its own empty directory, so the single HTML file it
-left behind is the whole output. `deepseek` is not included: its reasoning channel consumes the
-answer budget before it writes anything, as measured in the PipelineScore section.
-
-<!-- assbench:start -->
-| profile | client model id | deliverable | bytes |
-|---|---|---|---|
-| ornith | `ornith-1.5-35b-a3b` | no file produced | - |
-| flash | `qwen3.8-flash-next` | no file produced | - |
-| gemma | `gemma-4-26b-a4b` | no file produced | - |
-| dense | `halogen-qwen3.8-27b` | no file produced | - |
-<!-- assbench:end -->
-
-**No profile delivered a file, and the cause was the harness, not the models.** The two runs that
-worked for a long time — ornith (58 minutes) and gemma (110 minutes) — both died with
-`[API Error: Model stream ended after a tool result without visible progress]`, after repeated
-`Retrying provider attempt` lines. The other two, flash and dense, exited with code 0 after about
-19 minutes leaving only the 715-byte yolo warning in their logs: a clean exit that proves nothing
-was produced. Two different models failing the same way after a tool result points at the stream
-handling in Qwen Code, not at a quality difference between the profiles, so no comparison between
-them is published. The run stays here as a measured negative result: the task is a fair one, and a
-next attempt needs that stream failure understood first.
-
-### On the Fedora host, 2026-10-23
-
-The same prompt was run again on the host itself, to take the network and `cmd.exe` out of the path:
-Qwen Code **0.23.4** (the Windows PC runs 0.25.3), `bash`, endpoint `http://127.0.0.1:8741`, one
-profile loaded at a time with a warm-up before each run, and Playwright with Chromium already
-installed on the machine. One profile out of four delivered a file.
-
-| profile | client model id | exit | deliverable |
-|---|---|---|---|
-| ornith | `ornith-1.5-35b-a3b` | 0 | none: the turn was truncated at the 16,384-token output budget, all spent in reasoning, zero tool calls |
-| flash | `qwen3.8-flash-next` | 0 | none: `run.log` holds only the yolo warning |
-| gemma | `gemma-4-26b-a4b` | 0 | [gemma.html](benchmarks/assbench-host/gemma.html), 13,854 bytes |
-| dense | `halogen-qwen3.8-27b` | 1 | none |
-
-Two facts are worth keeping from this run. The network is not involved: the client talked to
-`localhost`, no Wi-Fi hop, and the host logged no disconnection. And **`exit=0` does not mean the
-work was done**: three of the four runs ended with code 0 and produced nothing, so only the
-presence of the file counts. The ornith case was chased to the end — a model that reasons for 65,965
-characters needs a bigger output budget than 16,384 tokens, so the entry was raised to 32,768 and
-the run repeated. It spent the whole new budget the same way: 139 KB of transcript, zero tool
-calls, no file. The budget was therefore not the cause, and the remaining lever is the server-side
-`--reasoning off` described in [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md), which our engine build
-does not expose. The flash and dense runs were not diagnosed.
-
-### With the patch 0012 engine, 2026-10-23
-
-The engine was rebuilt (`localhost/superfast-vk:patch0012`) so that `--reasoning` and
-`--spec-mtp-strict-qwen` exist, then the same prompt was run again on ornith and flash with
-`--reasoning off`. Neither delivered a file, but the failure changed shape.
-
-| profile | exit | deliverable | what happened |
-|---|---|---|---|
-| ornith | 1 | none | the thinking was off (`chat template, thinking = 0`) and the model finally used tools: **400 calls** (436 `run_shell_command`, 184 `edit`, 118 `read_file`). The harness loop detector stopped the run, `turn_tool_call_cap`, because the calls repeated |
-| flash | 0 | none | exit 0 with no file, as before |
-
-The two problems are now separate. `--reasoning off` fixes the reasoning runaway and is the right
-setting for this model: before it, the same prompt produced zero tool calls. What remains is
-repetition — 400 tool calls in one turn and still no deliverable means the model loops on
-edit-and-verify. `model.maxToolCallsPerTurn` is not set in `~/.qwen/settings.json`, so the adaptive
-default is what stopped it, and raising that cap would hide the loop instead of curing it. The next
-measurement for ornith belongs on the agentic axis, issues closed per cycle, not on another
-benchmark.
-
-
-
-
+The `ornith122` row was measured on 2026-10-25, after the five runs above.
+Its thinking is on, which is how the profile ships: the same run with
+`--reasoning off` scored **73.5** and its code sub-score fell from 100 to 75,
+so the switch costs 10.5 points. The card is
+[67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20).
 
 ## Benchmark: MultiPL-E (C#)
 
@@ -1821,13 +1754,16 @@ involved and no judge: the tests decide.
 |---|---|---|---|---|---|---|
 | ornith-1.5-35b-a3b | 158 | 70 | 116 | 44 | 3.2 | 0h08m |
 | qwen3.8-flash-next | 158 | 51 | 79 | 32 | 13.6 | 0h34m |
+| ornith-1.5-122b | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
 | halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
 | gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
 
-Ornith is first on both counts: it passes the most tasks and it is four times faster per task than
-the other three. Flash is second and compiles far more of what it writes (79 against 25-28), so the
-gap between flash and the other two is wider than the pass rate alone suggests. Gemma and dense are
-within one task of each other and are not separated by this benchmark.
+Ornith-1.5-122B passes the most tasks (72 against 70) but takes 18.4 s per task,
+six times the 35B's median; the 35B compiles far more of what it writes (116
+against 103) and is the fastest by a wide margin. Flash is third on passes and
+second on compiled code, so the gap between flash and the two Qwen-sized models
+is narrower than the pass rate alone suggests. Gemma and dense are within one
+task of each other and are not separated by this benchmark.
 
 What this does and does not say:
 
@@ -1880,9 +1816,8 @@ What this does and does not say:
 ## How good are the models
 
 Quality here is measured on this machine, not quoted. The runs we performed are in
-`## Benchmark: PipelineScore`, `## Benchmark: MultiPL-E (C#)` and
-`## Benchmark: assbench` above, and `docs/MODEL-CARDS.md` collects what the model
-authors say about serving them.
+`## Benchmark: PipelineScore` and `## Benchmark: MultiPL-E (C#)` above, and
+`docs/MODEL-CARDS.md` collects what the model authors say about serving them.
 
 Vendor benchmark tables are deliberately not reproduced: they measure other builds,
 other quantizations and other harnesses, and none of them answers the question that
@@ -2029,7 +1964,7 @@ superfast-switch list            # available profiles
 superfast-switch use dense       # Qwen3.8-27B (halogen engine)
 superfast-switch use flash       # Qwen3.8-Flash-Next MoE
 superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
-superfast-switch use deepseek    # DeepSeek-V4-Flash ROCmFPX
+superfast-switch use ornith122  # Ornith-1.5-122B MXFP4
 superfast-switch mode auto       # let the client's model field pick the profile
 superfast-switch stop            # stop everything
 superfast-switch api-key on      # require the API key from the LAN (:8741)
@@ -2097,7 +2032,7 @@ reference machine:
 | Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
 | Qwen3.8-Flash-Next | 262,144 | ~50 GB | native maximum, served as a GGUF quant on llama.cpp Vulkan with the PLE table on disk |
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
-| DeepSeek-V4-Flash | 524,288 | ~102 GB | half of the model's native 1M, and the largest window that stays stable here — see below |
+| Ornith-1.5-122B | 262,144 | ~77 GB | native maximum; only 12 of its 48 layers use full attention, so the KV cache stays small |
 
 Three properties that matter when a program uses this machine as its model:
 
@@ -2348,7 +2283,7 @@ answer budget:
 | Flash-Next | 245,760 tok @ 709 t/s | 347 s | 435 s | 3,600 s (the engine's queue timeout) | 3,947 s → **4,200,000 ms** | 4,382 s → **6,000,000 ms** |
 | Dense 27B | 245,760 tok @ 528 t/s | 465 s | 780 s | 6,000 s (the engine's queue timeout) | 6,465 s → **7,200,000 ms** | 7,245 s → **9,000,000 ms** |
 | Gemma-4-26B | 229,376 tok @ 1,527 t/s | 150 s | 572 s | 2,888 s (four requests ahead) | 3,038 s → **3,600,000 ms** | 3,610 s → **4,800,000 ms** |
-| DeepSeek-V4-Flash | 507,904 tok @ 163 t/s | 3,116 s | 1,463 s | 4,579 s (one request ahead) | 7,695 s → **8,400,000 ms** | 9,158 s → **10,800,000 ms** |
+| DeepSeek-V4-Flash (optional) | 507,904 tok @ 163 t/s | 3,116 s | 1,463 s | 4,579 s (one request ahead) | 7,695 s → **8,400,000 ms** | 9,158 s → **10,800,000 ms** |
 
 Read the deepseek row as the reason this table exists: 507,904 tokens is 52
 minutes of prefill at 163 tokens per second, and the server says nothing at all
@@ -2411,7 +2346,9 @@ part — and the model looks at it and answers. Vision is **on by default** for
 these two: the setup installs the encoder active, so the machine can already
 read images. Set `VISION_DEFAULT=0` at setup for a text-only machine. Turning
 vision on or off later restarts the profile and costs extra memory. The
-**dense** and **deepseek** profiles have no image encoder and stay text-only.
+**dense** and the optional **deepseek** profiles have no image encoder and
+stay text-only; **ornith122** has one, but its projector is not installed by
+default, so it is text-only until that `mmproj` is added.
 
 ```bash
 superfast-switch vision on     # load the encoder; restarts the profile
