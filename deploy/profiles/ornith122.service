@@ -15,8 +15,12 @@ ExecStart=/usr/bin/podman run --name ornith122-server --rm -p 127.0.0.1:8731:873
   -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
   --host 0.0.0.0 --port 8731 \
   -c 262144 --alias ornith-1.5-122b --jinja \
+  -ctk q8_0 -ctv q8_0 -fa on \
   --parallel 1 --timeout 0 \
   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --spec-mtp-strict-qwen
+# -ctk/-ctv q8_0 is the vendor's KV setting for this model: half the f16 cache
+# (~3 GiB instead of ~6 GiB for the whole 262K window) and the configuration
+# the 2026-10-25 re-measurement was taken with. -fa on is required by it.
 # --reasoning is deliberately absent: this model answers with the thinking on.
 # Measured on 2026-10-25 with PipelineScore, turning it off cost 10.5 points
 # (73.5 against 84.0) because the code tasks dropped from 100 to 75. The 35B

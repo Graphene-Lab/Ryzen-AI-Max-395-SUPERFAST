@@ -105,7 +105,7 @@ machine except where a row says otherwise:
 | `dense` | **Qwen3.8-27B**, dense, 27B parameters | `qwen3.8-27b` | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
 | `flash` | **Qwen3.8-Flash-Next**, mixture-of-experts, 125B in total, 6B active per token | `qwen3.8-flash-next` | — / 33.0 t/s | the default: llama.cpp on Vulkan with the 35.8 GB PLE table read from disk, 50.3 GB resident; vision with `--mmproj` |
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
-| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 24.6 / 27.6 t/s | the largest model that still fits with room to spare: 262K context, MTP inside the weights, vision when the projector is added |
+| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, q8_0 KV, MTP inside the weights, vision when the projector is added |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision at a quarter of the flash's memory |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -642,17 +642,19 @@ note):
 | Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Qwen3.8-Flash-Next MoE, Q4_0 ROCmFP4 GGUF | llama.cpp (Vulkan) | — | **33.0 t/s** | — |
-| Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw) | llama.cpp (Vulkan) | **24.6 t/s** | **27.6 t/s** | ~460 t/s |
+| Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw), q8_0 KV | llama.cpp (Vulkan) | **25.0 t/s** | **28.2 t/s** | ~512 t/s |
 | DeepSeek-V4-Flash ROCmFPX (~2.6 bpw), optional | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
 
 Ornith-1.5-122B is the fifth profile and it is a mixture-of-experts: 122B in
 total, about 6B active per token, 48 layers of which 12 use full attention.
-The checkpoint is 69.7 GB, so it leaves about 40 GB of the 124 GB pool for the
-KV cache and the rest of the system; 77 GB was resident with a 262,144-token
-window. The MTP head is inside the weights and the engine accepted 85% of its
-drafts, which is where the 24.6 and 27.6 come from: without speculation the
-same run measured 20.4 in prose and 20.6 in code. Its prefill is slower than
-the 35B's, so the first long prompt is the cost of the extra parameters.
+The checkpoint is 69.7 GB, so it leaves about 45 GB of the 124 GB pool for the
+KV cache and the rest of the system; 75 GB was resident with a 262,144-token
+window and a q8_0 KV cache (~3 GB for the whole window). The MTP head is
+inside the weights and the engine accepted 85% of its drafts, which is where
+the 25.0 and 28.2 come from: without speculation the same run measured 20.4 in
+prose and 20.6 in code. With the f16 KV cache the same profile measured 24.6
+and 27.6 at 77 GB resident; the q8_0 cache is what the profile ships, because
+the vendor recommends it for this model and it buys back about 3 GB.
 
 DeepSeek-V4-Flash deserves its own note, because it needed a change to the
 machine itself. The weights are 91.5 GB, of which the runtime wanted about
@@ -1721,7 +1723,8 @@ calls until the latency settled, and was submitted (`--user andrea-bruno`). One 
 | dense | `qwen3.8-27b` | 85.9 | MAINLINE |
 | flash | `qwen3.8-flash-next` | 83.8 | MAINLINE |
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
-| ornith122 | `ornith-1.5-122b` | **84.0** | MAINLINE |
+| ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
+| ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
 | flash, original memory flags | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 
 The row *flash, original memory flags* is the same model served with the settings this project
@@ -1734,11 +1737,17 @@ Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8,
 flash 76.9) are kept as a note: they measured the same models under the same conditions and agree
 in ranking, but they were not published.
 
-The `ornith122` row was measured on 2026-10-25, after the five runs above.
-Its thinking is on, which is how the profile ships: the same run with
-`--reasoning off` scored **73.5** and its code sub-score fell from 100 to 75,
-so the switch costs 10.5 points. The card is
-[67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20).
+The two `ornith122` rows were measured on 2026-10-25, the q8_0 one after the
+f16 one and both with the thinking on, which is how the profile ships. The
+q8_0 KV cache is the configuration it ships with, on the vendor's
+recommendation and at half the cache size; it scores **81.9** against **84.0**
+for f16, with code at 100 in both, reasoning 80 against 90, and speed 23.5
+against 22.2. Turning the thinking off is a separate, larger cost: the same
+model with `--reasoning off` scored **73.5**. The cards are
+[a8c8b2f8](https://pipelinescore.ai/s/a8c8b2f8-9e38-4bb8-94ee-2c31d2073353)
+(q8_0) and
+[67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20)
+(f16).
 
 ## Benchmark: MultiPL-E (C#)
 
@@ -1754,15 +1763,17 @@ involved and no judge: the tests decide.
 |---|---|---|---|---|---|---|
 | ornith-1.5-35b-a3b | 158 | 70 | 116 | 44 | 3.2 | 0h08m |
 | qwen3.8-flash-next | 158 | 51 | 79 | 32 | 13.6 | 0h34m |
-| ornith-1.5-122b | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
+| ornith-1.5-122b, q8_0 KV | 158 | 70 | 105 | 44 | 17.8 | 0h41m |
+| ornith-1.5-122b, f16 KV | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
 | halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
 | gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
 
-Ornith-1.5-122B passes the most tasks (72 against 70) but takes 18.4 s per task,
-six times the 35B's median; the 35B compiles far more of what it writes (116
-against 103) and is the fastest by a wide margin. Flash is third on passes and
-second on compiled code, so the gap between flash and the two Qwen-sized models
-is narrower than the pass rate alone suggests. Gemma and dense are within one
+Ornith-1.5-122B passes 70 with the q8_0 cache, level with the 35B, and 72 with
+f16, the most of any profile; both take about 18 s per task, six times the
+35B's median. The 35B compiles far more of what it writes (116 against 103-105)
+and is the fastest by a wide margin. Flash is third on passes and second on
+compiled code, so the gap between flash and the two Qwen-sized models is
+narrower than the pass rate alone suggests. Gemma and dense are within one
 task of each other and are not separated by this benchmark.
 
 What this does and does not say:
@@ -2033,7 +2044,7 @@ reference machine:
 | Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
 | Qwen3.8-Flash-Next | 262,144 | ~50 GB | native maximum, served as a GGUF quant on llama.cpp Vulkan with the PLE table on disk |
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
-| Ornith-1.5-122B | 262,144 | ~77 GB | native maximum; only 12 of its 48 layers use full attention, so the KV cache stays small |
+| Ornith-1.5-122B | 262,144 | ~75 GB | native maximum; only 12 of its 48 layers use full attention and the q8_0 KV cache is ~3 GB for the whole window |
 
 Three properties that matter when a program uses this machine as its model:
 
