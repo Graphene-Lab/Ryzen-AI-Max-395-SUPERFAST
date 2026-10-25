@@ -21,9 +21,12 @@ Two of the four profiles carry an image encoder:
 | `flash` | Qwen3.8-Flash-Next | `qwen38-flash-next-vision.hgn` | 897,916,416 B (~856 MiB) |
 | `gemma` | Gemma-4-26B-A4B | `mmproj-BF16.gguf` | 1,194,828,256 B (~1.1 GiB) |
 
-The other two — **dense** (Qwen3.8-27B) and **deepseek** (DeepSeek-V4-Flash) —
-have no image encoder in their repositories. They are text-only, and the vision
-control is unavailable for them (greyed out in the panel, refused by the CLI).
+The **dense** profile (Qwen3.8-27B) and the optional **deepseek**
+(DeepSeek-V4-Flash) have no image encoder in their repositories: they are
+text-only, and the vision control is unavailable for them (greyed out in the
+panel, refused by the CLI). **ornith122** (Ornith-1.5-122B) does have an
+encoder, but the setup does not download its projector yet, so it ships
+text-only until that `mmproj` is added.
 
 ## What turning it on actually does
 
@@ -94,13 +97,13 @@ superfast-switch vision off    # back to text-only
 
 `status` reports three things: whether the **running** profile can carry vision
 at all (`supported`), whether it is currently **enabled**, and which profile is
-active. On dense or deepseek it reads `supported=no`, so you always know
-whether a toggle would even apply.
+active. On dense, deepseek or ornith122 it reads `supported=no`, so you always
+know whether a toggle would even apply.
 
 On the desktop the same control is the **Vision** switch in the GNOME panel
 menu:
 
-- on **dense** and **deepseek** it is greyed out and labelled
+- on **dense**, **deepseek** and **ornith122** it is greyed out and labelled
   "Vision (not on this model)" — never clickable;
 - on **flash** and **gemma** it toggles on and off;
 - while a restart is in flight the switch is **locked** (as are the model

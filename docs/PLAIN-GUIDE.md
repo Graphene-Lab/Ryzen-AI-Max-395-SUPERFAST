@@ -36,10 +36,15 @@ Several "models" live on the machine, and you pick one at a time:
 - **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second). Like
   the Flash-Next model, it can also look at pictures when you turn "vision"
   on (see *Everyday use*).
-- **DeepSeek-V4-Flash** — a very large model (284 billion parameters) for
-  coding and hard problems. It is the **slowest** of the four (about 11 words
-  per second), it needs a large answer budget, and it requires two kernel
-  settings on the machine, which the setup script applies.
+- **Ornith-1.5-122B (MoE)** — the largest model that still leaves room on the
+  machine. It answers at about 25 words per second, has a 262K window, and
+  passes the most coding tasks of any profile, though it is slower per task
+  than the 35B Ornith.
+- **DeepSeek-V4-Flash (optional)** — a very large model (284 billion
+  parameters) for a 512K window and hard problems. It is the **slowest**
+  (about 11 words per second), it needs a large answer budget, and it
+  requires two kernel settings on the machine, which the setup script
+  applies. It is no longer installed by default.
 - **The orchestrator** — a tiny, very fast model that acts like a dispatcher:
   it reads simple requests and answers or routes them immediately, so the big
   model is not woken up for trivial work. It is a bit like the conductor of an

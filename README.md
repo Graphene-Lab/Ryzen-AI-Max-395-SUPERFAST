@@ -1769,7 +1769,8 @@ What this does and does not say:
 
 - **Function level, not repository level.** 158 single functions from the HumanEval lineage, no
   cross-file context, no tools. It ranks the profiles on code synthesis, not on agentic work; for
-  that axis the README reports PipelineScore (ornith 90,1 · dense 85,9 · flash 83,8 · gemma 81,2).
+  that axis the README reports PipelineScore (ornith 90,1 · dense 85,9 ·
+  ornith122 84,0 · flash 83,8 · gemma 81,2).
 - **512 tokens is the benchmark's budget, not a saving measure.** Without a cap the same models
   generate tens of thousands of tokens for one body and never stop; gemma reached 900 s on the first
   task, so the run could not finish.
@@ -2168,8 +2169,8 @@ it.
 `"vision": true` tells Qwen Code the model accepts images, so it sends image
 content straight to it instead of refusing it or routing it elsewhere.
 `"agent": true` lets the same model run as the full-turn agent with vision on.
-Add `"vision": true` to the `gemma` entry too; leave it off for `dense` and
-`deepseek`, which have no image encoder.
+Add `"vision": true` to the `gemma` entry too; leave it off for `dense`,
+`ornith122` and the optional `deepseek`, which have no projector loaded.
 
 Add the other profiles as further objects in the same array, using the values in
 the table below, and keep only the ones you use. Two entries that share both an
@@ -2184,7 +2185,8 @@ client sends as the model name, so it must match what `/health` reports, and
 | Flash-Next | `qwen3.8-flash-next` | 262,144 | 16,384 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | 7,200,000 | 9,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | 3,600,000 | 4,800,000 | **0** | none, the profile ignores it |
-| DeepSeek-V4-Flash | `deepseek-v4-flash` | 524,288 | 16,384 | 8,400,000 | 10,800,000 | **0** | none, the profile ignores it |
+| Ornith-1.5-122B | `ornith-1.5-122b` | 262,144 | 16,384 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
+| DeepSeek-V4-Flash (optional) | `deepseek-v4-flash` | 524,288 | 16,384 | 8,400,000 | 10,800,000 | **0** | none, the profile ignores it |
 
 Before you rely on it, check the three things a wrong setting hides: that the
 gateway answers with your key, that the model name you configured is one of the

@@ -188,7 +188,7 @@ gemma, and insensitive while a restart is in flight.
 | `SUPERFAST_API_LOG` | *(unset)* | Path to a teed front-end log, so the serving benchmark can read throughput counters from inside a container. |
 | `SUPERFAST_ROOT`, `SUPERFAST_PROMPTS`, `SUPERFAST_API_CTR` | *(derived)* | Benchmark inputs: the image's tool directory, the prompt fixture, the container whose log the counters are read from. |
 | `SUPERFAST_PORT`, `SUPERFAST_ORCH_PORT` | `8731`, `8732` | Ports the switch and the TUI probe. |
-| `SUPERFAST_FLASH_DIR`, `SUPERFAST_GEMMA_DIR`, `SUPERFAST_DEEPSEEK_DIR`, `SUPERFAST_ORCH_DIR` | `~/superfast-flash`, `~/gemma-models`, `~/deepseek-models`, `~/small-models` | Where each profile's weights live. |
+| `SUPERFAST_FLASH_DIR`, `SUPERFAST_GEMMA_DIR`, `SUPERFAST_DEEPSEEK_DIR`, `SUPERFAST_ORNITH_DIR`, `SUPERFAST_ORNITH122_DIR`, `SUPERFAST_ORCH_DIR` | `~/superfast-flash`, `~/gemma-models`, `~/deepseek-models`, `~/ornith-models`, `~/ornith122-models`, `~/small-models` | Where each profile's weights live. |
 | `SUPERFAST_*_UNIT` | `superfast.service`, `superfast-flash.service`, … | Override the systemd unit a profile maps to. |
 | `SUPERFAST_GATEWAY_PORT`, `SUPERFAST_KEY_FILE` | `8741`, `~/.config/superfast/api.key` | The API-key gateway. |
 | `SUPERFAST_API_KEY` | *(client side)* | The key the client sends as `Authorization: Bearer …`. `envKey` in the client entry names this variable. |
