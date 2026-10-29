@@ -418,6 +418,16 @@ def wants_stream(body: bytes) -> bool:
         return False
 
 
+def is_completion(head: bytes) -> bool:
+    """True when the request line targets an OpenAI completion route.
+
+    Only completion answers carry `choices`; a `/v1/models` (or any other)
+    answer has none, so judging it by `is_empty_body` would retry it five times
+    for nothing. The request line is the first line of the header block.
+    """
+    return b"/completions" in head.split(b"\r\n", 1)[0]
+
+
 def handle(client, upstream, key, auto, allow_empty_retry):
     try:
         client.settimeout(30)
@@ -443,7 +453,8 @@ def handle(client, upstream, key, auto, allow_empty_retry):
                 code = 409 if answer.get("state") != "failed" else 502
                 return respond(client, code,
                                "Conflict" if code == 409 else "Bad Gateway", answer)
-        if allow_empty_retry and whole is not None and not wants_stream(whole):
+        if (allow_empty_retry and whole is not None
+                and not wants_stream(whole) and is_completion(head)):
             # A valid request can still draw an empty answer or a 200 with no
             # "choices". Re-send it up to RESEND_MAX times, reading each reply
             # whole, so a transient empty answer is repaired before the client
