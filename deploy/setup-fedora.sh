@@ -964,7 +964,7 @@ EOF
 # A fresh install is checked against it here, so a drift shows up at the end of
 # the setup instead of the first time a client asks for a profile.
 phase_verify() {
-    local fails=0 spec profile want unit cmdline t
+    local fails=0 spec profile want unit cmdline t gw_unit
     log "== verify: the machine matches the reference configuration =="
 
     for spec in "ornith:--reasoning off" "ornith:--spec-mtp-strict-qwen" \
@@ -1021,6 +1021,22 @@ phase_verify() {
             fails=$((fails + 1))
         fi
     done
+
+    # The empty-answer retry is part of the reference machine: the gateway unit
+    # must pass the flag and the installed copy must carry the code.
+    gw_unit="$HOME/.config/systemd/user/superfast-gateway.service"
+    if [ -f "$gw_unit" ] && grep -q -- '--allow-empty-retry' "$gw_unit"; then
+        log "  ok   gateway unit carries --allow-empty-retry"
+    else
+        log "  FAIL gateway unit lacks --allow-empty-retry (empty-answer retry is off)"
+        fails=$((fails + 1))
+    fi
+    if grep -q 'def send_empty_retry' "$HOME/.local/bin/superfast-gateway.py" 2>/dev/null; then
+        log "  ok   gateway has the empty-answer retry code"
+    else
+        log "  FAIL gateway copy has no send_empty_retry (stale file)"
+        fails=$((fails + 1))
+    fi
 
     if [ "$fails" -eq 0 ]; then
         log "verify: this machine matches the reference"
