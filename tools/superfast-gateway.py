@@ -23,10 +23,16 @@ the prompt cache: while the engine is busy the gateway answers 409 with the
 profile that is loaded, the one that was asked for, and a retry hint, and it
 touches nothing.
 
-In the default `pinned` mode the field is decoration, exactly as before.
-A request whose body cannot be read whole (chunked upload) is forwarded
-without inspection rather than buffered: the switch is a convenience, not a
-reason to break a client.
+## The empty-response retry
+
+A few times per run the engine answers a well-formed HTTP request with a body
+that is empty or does not describe the requested model. That body reaches the
+client, and Qwen Code reports "400 status code (no body)". The request was
+valid; the response was the bad half. When the gateway detects an empty answer
+on an OpenAI completion route it re-sends the *same* query (up to RESEND_MAX
+tries, RESEND_WAIT seconds apart) before ever sending an answer to the client:
+a retry that the engine already proved works. It is off by default, so removing
+the flag reverts to the plain relay.
 """
 import argparse
 import fcntl
@@ -50,6 +56,16 @@ SWITCH_TIMEOUT = 900
 LOAD_WAIT = 600
 LOAD_POLL = 3
 
+# The engine answers a well-formed request with an empty body (no HTTP status
+# left in it, no "choices" describing a model) a few times per run. The request
+# was valid; the response was the bad half, and the client turns it into a
+# "400 status code (no body)". This is not a failure the client can see the
+# reason for, and re-sending the identical query is what the engine already
+# proved works on the next try: retry it before ever returning an answer, so
+# the client never sees the empty response. --allow-empty-retry turns it on;
+# off by default, so removing the flag reverts to the plain relay.
+RESEND_MAX = 5
+RESEND_WAIT = 1
 SWITCH = "superfast-switch"
 MODE_FILE = os.path.join(CONF, "mode")
 SWITCH_LOG = os.path.join(CONF, "switch.log")
@@ -340,7 +356,69 @@ def decide(body):
     return switch_to(active, target)
 
 
-def handle(client, upstream, key, auto):
+def send_empty_retry(upstream, head, body):
+    """Return the first non-empty answer to the same query, or None.
+
+    The request was valid; the reply was the bad half. Re-send it against the
+    upstream up to RESEND_MAX times, RESEND_WAIT seconds apart, reading each
+    reply whole, and return the raw response (head + body) of the first answer
+    that is not empty. Return None when every attempt comes back empty, when a
+    reply cannot be read whole (a streaming/chunked body), or on a connect
+    error, so the caller falls through to the ordinary relay and the client
+    still gets an answer instead of a new failure.
+    """
+    for attempt in range(1, RESEND_MAX + 1):
+        up = None
+        try:
+            up = socket.create_connection(upstream, timeout=30)
+            up.sendall(head.replace(b"Connection: keep-alive", b"Connection: close") + body)
+            up.settimeout(None)
+            head2, rest2 = read_head(up)
+            whole = read_body(up, parse_head(head2), rest2) if head2 else None
+            if whole is None:
+                return None  # streaming/chunked reply: not ours to judge whole
+            if whole.strip() and not is_empty_body(whole):
+                log("empty-response retry succeeded on attempt %d" % attempt)
+                return head2 + whole
+        except Exception:
+            return None
+        finally:
+            if up is not None:
+                try:
+                    up.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+        time.sleep(RESEND_WAIT)
+    log("empty-response retry exhausted after %d attempts" % RESEND_MAX)
+    return None
+
+
+def is_empty_body(body: bytes) -> bool:
+    """True when the upstream answer carries no completion.
+
+    Zero bytes is the "400 status code (no body)" the client reports; a JSON
+    object that names no choices is the same empty answer with a 200 around it.
+    A body that carries an error object is a real answer, not an empty one.
+    """
+    if not body.strip():
+        return True
+    try:
+        data = json.loads(body)
+    except Exception:
+        return False
+    return (isinstance(data, dict) and "error" not in data
+            and data.get("choices") in (None, []))
+
+
+def wants_stream(body: bytes) -> bool:
+    """True when the client asked for a streamed completion (SSE)."""
+    try:
+        return json.loads(body).get("stream") is True
+    except Exception:
+        return False
+
+
+def handle(client, upstream, key, auto, allow_empty_retry):
     try:
         client.settimeout(30)
         head, rest = read_head(client)
@@ -351,20 +429,29 @@ def handle(client, upstream, key, auto):
                            {"error": {"message": "missing or invalid API key",
                                       "type": "auth_error"}})
         headers = parse_head(head)
-        body = rest
-        if auto and mode() == "auto":
-            # A client that waits for "100 Continue" has not sent its body
-            # yet; without this the read below would block until it gives up.
-            if headers.get("expect", "").lower() == "100-continue":
-                client.sendall(b"HTTP/1.1 100 Continue\r\n\r\n")
-            whole = read_body(client, headers, rest)
-            if whole is not None:
-                body = whole
-                answer = decide(whole)
-                if answer:
-                    code = 409 if answer.get("state") != "failed" else 502
-                    return respond(client, code,
-                                   "Conflict" if code == 409 else "Bad Gateway", answer)
+        auto_mode = auto and mode() == "auto"
+        inspect = auto_mode or allow_empty_retry
+        # A client that waits for "100 Continue" has not sent its body yet;
+        # without this the read below would block until it gives up.
+        if inspect and headers.get("expect", "").lower() == "100-continue":
+            client.sendall(b"HTTP/1.1 100 Continue\r\n\r\n")
+        whole = read_body(client, headers, rest) if inspect else None
+        body = whole if whole is not None else rest
+        if auto_mode and whole is not None:
+            answer = decide(whole)
+            if answer:
+                code = 409 if answer.get("state") != "failed" else 502
+                return respond(client, code,
+                               "Conflict" if code == 409 else "Bad Gateway", answer)
+        if allow_empty_retry and whole is not None and not wants_stream(whole):
+            # A valid request can still draw an empty answer or a 200 with no
+            # "choices". Re-send it up to RESEND_MAX times, reading each reply
+            # whole, so a transient empty answer is repaired before the client
+            # ever sees it.
+            retry = send_empty_retry(upstream, head, whole)
+            if retry is not None:
+                client.sendall(retry)
+                return
         up = socket.create_connection(upstream, timeout=30)
         up.settimeout(None)
         client.settimeout(None)
@@ -400,6 +487,9 @@ def main():
     ap.add_argument("--switch-log", default=SWITCH_LOG)
     ap.add_argument("--no-switch", action="store_true",
                     help="forward everything; never switch the profile")
+    ap.add_argument("--allow-empty-retry", action="store_true",
+                    help="on an empty OpenAI completion answer, resend the "
+                         "same query before sending anything to the client")
     a = ap.parse_args()
     MODE_FILE = a.mode_file
     SWITCH_LOG = a.switch_log
@@ -409,6 +499,7 @@ def main():
         local = os.path.expanduser("~/.local/bin/superfast-switch")
         SWITCH = local if os.access(local, os.X_OK) else "superfast-switch"
     auto = not a.no_switch
+    allow_empty_retry = a.allow_empty_retry
     try:
         key = open(a.key_file, "rb").read().strip()
     except FileNotFoundError:
@@ -417,13 +508,14 @@ def main():
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(parse_addr(a.listen))
     srv.listen(64)
-    print("gateway %s -> %s (auth: %s, mode: %s)"
+    print("gateway %s -> %s (auth: %s, mode: %s, empty-retry: %s)"
           % (a.listen, a.upstream, "on" if key else "OFF",
-             "auto" if auto else "pinned"), flush=True)
+             "auto" if auto else "pinned",
+             "on" if allow_empty_retry else "off"), flush=True)
     while True:
         c, _ = srv.accept()
         threading.Thread(target=handle,
-                         args=(c, parse_addr(a.upstream), key, auto),
+                         args=(c, parse_addr(a.upstream), key, auto, allow_empty_retry),
                          daemon=True).start()
 
 

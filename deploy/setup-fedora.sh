@@ -908,7 +908,8 @@ Type=simple
 Environment=XDG_RUNTIME_DIR=/run/user/$UID_NUM
 ExecStart=/usr/bin/python3 $HOME/.local/bin/superfast-gateway.py \\
   --listen 0.0.0.0:8741 --upstream 127.0.0.1:8731 \\
-  --key-file $CONF_DIR/api.key
+  --key-file $CONF_DIR/api.key \\
+  --allow-empty-retry
 Restart=on-failure
 RestartSec=10
 
