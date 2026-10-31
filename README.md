@@ -1111,6 +1111,16 @@ the prefix already is the name. The front-end's source says so in one line:
   at 119 t/s against 5,479 at 475 t/s after pinning one slot). Warm answers
   are **not** byte-identical to cold ones here — llama.cpp makes no such
   promise, and its log does not claim it.
+- **Ornith and the other hybrid models** are the exception on both counts. Their
+  recurrent layers let llama.cpp resume only from an exact checkpoint, never
+  from a partial prefix, and its prompt cache holds at most `n_ctx` tokens
+  across every saved prompt — 262,144 here. So a session keeps its state only
+  while the traffic between two of its own requests stays inside that budget.
+  A client that runs its own background completions on the same model can
+  exceed it on every turn, and the next prompt is then prefilled from token
+  zero: measured at 126,977 tokens, 273 s with the extra traffic against 0.7 s
+  without it. [`docs/PROMPT-CACHE.md`](docs/PROMPT-CACHE.md) has the numbers,
+  the instrument, and what can be done about it.
 
 **Where to read the cache.** The API response does not carry it: `usage` reports
 `prompt_tokens`, `completion_tokens` and `total_tokens`, and adds

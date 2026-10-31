@@ -968,7 +968,7 @@ phase_verify() {
     log "== verify: the machine matches the reference configuration =="
 
     for spec in "ornith:--reasoning off" "ornith:--spec-mtp-strict-qwen" \
-                "ornith:--timeout 0" \
+                "ornith:--timeout 0" "ornith:--parallel 1" \
                 "flash:-ctk q5_1" "flash:-ctv q5_1" \
                 "flash:--spec-draft-p-split 0.10" "flash:--ple-disk" \
                 "flash:--timeout 0" \
