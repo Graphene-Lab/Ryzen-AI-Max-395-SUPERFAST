@@ -1022,19 +1022,22 @@ phase_verify() {
         fi
     done
 
-    # The empty-answer retry is part of the reference machine: the gateway unit
-    # must pass the flag and the installed copy must carry the code.
+    # The answer retry is part of the reference machine: the gateway unit must
+    # pass the flag and the installed copy must carry both repairs — an empty
+    # answer, and a tool call the engine's own parser rejected.
     gw_unit="$HOME/.config/systemd/user/superfast-gateway.service"
     if [ -f "$gw_unit" ] && grep -q -- '--allow-empty-retry' "$gw_unit"; then
         log "  ok   gateway unit carries --allow-empty-retry"
     else
-        log "  FAIL gateway unit lacks --allow-empty-retry (empty-answer retry is off)"
+        log "  FAIL gateway unit lacks --allow-empty-retry (the answer retry is off)"
         fails=$((fails + 1))
     fi
-    if grep -q 'def send_empty_retry' "$HOME/.local/bin/superfast-gateway.py" 2>/dev/null; then
-        log "  ok   gateway has the empty-answer retry code"
+    gw_copy="$HOME/.local/bin/superfast-gateway.py"
+    if grep -q 'def send_answer_retry' "$gw_copy" 2>/dev/null \
+       && grep -q 'def stream_answer' "$gw_copy" 2>/dev/null; then
+        log "  ok   gateway repairs an empty answer and a rejected tool call"
     else
-        log "  FAIL gateway copy has no send_empty_retry (stale file)"
+        log "  FAIL gateway copy lacks send_answer_retry/stream_answer (stale file)"
         fails=$((fails + 1))
     fi
 

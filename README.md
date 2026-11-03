@@ -2430,6 +2430,26 @@ stopped, only the machine itself can reach a model. The key lives at
 keeps 8731 closed; if you ever open 8731 yourself, you have exposed the models
 with no key again.
 
+### An answer the engine refuses is repaired before the client sees it
+
+Two failures happen every few runs, and both end a client's turn for a reason
+the client cannot repair. The engine sometimes answers a valid request with an
+empty body, which Qwen Code reports as `400 status code (no body)`. And
+llama.cpp's PEG parser sometimes refuses the model's own generation — a tool
+call it cannot read — and ends the request with `The model produced output that
+does not match the expected peg-native format`: a 500 for a non-streaming
+request, the same error inside the stream for a streaming one, after the text
+has already been delivered.
+
+The gateway repairs both before they reach a client. While nothing of the answer
+has been forwarded the same request is re-sent, up to three attempts in all.
+Once text has been delivered the stream is closed with a normal finish instead
+of the error, so an unattended run keeps going instead of stopping until
+someone presses Ctrl+Y. The switch is `--allow-empty-retry`, which the setup
+script already puts on the gateway unit; `tools/gateway-retry-selftest.py`
+reproduces both shapes and the retry budget against a fake engine, and
+`switch.log` records each repair.
+
 **Roadmap: other model families.** A second runtime is already in use —
 llama.cpp with the ROCmFPX fork, which serves GGUF models with AMD's FP4
 tensor types. One such runtime can host several profiles, because a profile

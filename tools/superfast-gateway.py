@@ -23,7 +23,7 @@ the prompt cache: while the engine is busy the gateway answers 409 with the
 profile that is loaded, the one that was asked for, and a retry hint, and it
 touches nothing.
 
-## The empty-response retry
+## The answer retry
 
 A few times per run the engine answers a well-formed HTTP request with a body
 that is empty or does not describe the requested model. That body reaches the
@@ -31,14 +31,26 @@ client, and Qwen Code reports "400 status code (no body)". The request was
 valid; the response was the bad half. When the gateway detects an empty answer
 on an OpenAI completion route it re-sends the *same* query (up to RESEND_MAX
 tries, RESEND_WAIT seconds apart) before ever sending an answer to the client:
-a retry that the engine already proved works. It is off by default, so removing
-the flag reverts to the plain relay.
+a retry that the engine already proved works.
+
+The engine also refuses its own generation. llama.cpp's PEG parser rejects a
+tool call the model formatted badly and ends the request with "The model
+produced output that does not match the expected peg-native format" — a 500 for
+a non-streaming request, the same error inside the SSE stream for a streaming
+one, after the text has already been delivered. Qwen Code cannot recover from
+that without the user, so an unattended run stops there. The gateway repairs it
+too: while nothing of the answer has reached the client the request is re-sent,
+and once text has been delivered the stream is closed with a normal finish
+instead of the error, so the run continues.
+
+It is off by default, so removing the flag reverts to the plain relay.
 """
 import argparse
 import fcntl
 import hmac
 import json
 import os
+import re
 import socket
 import subprocess
 import threading
@@ -66,6 +78,23 @@ LOAD_POLL = 3
 # off by default, so removing the flag reverts to the plain relay.
 RESEND_MAX = 5
 RESEND_WAIT = 1
+
+# A streamed answer is read event by event so that a rejected tool call can be
+# repaired before it reaches the client. FORMAT_RETRY_MAX counts attempts, not
+# retries: the first attempt is the request itself. The note is what the model
+# and the user see in place of a tool call the engine dropped after the text had
+# already been delivered.
+FORMAT_RETRY_MAX = 3
+FORMAT_NOTE = ("\n\n[gateway] the engine dropped the model's tool call because "
+               "it could not be parsed; the turn ends here.")
+# Generous on purpose: a local model can stay silent for minutes while it
+# prefills a long prompt, and dropping the connection early is worse than
+# waiting. The idle bound only catches an engine that never answers at all.
+CONNECT_TIMEOUT = 60
+IDLE_TIMEOUT = 3600
+# llama.cpp separates SSE events with a bare blank line; a proxy in between may
+# use CRLF, so the boundary is matched either way.
+EVENT_END = re.compile(rb"\r?\n\r?\n")
 SWITCH = "superfast-switch"
 MODE_FILE = os.path.join(CONF, "mode")
 SWITCH_LOG = os.path.join(CONF, "switch.log")
@@ -356,7 +385,7 @@ def decide(body):
     return switch_to(active, target)
 
 
-def send_empty_retry(upstream, head, body):
+def send_answer_retry(upstream, head, body):
     """Return the first non-empty answer to the same query, or None.
 
     The request was valid; the reply was the bad half. Re-send it against the
@@ -377,8 +406,8 @@ def send_empty_retry(upstream, head, body):
             whole = read_body(up, parse_head(head2), rest2) if head2 else None
             if whole is None:
                 return None  # streaming/chunked reply: not ours to judge whole
-            if whole.strip() and not is_empty_body(whole):
-                log("empty-response retry succeeded on attempt %d" % attempt)
+            if whole.strip() and not is_empty_body(whole, head):
+                log("answer retry succeeded on attempt %d" % attempt)
                 return head2 + whole
         except Exception:
             return None
@@ -393,12 +422,28 @@ def send_empty_retry(upstream, head, body):
     return None
 
 
-def is_empty_body(body: bytes) -> bool:
-    """True when the upstream answer carries no completion.
+def is_format_failure(answer) -> bool:
+    """True when an answer reports the engine's model-output format failure.
+
+    llama.cpp refuses a generation its PEG tool-call parser cannot read and
+    words it "The model produced output that does not match the expected
+    <format> format". The name varies (peg-native, peg-simple, Content-only), so
+    the match is on the wording. The same text arrives in a 500 body, in a
+    non-streaming completion body, or inside an SSE event.
+    """
+    raw = answer if isinstance(answer, (bytes, bytearray)) else json.dumps(answer).encode()
+    low = raw.lower()
+    return b"does not match the expected" in low and b"format" in low
+
+
+def is_empty_body(body: bytes, head: bytes = b"") -> bool:
+    """True when the upstream answer carries no usable completion.
 
     Zero bytes is the "400 status code (no body)" the client reports; a JSON
     object that names no choices is the same empty answer with a 200 around it.
-    A body that carries an error object is a real answer, not an empty one.
+    On a completion route an error object that reports a model-output format
+    failure is unusable too: the engine refused its own generation. Any other
+    error object is a real answer, not an empty one.
     """
     if not body.strip():
         return True
@@ -406,8 +451,267 @@ def is_empty_body(body: bytes) -> bool:
         data = json.loads(body)
     except Exception:
         return False
-    return (isinstance(data, dict) and "error" not in data
-            and data.get("choices") in (None, []))
+    if not isinstance(data, dict):
+        return False
+    if "error" in data:
+        return is_format_failure(data) and is_completion(head)
+    return data.get("choices") in (None, [])
+
+
+class BodyReader:
+    """One response body, de-chunked when the upstream chunked it.
+
+    The gateway re-frames a stream for the client, so it has to read the
+    upstream framing itself. `read()` returns the next piece and b"" at the end.
+    """
+
+    def __init__(self, sock, chunked):
+        self.sock = sock
+        self.chunked = chunked
+        self.buf = b""
+
+    def _fill(self):
+        try:
+            data = self.sock.recv(65536)
+        except Exception:
+            data = b""
+        if not data:
+            return False
+        self.buf += data
+        return True
+
+    def _line(self):
+        while b"\r\n" not in self.buf:
+            if not self._fill():
+                return None
+        line, _, self.buf = self.buf.partition(b"\r\n")
+        return line
+
+    def read(self):
+        if not self.chunked:
+            if not self.buf and not self._fill():
+                return b""
+            piece, self.buf = self.buf, b""
+            return piece
+        line = self._line()
+        if line is None:
+            return b""
+        try:
+            size = int(line.split(b";")[0].strip() or b"0", 16)
+        except ValueError:
+            return b""
+        if size == 0:
+            self._line()  # the CRLF that follows the last-chunk line
+            return b""
+        while len(self.buf) < size + 2 and self._fill():
+            pass
+        piece, self.buf = self.buf[:size], self.buf[size + 2:]
+        return piece
+
+
+def send_chunk(client, data):
+    """One HTTP chunk: the body the gateway writes is framed by the gateway."""
+    if data:
+        client.sendall(b"%x\r\n" % len(data) + data + b"\r\n")
+
+
+def end_chunks(client):
+    client.sendall(b"0\r\n\r\n")
+
+
+def sse_head(head2: bytes) -> bytes:
+    """The upstream 200 head, re-framed: the gateway chunk-encodes the body."""
+    lines = [line for line in head2.split(b"\r\n") if line]
+    keep = [lines[0]] if lines else [b"HTTP/1.1 200 OK"]
+    for line in lines[1:]:
+        name = line.split(b":", 1)[0].strip().lower()
+        if name in (b"transfer-encoding", b"content-length", b"connection"):
+            continue
+        keep.append(line)
+    keep.append(b"transfer-encoding: chunked")
+    keep.append(b"connection: close")
+    return b"\r\n".join(keep) + b"\r\n\r\n"
+
+
+def classify_event(event: bytes):
+    """('error' | 'final' | 'content' | '', payload) for one SSE event."""
+    payload = b""
+    for line in event.split(b"\n"):
+        line = line.strip()
+        if line.startswith(b"data:"):
+            payload = line[5:].strip()
+    if payload == b"[DONE]":
+        return "final", {}
+    if not payload:
+        return "", {}
+    try:
+        data = json.loads(payload)
+    except Exception:
+        return "", {}
+    if not isinstance(data, dict):
+        return "", {}
+    if data.get("error"):
+        return "error", data
+    for choice in data.get("choices") or []:
+        delta = choice.get("delta") or {}
+        if (delta.get("content") or delta.get("reasoning_content")
+                or delta.get("tool_calls")):
+            return "content", data
+    return "", data
+
+
+def flush_out(client, head2, events, sent, finish=True):
+    """Send the held answer, then close the chunked body."""
+    if not sent:
+        client.sendall(head2)
+    for event in events:
+        send_chunk(client, event)
+    if finish:
+        end_chunks(client)
+
+
+def close_turn(client, head2, held, meta, sent):
+    """End a stream whose answer was rejected after text reached the client.
+
+    The attempt cannot be re-sent: its text is already in the client's message
+    and a second answer would be appended to the first. The rejected event is
+    replaced by a normal finish, so the client keeps the text it has and the run
+    goes on instead of stopping on an error it cannot repair.
+    """
+    flush_out(client, head2, held, sent, finish=False)
+    base = {
+        "id": meta.get("id") or "chatcmpl-gateway",
+        "object": "chat.completion.chunk",
+        "created": meta.get("created") or int(time.time()),
+        "model": meta.get("model") or "",
+    }
+    note = dict(base, choices=[{"index": 0, "delta": {"content": FORMAT_NOTE},
+                                "finish_reason": None}])
+    final = dict(base, choices=[{"index": 0, "delta": {}, "finish_reason": "stop"}])
+    send_chunk(client, b"data: " + json.dumps(note).encode() + b"\n\n")
+    send_chunk(client, b"data: " + json.dumps(final).encode() + b"\n\n")
+    send_chunk(client, b"data: [DONE]\n\n")
+    end_chunks(client)
+
+
+def run_stream(reader, client, head2: bytes, attempt: int) -> bool:
+    """Relay one streamed attempt; True when the client has been answered.
+
+    False means the attempt was rejected before any text was forwarded, so the
+    caller can send the same request again without the client ever noticing.
+    """
+    out = sse_head(head2)
+    held = []
+    sent = False
+    text = False
+    meta = {}
+    buf = b""
+    while True:
+        piece = reader.read()
+        if not piece:
+            flush_out(client, out, held, sent)
+            return True
+        buf += piece
+        while True:
+            end = EVENT_END.search(buf)
+            if end is None:
+                break
+            event, buf = buf[:end.end()], buf[end.end():]
+            kind, data = classify_event(event)
+            if data and not meta.get("id"):
+                meta = data
+            if kind == "error":
+                if is_format_failure(event):
+                    if not text and attempt < FORMAT_RETRY_MAX:
+                        log("answer retry %d: the engine rejected the model's "
+                            "output before any text was sent" % attempt)
+                        return False
+                    if not text:
+                        # Nothing reached the client, and the budget is spent:
+                        # hand it the real error rather than nothing at all.
+                        flush_out(client, out, held + [event], sent)
+                        return True
+                    log("answer retry %d: the engine rejected the model's output "
+                        "after text was sent, closing the turn" % attempt)
+                    close_turn(client, out, held, meta, sent)
+                    return True
+                flush_out(client, out, held + [event], sent)
+                return True
+            if kind == "content":
+                text = True
+            if not text and kind != "final":
+                held.append(event)
+                continue
+            if not sent:
+                client.sendall(out)
+                for held_event in held:
+                    send_chunk(client, held_event)
+                held = []
+                sent = True
+            send_chunk(client, event)
+            if kind == "final":
+                end_chunks(client)
+                return True
+
+
+def read_until_close(sock) -> bytes:
+    """The rest of a short (non-streamed) answer, bounded by MAX_BODY."""
+    out = b""
+    try:
+        while len(out) < MAX_BODY:
+            data = sock.recv(65536)
+            if not data:
+                break
+            out += data
+    except Exception:
+        pass
+    return out
+
+
+def stream_answer(upstream, head, body, client) -> bool:
+    """Answer a streamed completion, repairing the engine's own rejections.
+
+    Returns True when the client has been answered; False tells the caller to
+    fall back to the plain relay (the upstream connection never opened).
+    """
+    for attempt in range(1, FORMAT_RETRY_MAX + 1):
+        up = None
+        head2 = b""
+        try:
+            up = socket.create_connection(upstream, timeout=CONNECT_TIMEOUT)
+            up.settimeout(IDLE_TIMEOUT)
+            up.sendall(head.replace(b"Connection: keep-alive", b"Connection: close") + body)
+            head2, rest = read_head(up)
+            if not head2:
+                return False
+            parts = head2.split(b" ", 2)
+            status = parts[1] if len(parts) > 1 else b""
+            if status != b"200":
+                whole = rest + read_until_close(up)
+                if is_format_failure(whole) and attempt < FORMAT_RETRY_MAX:
+                    log("answer retry %d: the engine answered %s with a rejected "
+                        "answer" % (attempt, status.decode("latin-1", "replace")))
+                    continue
+                client.sendall(head2 + whole)
+                return True
+            reader = BodyReader(
+                up, "chunked" in parse_head(head2).get("transfer-encoding", ""))
+            reader.buf = rest
+            if run_stream(reader, client, head2, attempt):
+                return True
+        except Exception as e:
+            # Once the upstream answered, the client may hold part of it: a
+            # second relay would generate the answer again, so only a request
+            # that never got a response falls back to the plain relay.
+            log("answer retry aborted: %s" % e)
+            return bool(head2)
+        finally:
+            if up is not None:
+                try:
+                    up.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+    return False
 
 
 def wants_stream(body: bytes) -> bool:
@@ -453,16 +757,19 @@ def handle(client, upstream, key, auto, allow_empty_retry):
                 code = 409 if answer.get("state") != "failed" else 502
                 return respond(client, code,
                                "Conflict" if code == 409 else "Bad Gateway", answer)
-        if (allow_empty_retry and whole is not None
-                and not wants_stream(whole) and is_completion(head)):
-            # A valid request can still draw an empty answer or a 200 with no
-            # "choices". Re-send it up to RESEND_MAX times, reading each reply
-            # whole, so a transient empty answer is repaired before the client
-            # ever sees it.
-            retry = send_empty_retry(upstream, head, whole)
-            if retry is not None:
-                client.sendall(retry)
-                return
+        if allow_empty_retry and whole is not None and is_completion(head):
+            # A valid request can still draw an answer the engine itself refuses
+            # — an empty body, or a tool call its PEG parser rejected. Repair it
+            # before the client ever sees it.
+            if wants_stream(whole):
+                if stream_answer(upstream, head, whole, client):
+                    return
+            else:
+                # A whole (non-streamed) answer is judged whole and re-sent.
+                retry = send_answer_retry(upstream, head, whole)
+                if retry is not None:
+                    client.sendall(retry)
+                    return
         up = socket.create_connection(upstream, timeout=30)
         up.settimeout(None)
         client.settimeout(None)
@@ -470,7 +777,8 @@ def handle(client, upstream, key, auto, allow_empty_retry):
         t = threading.Thread(target=relay, args=(up, client), daemon=True)
         t.start()
         relay(client, up)
-    except Exception:
+    except Exception as e:
+        log("request failed: %r" % e)
         try:
             client.sendall(b"HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\n\r\n")
         except Exception:
@@ -499,7 +807,8 @@ def main():
     ap.add_argument("--no-switch", action="store_true",
                     help="forward everything; never switch the profile")
     ap.add_argument("--allow-empty-retry", action="store_true",
-                    help="on an empty OpenAI completion answer, resend the "
+                    help="on an unusable OpenAI completion answer (empty, or a "
+                         "tool call the engine's parser rejected), resend the "
                          "same query before sending anything to the client")
     a = ap.parse_args()
     MODE_FILE = a.mode_file
@@ -519,7 +828,7 @@ def main():
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(parse_addr(a.listen))
     srv.listen(64)
-    print("gateway %s -> %s (auth: %s, mode: %s, empty-retry: %s)"
+    print("gateway %s -> %s (auth: %s, mode: %s, answer-retry: %s)"
           % (a.listen, a.upstream, "on" if key else "OFF",
              "auto" if auto else "pinned",
              "on" if allow_empty_retry else "off"), flush=True)
