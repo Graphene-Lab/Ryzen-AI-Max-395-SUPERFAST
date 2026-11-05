@@ -41,6 +41,9 @@ Studio, or Ollama. The `q4_0_rocmfp4` tensor types (ggml ids 100 and 101) do not
 
 ## flash — pugant/Qwen3.8-Flash-Next-ROCMFP4_STRIX_LEAN-GGUF
 
+*The profile this card describes was removed on 2026-11-05; the section stays as the record of
+what the vendor said about that engine build, which still serves nothing here.*
+
 The card documents the root cause of the output-integrity incidents we have been seeing.
 
 **The bug, quoted.** "Earlier agent sessions with this quant showed output-integrity incidents
@@ -78,6 +81,6 @@ configuration is not ours.
 
 Both cards say the same thing in different words: the engine build matters more than any client
 setting. A rebuild to a ROCmFPX that carries patch `0012` and exposes `--reasoning` and
-`--spec-mtp-strict-qwen` would give the reasoning switch for ornith and the rollback fix for flash,
+`--spec-mtp-strict-qwen` would give the reasoning switch for ornith and the rollback fix for every GGUF profile,
 which is where our unexplained failures live. Until then the honest statement is that the profiles
 run on an older build, and the assbench results of 2026-10-23 were taken on it.
