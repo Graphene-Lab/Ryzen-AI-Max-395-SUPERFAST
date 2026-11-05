@@ -190,7 +190,7 @@ curl -s https://<machine>.<tailnet>.ts.net/v1/models \
      -H "Authorization: Bearer <key>"
 ```
 
-The answer is the model list, for example `qwen3.8-flash-next`.
+The answer is the model list, for example `ornith-1.5-122b`.
 
 Then check that a long prefill survives the public path. The machine resolves its
 own name inside the tailnet, so force the public address to test the relay:

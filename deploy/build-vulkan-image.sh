@@ -12,7 +12,7 @@
 # A build without them would start and then fail on the first request, so the
 # script checks the binary before declaring the image ready.
 #
-# Called by deploy/setup-fedora.sh when VULKAN_FLASH=1 (the default), and safe
+# Called by deploy/setup-fedora.sh when VULKAN_ENGINE=1 (the default), and safe
 # to run on its own.
 set -euo pipefail
 
@@ -65,7 +65,7 @@ podman build -t "$IMG" "$CTX"
 
 if ! has_patch0012 "$IMG"; then
     echo "the image was built but its llama-server has no --reasoning:" >&2
-    echo "the units for ornith and flash would start and fail on the first request." >&2
+    echo "the units for ornith and ornith122 would start and fail on the first request." >&2
     exit 1
 fi
 echo "built $IMG with patch 0012"

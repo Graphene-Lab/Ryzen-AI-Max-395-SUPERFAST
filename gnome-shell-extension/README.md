@@ -29,7 +29,7 @@ For development, copy the folder to
 
 - **Serving:** which model currently answers (loopback on port 8731; from the
   LAN it is the gateway on port 8741).
-- **Model:** activate `dense`, `flash`, `gemma` or `deepseek` (one at a time).
+- **Model:** activate `dense`, `gemma`, `ornith` or `ornith122` (one at a time).
 - **Orchestrator:** on/off for the small fast router on port 8732.
 - **API key:** turn LAN access on or off, copy the key to the clipboard,
   generate a new key, or clear it. On = the gateway on port 8741 answers, and

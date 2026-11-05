@@ -23,7 +23,7 @@
 #
 # Fully unattended, including the reboot the kernel parameters need:
 #   curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
-#   PROFILES="dense flash gemma deepseek small" UNATTENDED=1 bash setup-fedora.sh
+#   PROFILES="dense gemma ornith small" UNATTENDED=1 bash setup-fedora.sh
 # With UNATTENDED=1 the script refuses to wait for anything: sudo must be
 # passwordless (it says how), the script must be a file on disk (it re-runs
 # itself after the reboot), and when the kernel parameters are set it installs
@@ -38,9 +38,9 @@
 #                     published it will be the same content.
 #   MODELS_DIR        where the dense checkpoint lives (default: ~/superfast-models)
 #   PROFILES          which profiles to prepare, space separated. Default
-#                     "dense". Also accepted: flash, gemma, deepseek, small
+#                     "dense". Also accepted: gemma, ornith, ornith122, deepseek, small
 #                     (the small orchestrator). Example:
-#                       PROFILES="dense flash gemma deepseek small" bash deploy/setup-fedora.sh
+#                       PROFILES="dense gemma ornith small" bash deploy/setup-fedora.sh
 #                     Weights for the extra profiles are fetched by a systemd
 #                     unit per profile, so this script returns without waiting
 #                     for tens of gigabytes to arrive.
@@ -56,7 +56,7 @@
 #   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
 #   VISION_DEFAULT=0  keep the text-only default: stage the vision drop-in but
 #                     leave it inactive. Unset or 1 (the default) installs the
-#                     vision drop-in active for flash and gemma, so the
+#                     vision drop-in active for gemma and ornith, so the
 #                     machine comes up with vision on for the models that can
 #                     carry it. Change it later with `superfast-switch vision`.
 #   SMOKE=1           also run the small container device test
@@ -94,15 +94,16 @@ RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
 # pulled, the image is built from runtime/ instead.
 RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
 RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
-FLASH_IMAGE="${SUPERFAST_FLASH_IMAGE:-ghcr.io/peonist-ai/halogen-flash-server:0.5.6}"
 REBOOT_NEEDED=0
-# The reference machine runs all five profiles plus the small orchestrator;
+# The reference machine runs four profiles plus the small orchestrator;
 # a fresh install creates the same machine unless PROFILES says otherwise.
-PROFILES="${PROFILES:-dense flash gemma ornith ornith122 small}"
+PROFILES="${PROFILES:-dense gemma ornith ornith122 small}"
+# The Vulkan engine image serves ornith and ornith122. VULKAN_FLASH was the
+# name before the flash profile was removed, so it is still honoured.
+VULKAN_ENGINE="${VULKAN_ENGINE:-${VULKAN_FLASH:-1}}"
 MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
 MODELS_DIR_ORNITH122="${MODELS_DIR_ORNITH122:-$HOME/ornith122-models}"
 MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
-MODELS_DIR_FLASH="${MODELS_DIR_FLASH:-$HOME/superfast-flash}"
 MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
 MODELS_DIR_DEEPSEEK="${MODELS_DIR_DEEPSEEK:-$HOME/deepseek-models}"
 MODELS_DIR_SMALL="${MODELS_DIR_SMALL:-$HOME/small-models}"
@@ -196,7 +197,7 @@ engine_not_ready_hint() { # unit
         log "  been through many container starts is what both failures have in common."
     fi
     proc="$(ps -eo pcpu=,comm= 2>/dev/null \
-        | awk '$2 == "flash_serve" || $2 == "llama-server" || $2 == "halogen" {print $1"% CPU ("$2")"}' \
+        | awk '$2 == "llama-server" || $2 == "halogen" {print $1"% CPU ("$2")"}' \
         | sort -rn | head -n 1)"
     [ -n "$proc" ] && log "  engine process: $proc — a spinning engine burns a core, a loading one does not"
     pool="$(unit_env "$unit" HALOGEN_KV_POOL_POSITIONS)"
@@ -244,7 +245,7 @@ kernel_args_state() {
         log "shared-memory kernel parameters: written, not active yet (the next boot applies them)"
     else
         log "shared-memory kernel parameters: MISSING."
-        log "  flash and deepseek will fail with 'cudaMalloc failed: out of memory'."
+        log "  deepseek will fail with 'cudaMalloc failed: out of memory'."
         log "  Run phase 5 and reboot, or by hand:"
         log "  sudo grubby --update-kernel=ALL --args=\"amdgpu.gttsize=118784 ttm.pages_limit=31457280\""
     fi
@@ -254,7 +255,6 @@ kernel_args_state() {
 profile_dir() {
     case "$1" in
         dense)    echo "$MODELS_DIR" ;;
-        flash)    echo "$MODELS_DIR_FLASH" ;;
         gemma)    echo "$MODELS_DIR_GEMMA" ;;
         deepseek) echo "$MODELS_DIR_DEEPSEEK" ;;
         small)    echo "$MODELS_DIR_SMALL" ;;
@@ -266,7 +266,6 @@ profile_dir() {
 # Unit name of a profile (the orchestrator is named after its role).
 unit_for() {
     case "$1" in
-        flash) echo "superfast-flash" ;;
         small) echo "orchestrator" ;;
         *)     echo "$1" ;;
     esac
@@ -284,7 +283,6 @@ install_template() { # src dst
     sed -e "s#__HOME__#$HOME#g" \
         -e "s#__XDG__#/run/user/$UID_NUM#g" \
         -e "s#__DENSE_DIR__#$MODELS_DIR#g" \
-        -e "s#__FLASH_DIR__#$MODELS_DIR_FLASH#g" \
         -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
         -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
@@ -292,7 +290,7 @@ install_template() { # src dst
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
         -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" \
         -e "s#__DENSE_IMAGE__#$IMAGE#g" \
-        -e "s#__FLASH_IMAGE__#$FLASH_IMAGE#g" "$1" > "$2"
+        -e "s#__DENSE_IMAGE__#$IMAGE#g" "$1" > "$2"
 }
 
 # Install the shared weights downloader (one script, one unit template).
@@ -484,15 +482,15 @@ phase_smoke() {
 }
 
 phase_engine() {
-    # The flash and ornith profiles run on the Vulkan image built from
+    # The ornith and ornith122 profiles run on the Vulkan image built from
     # runtime/Dockerfile.vulkan (patch 0012). That Dockerfile alone is not
     # enough: the build needs the ROCmFPX source snapshot, which is not
     # vendored here, so build-vulkan-image.sh clones it under ~/.cache and
-    # reuses it. Set VULKAN_FLASH=0 to skip the build.
-    if { in_profiles flash || in_profiles ornith; } && [ "${VULKAN_FLASH:-1}" = "1" ]; then
-        log "building the Vulkan engine for the flash and ornith profiles (this takes a while)"
+    # reuses it. Set VULKAN_ENGINE=0 to skip the build.
+    if { in_profiles ornith || in_profiles ornith122; } && [ "$VULKAN_ENGINE" = "1" ]; then
+        log "building the Vulkan engine for the ornith profiles (this takes a while)"
         bash "$SCRIPT_DIR/build-vulkan-image.sh" \
-            || log "warning: Vulkan image build failed; the flash unit will not start until it exists"
+            || log "warning: Vulkan image build failed; the ornith units will not start until it exists"
     fi
     # The optional image generator runs sd-server (stable-diffusion.cpp) on
     # Vulkan. Its Dockerfile clones the source itself, so there is no upstream
@@ -568,7 +566,7 @@ phase_engine() {
     # Only one profile can own port 8731. Stop the others first, exactly like
     # the switch does, so that re-running this script on a machine that is
     # already serving does not fail to bind the port.
-    for q in superfast-flash gemma deepseek; do
+    for q in gemma deepseek; do
         XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user stop "$q.service" 2>/dev/null || true
     done
 
@@ -739,13 +737,10 @@ phase_profiles() {
         fi
     fi
 
-    for p in flash gemma ornith ornith122 small; do
+    for p in gemma ornith ornith122 small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
         tpl="$PROF_DIR/$u.service"
-        if [ "$p" = "flash" ] && [ -f "$PROF_DIR/superfast-flash-vk.service" ]; then
-            tpl="$PROF_DIR/superfast-flash-vk.service"
-        fi
         if [ -f "$tpl" ]; then
             install_template "$tpl" "$HOME/.config/systemd/user/$u.service"
             if [ "$p" = "small" ]; then
@@ -769,8 +764,8 @@ phase_profiles() {
         fi
     done
 
-    # 4b. Vision drop-ins. The tower (flash) and projector (gemma) are
-    #     downloaded with the profile, but the engine loads them only when a
+    # 4b. Vision drop-ins. The projector (gemma, ornith) is
+    #     downloaded with the profile, but the engine loads it only when a
     #     systemd drop-in is present in the unit's .d/ directory. The drop-in
     #     is always staged under ~/.config/superfast/vision/ so
     #     `superfast-switch vision on|off` can move it in and out without a
@@ -782,18 +777,17 @@ phase_profiles() {
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
-    # flash is installed as superfast-flash.service, because unit_for maps the
-    # profile to that name. Its drop-in must therefore be named after that unit
-    # too: staging it as superfast-flash-vk.service.conf would leave
-    # 'superfast-switch vision on' unable to find it, and the active copy would
-    # land in a .d/ directory of a unit that does not exist.
-    for pair in "gemma gemma" "ornith ornith" "flash superfast-flash"; do
+    # A drop-in is named after the unit that exists, never after the
+    # template file: a drop-in staged under another name is invisible to
+    # "superfast-switch vision on" and lands in a directory no unit reads.
+
+
+    for pair in "gemma gemma" "ornith ornith"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
         vtmpl="$PROF_DIR/${vu}.service.vision.conf"
-        # The flash template keeps the name it had before the unit was renamed.
-        [ "$vp" = "flash" ] && vtmpl="$PROF_DIR/superfast-flash-vk.service.vision.conf"
+
         if [ -f "$vtmpl" ]; then
             install_template "$vtmpl" "$HOME/.config/superfast/vision/${vu}.service.conf"
         else
@@ -807,7 +801,6 @@ phase_profiles() {
         # already present and takes a lock, so this is safe even if a download
         # for the same profile is already running. Skipped under SKIP_WEIGHTS.
         case "$vp" in
-            flash) vfile="$MODELS_DIR_FLASH/qwen38-flash-next-vision.hgn" ;;
             gemma) vfile="$MODELS_DIR_GEMMA/mmproj-BF16.gguf" ;;
             ornith) vfile="$MODELS_DIR_ORNITH/mmproj-Ornith-1.5-35B-BF16.gguf" ;;
         esac
@@ -853,7 +846,7 @@ phase_profiles() {
 
     systemctl --user daemon-reload
     log "profiles prepared: $requested"
-    log "switch between them with: superfast-switch use dense|flash|gemma|deepseek"
+    log "switch between them with: superfast-switch use dense|gemma|ornith|ornith122"
     log "the small router runs beside the active profile: superfast-switch orchestrator on|off"
 }
 
@@ -969,14 +962,10 @@ phase_verify() {
 
     for spec in "ornith:--reasoning off" "ornith:--spec-mtp-strict-qwen" \
                 "ornith:--timeout 0" "ornith:--parallel 1" \
-                "flash:-ctk q5_1" "flash:-ctv q5_1" \
-                "flash:--spec-draft-p-split 0.10" "flash:--ple-disk" \
-                "flash:--timeout 0" \
                 "gemma:--parallel 1" "gemma:--timeout 0"; do
         profile="${spec%%:*}"; want="${spec#*:}"
         case "$profile" in
             ornith) unit="ornith.service" ;;
-            flash)  unit="superfast-flash.service" ;;
             gemma)  unit="gemma.service" ;;
             *) continue ;;
         esac
@@ -1006,11 +995,11 @@ phase_verify() {
              localhost/superfast-vk:patch0012 --help 2>&1 | grep -q -- '--reasoning'; then
             log "  ok   engine has --reasoning (patch 0012)"
         else
-            log "  FAIL engine has no --reasoning: rebuild it with VULKAN_FLASH=1"
+            log "  FAIL engine has no --reasoning: rebuild it with VULKAN_ENGINE=1"
             fails=$((fails + 1))
         fi
     else
-        log "  --   engine image absent (VULKAN_FLASH=0, or the build failed)"
+        log "  --   engine image absent (VULKAN_ENGINE=0, or the build failed)"
     fi
 
     for t in superfast-switch superfast-tui superfast-recover superfast-gateway.py; do
@@ -1131,7 +1120,7 @@ main() {
     run_phase ui_auth
     run_phase verify
     log "setup complete — profiles prepared: $PROFILES"
-    log "start one with: superfast-switch use dense|flash|gemma|deepseek"
+    log "start one with: superfast-switch use dense|gemma|ornith|ornith122"
     log "control: superfast-tui (terminal) or the GNOME extension"
     # The one thing a re-run cannot tell by looking at the machine: whether the
     # parameters are in the running kernel yet.
@@ -1145,7 +1134,7 @@ main() {
             sudo systemctl reboot
             exit 0
         fi
-        log "After rebooting, the large profiles (flash, deepseek) can load; check with:"
+        log "After rebooting, the large profiles (deepseek, ornith122) can load; check with:"
         log "  cat /proc/cmdline   # must show amdgpu.gttsize=118784 ttm.pages_limit=31457280"
         log "If PROFILES named more than dense, the other checkpoints were started in the"
         log "background and may still be downloading:"

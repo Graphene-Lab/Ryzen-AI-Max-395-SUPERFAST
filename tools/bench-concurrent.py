@@ -61,7 +61,7 @@ import time
 import urllib.request
 
 API = os.environ.get("SUPERFAST_API", "http://127.0.0.1:8731")
-CTR = os.environ.get("SUPERFAST_API_CTR", "superfast-flash")
+CTR = os.environ.get("SUPERFAST_API_CTR", "ornith-server")
 SOLO_TPS = float(os.environ.get("SUPERFAST_SOLO_TPS", "38.5"))
 # Making this run's own requests identifiable is the whole difficulty of
 # measuring a live box. Two things do not work, both measured: counting tail

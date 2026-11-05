@@ -61,7 +61,7 @@ MAX_BODY = 16 * 1024 * 1024
 SWITCH_TIMEOUT = 900
 
 # A profile that is starting is not a failure: ornith reads its weights in about
-# 25 s and the ple-disk flash takes minutes with its drafter, so a request that
+# 25 s and a large profile takes minutes to load with its drafter, so a request that
 # arrives in that window waits here instead of being told 409. The bound keeps a
 # truly stuck engine from holding a client for ever; after it the client gets the
 # same refusal it would have had at once.

@@ -14,7 +14,7 @@
 # Usage:
 #   superfast-switch status
 #   superfast-switch list
-#   superfast-switch use dense|flash|gemma|ornith|ornith122
+#   superfast-switch use dense|gemma|ornith|ornith122
 #   superfast-switch mode pinned|auto
 #   superfast-switch state
 #   superfast-switch profile-for <model-id>
@@ -35,8 +35,8 @@
 # `api-key off` means "no remote access at all" (loopback on the host still
 # works, no key needed there).
 #
-# `vision on|off` toggles the vision component of the ACTIVE profile (flash
-# and gemma only; dense and deepseek are text-only). It restarts that profile
+# `vision on|off` toggles the vision component of the ACTIVE profile (gemma
+# and ornith only; dense and deepseek are text-only). It restarts that profile
 # and drops its prompt cache, so use it between conversations. The vision
 # files are downloaded at setup whether or not the toggle is used.
 set -euo pipefail
@@ -45,7 +45,6 @@ XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export XDG_RUNTIME_DIR
 PORT="${SUPERFAST_PORT:-8731}"
 HEALTH="http://127.0.0.1:${PORT}/health"
-FLASH_DIR="${SUPERFAST_FLASH_DIR:-$HOME/superfast-flash}"
 GEMMA_DIR="${SUPERFAST_GEMMA_DIR:-$HOME/gemma-models}"
 ORNITH_DIR="${SUPERFAST_ORNITH_DIR:-$HOME/ornith-models}"
 ORNITH122_DIR="${SUPERFAST_ORNITH122_DIR:-$HOME/ornith122-models}"
@@ -56,19 +55,17 @@ MODE_FILE="${SUPERFAST_MODE_FILE:-$HOME/.config/superfast/mode}"
 
 declare -A UNIT=(
     [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
-    [flash]="${SUPERFAST_FLASH_UNIT:-superfast-flash.service}"
     [gemma]="${SUPERFAST_GEMMA_UNIT:-gemma.service}"
     [ornith]="${SUPERFAST_ORNITH_UNIT:-ornith.service}"
     [ornith122]="${SUPERFAST_ORNITH122_UNIT:-ornith122.service}"
 )
 declare -A LABEL=(
     [dense]="Qwen3.8-27B dense (halogen)"
-    [flash]="Qwen3.8-Flash-Next MoE (halogen-flash)"
     [gemma]="Gemma-4-26B-A4B ROCmFP4 (llama-rocmfpx)"
     [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
     [ornith122]="Ornith-1.5-122B MXFP4 (llama.cpp Vulkan)"
 )
-PROFILES=(dense flash gemma ornith ornith122)
+PROFILES=(dense gemma ornith ornith122)
 
 # Served model id -> profile, for `mode auto`. These are the ids the units
 # answer with (`--alias`, or HALOGEN's own model name), never the display
@@ -76,7 +73,6 @@ PROFILES=(dense flash gemma ornith ornith122)
 # not a contract. A client that sends the profile name itself is accepted too.
 declare -A ALIAS=(
     [qwen3.8-27b]=dense
-    [qwen3.8-flash-next]=flash
     [gemma-4-26b-a4b]=gemma
     [ornith-1.5-35b-a3b]=ornith
     [ornith-1.5-122b]=ornith122
@@ -90,7 +86,7 @@ ORCH_DIR="${SUPERFAST_ORCH_DIR:-$HOME/small-models}"
 ORCH_PORT="${SUPERFAST_ORCH_PORT:-8732}"
 ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 
-# Vision is a per-profile toggle. The tower (flash) / projector (gemma) is
+# Vision is a per-profile toggle. The projector (gemma, ornith) is
 # loaded only when a systemd drop-in is active in the unit's .d/ directory.
 # The drop-in templates are staged here by setup and moved into .d/ by
 # `vision on`, removed by `vision off`. Because the engine reads the flag once
@@ -98,11 +94,9 @@ ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
 # Profiles whose engine can carry a vision component. dense and deepseek are
 # text-only: no encoder exists in their repositories, so the toggle is not
-# available for them. flash runs the Vulkan ple-disk engine, whose GGUF ships
-# no projector of its own: the mmproj from unsloth/Qwen3.8-Flash-Next-GGUF is
-# loaded through superfast-flash-vk.service.vision.conf, which is why the
-# toggle works there and the projector is still an opt-in.
-VISION_CAPABLE="gemma ornith flash"
+# available for them. gemma and ornith load an --mmproj projector through
+# their drop-in, which is why the projector is still an opt-in.
+VISION_CAPABLE="gemma ornith"
 
 # Is a word in a space-separated list?
 is_in() { # "list" word
@@ -152,9 +146,6 @@ unit_age() { # unit
 weights_ready() {
     case "$1" in
         dense) return 0 ;;
-        flash)
-            [ -f "$FLASH_DIR/qwen38-flash-next-w4b.hgn" ] \
-                && [ -f "$FLASH_DIR/.download-complete" ] ;;
         gemma)
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
         ornith)
@@ -369,8 +360,8 @@ cmd_profile_for() {
 
 # One line of key=value, read by the gateway before it touches anything.
 #
-# `busy` and `queued` come from HALOGEN's /health. llama.cpp — gemma, deepseek,
-# ornith and the Vulkan flash — does not report them, so there the signal is
+# `busy` and `queued` come from HALOGEN's /health. llama.cpp — gemma, deepseek
+# and ornith — does not report them, so there the signal is
 # the slot being processed: /slots says `is_processing` per slot. A request
 # waiting in llama.cpp's queue sits behind a processing slot, so `busy` covers
 # it; `queued` stays 0 because that count does not exist.
@@ -439,19 +430,6 @@ vision_staged() { # profile
     [ -f "$VISION_DIR/${UNIT[$1]}.conf" ]
 }
 
-# Whether the engine reports the vision component enabled. Only the flash
-# engine exposes it in /health; llama.cpp (gemma) does not, so for gemma a
-# healthy 200 is the signal — a projector that fails to load stops the server,
-# which never reaches 200.
-vision_health_enabled() { # profile
-    case "$1" in
-        flash)
-            curl -s --max-time 5 "$HEALTH" 2>/dev/null \
-                | grep -Eq '"vision"[^}]*"enabled"[[:space:]]*:[[:space:]]*true' ;;
-        *) return 0 ;;
-    esac
-}
-
 # Toggle the vision component of the ACTIVE profile. The state is per profile:
 # the drop-in lives in that profile's unit, so switching profiles keeps each
 # one's own vision setting. Turning it on or off restarts the profile and
@@ -489,7 +467,7 @@ cmd_vision() {
             cp "$VISION_DIR/${UNIT[$p]}.conf" "$(vision_override_path "$p")"
             systemctl --user daemon-reload
             systemctl --user restart "${UNIT[$p]}"
-            if wait_healthy 60 && vision_health_enabled "$p"; then
+            if wait_healthy 60; then
                 echo "vision on for '$p'"
                 return 0
             fi
@@ -626,9 +604,8 @@ cmd_stop() {
 # own peak.
 #
 # The footprint table is measured, not copied from the engine's own table:
-# `flash` is 98.2 GiB resident by measurement while one README table says
-# ~45 GB, and trusting the second number would start a 24 GB render on a
-# machine with 17 GB free.
+# trusting a vendor number would start a 24 GB render on a machine with 17 GB
+# free.
 IMAGE_UNIT="${SUPERFAST_IMAGE_UNIT:-superfast-image.service}"
 IMAGE_RUNTIME="${SUPERFAST_IMAGE_RUNTIME:-localhost/superfast-image:1}"
 IMAGE_STATE="${SUPERFAST_IMAGE_STATE:-$HOME/.config/superfast/image-generator}"
@@ -638,13 +615,8 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 declare -A PROFILE_GB=(
-    [dense]=36 [flash]=51 [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
+    [dense]=36 [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
 )
-# flash is 50.3 GB by measurement since the ple-disk engine (it was 98 with
-# halogen, the number this table carried until 2026-10-20). Keeping the old
-# value made the gate refuse the generator next to flash even when the room
-# was there: 124 - 51 - 12 leaves 61 GB, against the 24 GB a 1024 px render
-# needs.
 
 image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }
 

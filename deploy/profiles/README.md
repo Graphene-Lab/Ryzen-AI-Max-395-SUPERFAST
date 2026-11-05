@@ -6,23 +6,21 @@ installs them, replacing the placeholders
 
 - `__HOME__` — the home directory of the user running the script,
 - `__XDG__` — `/run/user/<uid>`, which rootless Podman needs,
-- `__DENSE_DIR__`, `__FLASH_DIR__`, `__GEMMA_DIR__`, `__DEEPSEEK_DIR__`,
-  `__SMALL_DIR__` — where each profile's weights live, so a `MODELS_DIR_*`
-  override reaches the installed units,
-- `__DENSE_IMAGE__`, `__FLASH_IMAGE__` — the engine images, so
-  `SUPERFAST_IMAGE` and `SUPERFAST_FLASH_IMAGE` do too.
+- `__DENSE_DIR__`, `__GEMMA_DIR__`, `__DEEPSEEK_DIR__`, `__SMALL_DIR__` — where
+  each profile's weights live, so a `MODELS_DIR_*` override reaches the
+  installed units,
+- `__DENSE_IMAGE__` — the dense engine image, so `SUPERFAST_IMAGE` does too.
 
 | file | what it is |
 |---|---|
 | `dense.service` | Qwen3.8-27B, the quality profile, installed as `superfast.service` |
-| `superfast-flash.service` | Qwen3.8-Flash-Next MoE, the fast profile on the engine image |
 | `gemma.service` | Gemma-4-26B-A4B ROCmFP4, on the local `llama-rocmfpx` image |
 | `deepseek.service` | DeepSeek-V4-Flash ROCmFPX, on the local `llama-rocmfpx` image |
 | `orchestrator.service` | the small LFM2.5 router, on port 8732 (runs beside a profile) |
-| `superfast-download@.service` | one downloader per profile: `superfast-download@flash`, `@gemma`, `@deepseek`, `@small` |
+| `superfast-download@.service` | one downloader per profile: `superfast-download@gemma`, `@deepseek`, `@small` |
 | `download-weights.sh` | the downloader itself: resume at the exact byte offset, one writer per file, SHA-256 verified before the final rename |
 | `superfast-monitor.service`, `superfast-monitor.timer` | the engine sampler: one read of `/health`, `/cache`, the GPU and memory every 30 s, for telling a slow machine apart from a queueing one |
-| `superfast-flash-vk.service.vision.conf`, `gemma.service.vision.conf`, `ornith.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with flash, gemma and ornith able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (the tower for flash, `--mmproj` for gemma and ornith). Each mirrors its base unit's `ExecStart` — keep them in sync. dense and deepseek have no such file: no encoder exists for them |
+| `gemma.service.vision.conf`, `ornith.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with gemma and ornith able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (`--mmproj` for both). Each mirrors its base unit's `ExecStart` — keep them in sync. dense and deepseek have no such file: no encoder exists for them |
 
 The dense unit has a `.service` file of its own because it is installed by two
 phases: the engine phase starts it on a fresh machine, and the profiles phase
@@ -49,23 +47,9 @@ Multi-turn conversations reuse the KV prefix of the previous turn
 automatically; the rest of the context handling is described in the README
 under "What each profile ships: context, tokens, tools".
 
-`superfast-flash.service` carries engine settings instead, because that profile
-runs the Flash-Next engine and the settings are how several agent
-conversations stay resident at once:
-
-| setting | value | why |
-|---|---|---|
-| `HALOGEN_KV_POOL_POSITIONS` | `655360` | positions resident across **all** conversations. The image default is 524288 (two full-length conversations); a client that opens subagents needs more, and each request reserves `prompt + max_tokens` of it. 786432 is the largest value measured to **start reliably**: with 1048576 the engine reaches `model ready` and then spins forever in the serving-slot allocation, with no error and no listening socket (measured 2026-09-13; the table is in the README). The shipped value is one step below that — 655360 — because the pool is the only part of the engine's footprint a host can give back, and at 786432 the ~13 GiB left for the rest of the system did not survive a day of use (measured 2026-10-11; see the base unit's comment and the README) |
-| `HALOGEN_KV_POOL_FIT` | `0` | without it the engine shrinks the pool at startup — a pool requested as 1048576 came up as 524288, so the setting did nothing. `0` is safe here because the shipped 655360 is a value the host has been measured to back |
-| `HALOGEN_MAX_TOK` | `16384` | the prefill arena (not the answer budget). The pool above fits only with the arena halved; longer prompts are prefilled in arena-sized pieces |
-| `HALOGEN_CACHE_ENTRIES` | `32` | conversations whose resumable state the cache keeps. The image ships 8; 32 leaves headroom for a client that opens subagents. ~111 MiB each |
-| `HALOGEN_KV_SLOTS` / `HALOGEN_CTX` | `4` / `262144` | explicit rather than inherited, so what the unit runs with is readable in the unit |
-| `HALOGEN_QUEUE_TIMEOUT` | `3600` | seconds a request waits for room in the pool before the engine answers 503. Four concurrent worst-case requests are 2,386 s here, and a 503 throws away the work already queued. The dense unit ships 6000 for the same reason (one slot, four requests, 4,980 s) |
-| `HALOGEN_MAX_TOKENS_CAP` | `65536` | largest answer budget a request may ask for. Above it the engine answers 400 rather than truncating; the largest client budget this project documents is 32,768 |
-
-Both are the engine's own names, and both are written explicitly rather than
-left to the image: they decide whether a long turn is refused, and a default
-that changes under a new image tag is not something to discover in production.
+The dense unit's settings are the engine's own names, and they are written explicitly
+rather than left to the image: they decide whether a long turn is refused, and a
+default that changes under a new image tag is not something to discover in production.
 The values, and the client-side ones that pair with them, are derived in the
 README under "Timeouts, and why they are what they are".
 

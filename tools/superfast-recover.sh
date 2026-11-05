@@ -3,11 +3,11 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# The flash profile holds most of the machine: on the reference host the engine
-# reports 68.0 GiB of weights locked in RAM, plus the KV pool, plus its working
-# memory — 98.2 GiB of 124 GiB with the pool at 655360. The rest of the system
-# shares what is left, and the engine's 47.7 GiB lookup table is read from disk
-# through the page cache, which never fits in that remainder.
+# The biggest profile holds most of the machine: the deepseek profile measures
+# about 102 GB in use at 512K on a host with 124 GB, and ornith122 is not far
+# behind. The rest of the system shares what is left, and part of a checkpoint
+# is read from disk through the page cache, which then has to fit in that
+# remainder.
 #
 # That is fine while there is room. It stops being fine when the host's memory
 # has accumulated: the page cache and the zram swap fill up, and the contiguous
@@ -63,9 +63,8 @@ command -v systemctl >/dev/null 2>&1 || { say "systemctl not found; this tool is
 
 # Which profile is serving? The directory of units is the source of truth.
 active=""
-for p in dense flash gemma ornith ornith122; do
+for p in dense gemma ornith ornith122; do
     u="superfast${p#dense}"; [ "$p" = "dense" ] && u="superfast"
-    [ "$p" = "flash" ]   && u="superfast-flash"
     [ "$p" = "gemma" ]   && u="superfast-gemma"
     [ "$p" = "ornith" ]  && u="superfast-ornith"
     [ "$p" = "ornith122" ] && u="superfast-ornith122"

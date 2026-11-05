@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Removed
+
+- **The 125B flash profile is gone, and `ornith122` is the largest profile the
+  machine serves.** Qwen3.8-Flash-Next leaves the installer (the default
+  `PROFILES` no longer offers it), `deploy/profiles/` (its four unit templates
+  are deleted), `superfast-switch` (the profile list, the unit map and the
+  `qwen3.8-flash-next` alias), `superfast-recover`, the GNOME panel's profile
+  list and the `superfast-download@flash` unit. Its 224 GB of weights are
+  deleted from the reference host: `~/ple-models` (103 GB, the GGUF the unit
+  mounted) and `~/superfast-flash` (121 GB, the dead `.hgn` checkpoint of the
+  engine it used before 2026-10-20) — disk use went from 535 GB to 311 GB.
+  The README, `docs/FLAGS.md`, `docs/VISION.md`, the plain guide, the flash
+  weights table and the client examples now describe Ornith-1.5-122B (122B in
+  total, 124.6 B measured, 25.0/28.2 t/s, 69.7 GB on disk, 75 GB resident) as
+  the flagship, and the published PipelineScore and MultiPL-E tables no longer
+  carry the flash rows: those figures were measured on a profile that this
+  machine can no longer serve. Every client configuration drops its
+  `qwen3.8-flash-next` entries — Qwen Code on Windows and on the host, PI
+  (`superfast` and `superfast-remote`), OpenCode, whose global default moves to
+  `superfast-lan/ornith-1.5-35b-a3b`, and the dsh profile.
+
+- **`VULKAN_FLASH` is now `VULKAN_ENGINE`.** The variable builds the Vulkan
+  engine that serves `ornith` and `ornith122`; the old name is still read, so an
+  existing invocation keeps working.
+
 ### Added
 
 - **Gemma comes up with vision on a fresh install.** `VISION_DEFAULT` has

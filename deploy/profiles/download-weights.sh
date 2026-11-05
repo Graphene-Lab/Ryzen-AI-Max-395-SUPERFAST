@@ -1,5 +1,5 @@
 #!/bin/bash
-# download-weights.sh <dense|flash|gemma|ornith|ornith122|deepseek|small>
+# download-weights.sh <dense|gemma|ornith|ornith122|deepseek|small>
 #
 # Downloads one profile's weights into its own directory. Installed by
 # deploy/setup-fedora.sh as ~/.local/bin/superfast-downloads/download-weights.sh
@@ -25,13 +25,12 @@ set -u
 PROFILE="${1:-}"
 case "$PROFILE" in
     dense)    DIR="__DENSE_DIR__";    TOKENIZER=1 ;;
-    flash)    DIR="__FLASH_DIR__";    TOKENIZER=0 ;;
     gemma)    DIR="__GEMMA_DIR__";    TOKENIZER=0 ;;
     deepseek) DIR="__DEEPSEEK_DIR__"; TOKENIZER=0 ;;
     ornith)   DIR="__ORNITH_DIR__";   TOKENIZER=0 ;;
     ornith122) DIR="__ORNITH122_DIR__"; TOKENIZER=0 ;;
     small)    DIR="__SMALL_DIR__";    TOKENIZER=0 ;;
-    *) echo "usage: $0 dense|flash|gemma|ornith|ornith122|small" >&2; exit 2 ;;
+    *) echo "usage: $0 dense|gemma|ornith|ornith122|deepseek|small" >&2; exit 2 ;;
 esac
 
 LOG="$DIR/.download.log"
@@ -62,19 +61,6 @@ files() {
     case "$PROFILE" in
         dense)
             echo "qwen3.8-27b-p1w4d-d2.hgn|35865565184|274c3fc767fb57faf025dd03c76376b1fc1b32448aef45aaf02d1898fa962089|https://huggingface.co/peonist-ai/halogen-qwen3.8-27b/resolve/main/qwen3.8-27b-p1w4d-d2.hgn"
-            ;;
-        flash)
-            # llama.cpp Vulkan engine with --ple-disk: three shards of the
-            # STRIX_LEAN quant plus the MTP draft head. The GGUF carries its
-            # own tokenizer, so TOKENIZER is 0 for this profile.
-            echo "Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00001-of-00003.gguf|44944112832|7d5fc36da007b45fabe58537e96486df5a5d7629558fbe94888d5e0dd2086a7f|https://huggingface.co/pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF/resolve/main/ROCmFP4-STRIX_LEAN/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00001-of-00003.gguf"
-            echo "Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00002-of-00003.gguf|44688348576|05ce892c44b38f7cbdb3d5a48ebcce9cc4a956786c3a96f02f24c45bd9232954|https://huggingface.co/pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF/resolve/main/ROCmFP4-STRIX_LEAN/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00002-of-00003.gguf"
-            echo "Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00003-of-00003.gguf|16121070688|7551add986ac6a46bc69cab644b8fc64313d79ad06423e1f7e0544f87ced74aa|https://huggingface.co/pugant/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-GGUF/resolve/main/ROCmFP4-STRIX_LEAN/Qwen3.8-Flash-Next-Q4_0_ROCMFP4_STRIX_LEAN-00003-of-00003.gguf"
-            echo "Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf|3818043776|fa30a89fa06cd1bcc40810dcf1fed73d69c5ff33afb2a08b76333c6f9629ea34|https://huggingface.co/pugant/Qwen3.8-Flash-Next-MTP-DRAFT-HEAD-ROCMFP4-GGUF/resolve/main/Qwen3.8-Flash-Next-MTP-Q8_0-HEAD-ROCMFP4.gguf"
-            # Vision projector: the STRIX_LEAN quant ships none, so without this
-            # file the vision drop-in would point at nothing. Downloaded always,
-            # loaded only when that drop-in is active.
-            echo "mmproj-Flash-Next-F16.gguf|904004000||https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF/resolve/main/mmproj-F16.gguf"
             ;;
         gemma)
             echo "gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf|14439364064|76559759aee76a4a29f233f3279c4470ce2c47c206fac3ec60f33d00e3daecdb|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf"
@@ -175,7 +161,6 @@ log "=== $PROFILE: started ==="
 if [ "$TOKENIZER" = "1" ]; then
     case "$PROFILE" in
         dense) tokenizer "https://huggingface.co/peonist-ai/halogen-qwen3.8-27b/resolve/main" ;;
-        flash) tokenizer "https://huggingface.co/peonist-ai/halogen-qwen3.8-flash-next/resolve/main" ;;
     esac
 fi
 

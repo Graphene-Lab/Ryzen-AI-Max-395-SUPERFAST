@@ -31,11 +31,9 @@ Several "models" live on the machine, and you pick one at a time:
 
 - **Qwen3.8-27B (dense)** — the careful, high-quality model. Best answers,
   slower (about 21 words per second).
-- **Qwen3.8-Flash-Next (MoE)** — a bigger, newer model that works differently
-  and is much faster.
-- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second). Like
-  the Flash-Next model, it can also look at pictures when you turn "vision"
-  on (see *Everyday use*).
+
+- **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second), and it
+  can look at pictures when you turn "vision" on (see *Everyday use*).
 - **Ornith-1.5-122B (MoE)** — the largest model that still leaves room on the
   machine. It answers at about 25 words per second, has a 262K window, and
   passes the most coding tasks of any profile, though it is slower per task
@@ -79,7 +77,7 @@ when you switch.
   When it is on, a stranger on your network cannot use your machine without the
   key; when it is off, nobody on the network can use it, only you on the
   machine itself.
-- Two of the models (Flash-Next and Gemma) can **look at pictures**. There is
+- Two of the models (Gemma and Ornith) can **look at pictures**. There is
   a "Vision" switch in the desktop panel: it is greyed out for the models that
   cannot see, and you can turn it on or off for the two that can. Turning it
   on gives the model its "eyes", but it restarts that model — so do it
@@ -102,7 +100,7 @@ past that, the engine had to forget one conversation to keep another, and the
 helper whose conversation was forgotten read its whole history again. That is
 the pause of a minute or more.
 
-The flash profile now reserves room for four long conversations. Measured on
+The dense profile now reserves room for four long conversations. Measured on
 this machine with four helpers working together, each with about 140,000
 tokens of history:
 
