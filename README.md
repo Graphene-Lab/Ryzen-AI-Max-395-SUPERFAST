@@ -1710,6 +1710,8 @@ calls until the latency settled, and was submitted (`--user andrea-bruno`). One 
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
 | ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
 | ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
+| *Qwen3.8-Flash-Next, shipped flags — removed* | `qwen3.8-flash-next` | 83.8 | MAINLINE |
+| *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
 
 
@@ -1728,6 +1730,15 @@ model with `--reasoning off` scored **73.5**. The cards are
 (q8_0) and
 [67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20)
 (f16).
+
+The two italic `Qwen3.8-Flash-Next` rows are the **125B model the lineup used until
+2026-11-05**, kept because they record why it left. It scored **83.8** with the memory flags
+it shipped — one slot, ubatch 128, q8_0 KV — and **80.7** with the four slots, ubatch 512
+and f16 KV it ran before 2026-10-21, so those flags were a gain and not a quality trade.
+The best run reads code 100, reason 80, tool use 87.5, RAG 100, speed 36.1, and the model
+page is [qwen3.8-flash-next](https://pipelinescore.ai/models/qwen3.8-flash-next). It lost
+its slot on the code axis rather than on this one: 51 of 158 on MultiPL-E against 70 for
+both Ornith-1.5-122B and ornith, for a decode of 33-35 t/s.
 
 The `GLM-5.3-Flash` row in italics is a **reference measurement, not a profile**: it was run on
 2026-11-06 to decide whether the model deserved a slot, and it did not. On this axis it is a peer of
@@ -1759,6 +1770,7 @@ involved and no judge: the tests decide.
 | ornith-1.5-122b, f16 KV | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
 | halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
 | gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
+| *Qwen3.8-Flash-Next — removed* | 158 | 51 | 79 | 32 | 13.6 | 0h35m |
 | *GLM-5.3-Flash, reference* | 158 | 72 | **111** | 46 | 18.1 | 0h44m |
 
 Ornith-1.5-122B passes 70 with the q8_0 cache, level with the 35B, and 72 with
@@ -1766,6 +1778,10 @@ f16; both take about 18 s per task, six times the 35B's median. The 35B compiles
 far more of what it writes (116 against 103-105)
 and is the fastest by a wide margin. Gemma and dense are within one task of
 each other and are not separated by this benchmark.
+
+The italic `Qwen3.8-Flash-Next` row is the 125B profile removed on 2026-11-05: 51 of 158,
+a third, against 70 for both the models that outrank it here. That gap is why it left,
+and it is far wider than the one- or two-task differences this benchmark otherwise shows.
 
 The italic `GLM-5.3-Flash` row is the same reference measurement described
 under PipelineScore: it ties the 122B's best result at 72 passed, compiles more
