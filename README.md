@@ -425,7 +425,7 @@ Things we learned on the reference machine:
 - **Two kernel parameters, not one.** The GPU can only use part of the shared
   memory unless you raise both limits, and the allocatable size is the
   **smaller** of the two:
-  `amdgpu.gttsize=118784` (116 GiB) and `ttm.pages_limit=31457280`
+  `amdgpu.gttsize=122880` (120 GiB) and `ttm.pages_limit=31457280`
   (120 GiB, counted in 4 KiB pages). Both must be on the kernel command line,
   because the driver fixes the pool size when it loads. With the defaults,
   only about 62 GiB are usable, which is not enough for the largest
@@ -660,7 +660,7 @@ of the two:
 
 | parameter | default | set to | meaning |
 |---|---|---|---|
-| `amdgpu.gttsize` | auto (half of RAM) | `118784` | GTT aperture, in MiB (116 GiB) |
+| `amdgpu.gttsize` | auto (half of RAM) | `122880` | GTT aperture, in MiB (120 GiB) |
 | `ttm.pages_limit` | 16309919 pages | `31457280` | TTM limit, in 4 KiB pages (120 GiB) |
 
 Evidence for "the smaller of the two": with the default `ttm.pages_limit`,
@@ -671,7 +671,7 @@ because the driver fixes the pool size when it loads. Both parameters must be
 on the kernel command line, followed by a reboot:
 
 ```bash
-sudo grubby --update-kernel=ALL --args="amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+sudo grubby --update-kernel=ALL --args="amdgpu.gttsize=122880 ttm.pages_limit=31457280"
 sudo reboot
 ```
 
@@ -1710,6 +1710,7 @@ calls until the latency settled, and was submitted (`--user andrea-bruno`). One 
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
 | ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
 | ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
+| *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
 
 
 Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8, gemma 81.1)
@@ -1728,6 +1729,19 @@ model with `--reasoning off` scored **73.5**. The cards are
 [67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20)
 (f16).
 
+The `GLM-5.3-Flash` row in italics is a **reference measurement, not a profile**: it was run on
+2026-11-06 to decide whether the model deserved a slot, and it did not. On this axis it is a peer of
+the 122B rather than a successor — code 100, reasoning 80, tool use 87.5 and RAG 100 are identical,
+the same three tasks fail, and its +0.5 over the shipped 122B is entirely the speed axis (26.9
+against 23.5). Card:
+[4d9f41f8](https://pipelinescore.ai/s/4d9f41f8-2fe6-4386-925d-0c1181733086). The run served
+`j2ipper/GLM-5.3-Flash-a4e3s`, a 109.5 GiB requant whose experts are IQ2_S/IQ3_S at KLD 0.0419,
+through a **third engine**: llama.cpp `529ac893e` plus 46 Vulkan patches. It decodes faster
+(29.5-31.6 t/s against 25-28) but prefills at half the rate (208-280 t/s against ~512) and serves
+**64K** of context against 262K; it carries no `mmproj`, so no vision; and at 111 GiB of GTT it
+leaves no room beside the image generator. Raising the pool to `amdgpu.gttsize=122880` (120 GiB) is
+what makes it load at all — 116 GiB died on `Couldn't update BO_VA (-12)`.
+
 ## Benchmark: MultiPL-E (C#)
 
 [`nuprl/MultiPL-E`](https://huggingface.co/datasets/nuprl/MultiPL-E) config `humaneval-cs` ships 158
@@ -1745,12 +1759,20 @@ involved and no judge: the tests decide.
 | ornith-1.5-122b, f16 KV | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
 | halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
 | gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
+| *GLM-5.3-Flash, reference* | 158 | 72 | **111** | 46 | 18.1 | 0h44m |
 
 Ornith-1.5-122B passes 70 with the q8_0 cache, level with the 35B, and 72 with
-f16, the most of any profile; both take about 18 s per task, six times the
-35B's median. The 35B compiles far more of what it writes (116 against 103-105)
+f16; both take about 18 s per task, six times the 35B's median. The 35B compiles
+far more of what it writes (116 against 103-105)
 and is the fastest by a wide margin. Gemma and dense are within one task of
 each other and are not separated by this benchmark.
+
+The italic `GLM-5.3-Flash` row is the same reference measurement described
+under PipelineScore: it ties the 122B's best result at 72 passed, compiles more
+than any profile (111), and still did not earn a slot — same correctness
+ceiling, half the context, no vision, a third engine. Its 18,1 s median is the
+122B's own, which is the point: a faster decoder pays it back in prefill,
+because every task here is a fresh prompt.
 
 What this does and does not say:
 

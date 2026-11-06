@@ -236,7 +236,7 @@ check_armed_pool() { # unit
 # failed: out of memory", which looks like a GPU problem rather than a missing
 # boot parameter, so every run ends by saying which of the two it is.
 kernel_args_state() {
-    local want="amdgpu.gttsize=118784"
+    local want="amdgpu.gttsize=122880"
     if grep -qw -- "$want" /proc/cmdline 2>/dev/null; then
         log "shared-memory kernel parameters: ACTIVE ($want)"
         return 0
@@ -247,7 +247,7 @@ kernel_args_state() {
         log "shared-memory kernel parameters: MISSING."
         log "  deepseek will fail with 'cudaMalloc failed: out of memory'."
         log "  Run phase 5 and reboot, or by hand:"
-        log "  sudo grubby --update-kernel=ALL --args=\"amdgpu.gttsize=118784 ttm.pages_limit=31457280\""
+        log "  sudo grubby --update-kernel=ALL --args=\"amdgpu.gttsize=122880 ttm.pages_limit=31457280\""
     fi
 }
 
@@ -405,7 +405,10 @@ phase_suspend_mask() {
     # late because amdgpu fixes the pool size when it loads. Both therefore go
     # on the kernel command line, which needs a reboot. Without this the large
     # checkpoints fail with "cudaMalloc failed: out of memory".
-    cmdline_args="amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+    # 120 GiB, not 116: a 109.5 GiB checkpoint (GLM-5.3-Flash, 2026-11-06)
+    # needs the whole pool — at 118784 the Vulkan device died eight seconds
+    # into the load with "Couldn't update BO_VA (-12)".
+    cmdline_args="amdgpu.gttsize=122880 ttm.pages_limit=31457280"
     if grep -q -- "amdgpu.gttsize=" /etc/kernel/cmdline 2>/dev/null; then
         log "shared-memory parameters already present in /etc/kernel/cmdline"
     else
@@ -981,7 +984,7 @@ phase_verify() {
         fi
     done
 
-    for t in amdgpu.gttsize=118784 ttm.pages_limit=31457280; do
+    for t in amdgpu.gttsize=122880 ttm.pages_limit=31457280; do
         if grep -q -- "$t" /proc/cmdline; then
             log "  ok   kernel command line carries $t"
         else
@@ -1135,7 +1138,7 @@ main() {
             exit 0
         fi
         log "After rebooting, the large profiles (deepseek, ornith122) can load; check with:"
-        log "  cat /proc/cmdline   # must show amdgpu.gttsize=118784 ttm.pages_limit=31457280"
+        log "  cat /proc/cmdline   # must show amdgpu.gttsize=122880 ttm.pages_limit=31457280"
         log "If PROFILES named more than dense, the other checkpoints were started in the"
         log "background and may still be downloading:"
         log "  systemctl --user list-units 'superfast-download*'"
