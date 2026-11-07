@@ -1069,7 +1069,7 @@ classification; the second is the setting experiment.
 | profile | card sampling | greedy | compiled | pass % | median s/task | total |
 |---|---|---|---|---|---|---|
 | gemma-4-26b-a4b | **98** | 96 | 147 | 62 | 5.1 | 0h16m |
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | **92** | — | **151** | 58 | 7.9 | 0h22m |
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | **92** | **93** | **151** | 58 | 7.9 | 0h22m |
 | ornith-1.5-122b | **82** | 83 | 141 | 52 | 6.2 | 0h20m |
 | *GLM-5.3-Flash, reference* | 72 | — | 111 | 46 | 18.1 | 0h44m |
 | ornith-1.5-35b-a3b | 67 | **69** | 103 | 42 | 10.7 | 0h25m |
@@ -1107,12 +1107,18 @@ baseline and they are not kept. Every row above is one protocol: thinking off, t
 benchmark's own 512-token budget, each model's card sampling.
 
 **The second column is the sampling experiment.** Two runs per model, same day,
-same harness, same tasks: the difference is inside the noise — 98 against 96, 82
-against 83, 67 against 69, 11 against 12, two passes over 632 tasks while the two
-settings disagree on 66. Temperature changes *which* tasks pass, not how many.
-What it does change is the bill: at its card's set ornith-35b compiles 103 of 158
-and spends 7.2 s generating each body, greedy compiles 121 and spends 2.1 s. On
-gemma and the 122B the two costs are identical.
+same harness, same tasks: the difference is inside the noise — 98 against 96, 92
+against 93, 82 against 83, 67 against 69, 11 against 12, three passes over 790
+tasks while the two settings disagree on 83. Temperature changes *which* tasks
+pass, not how many. What it does change is the bill: at its card's set
+ornith-35b compiles 103 of 158 and spends 7.2 s generating each body, greedy
+compiles 121 and spends 2.1 s. On gemma and the 122B the two costs are identical.
+
+Nemotron is the one row where the two columns also differ in the engine: its
+card-sampling run was served plain (7.9 s per task) and its greedy run carried
+the MTP head and the 256-token ubatch (6.0 s, 16 minutes for the 158). So the
+two time figures are not the sampling talking — the pass count is what those
+two columns compare.
 
 The italic `Qwen3.8-Flash-Next` row is the 125B profile removed on 2026-11-05: 51 of 158,
 a third, against 98 for gemma, 92 for the Nemotron reference and 82 for the 122B. That
