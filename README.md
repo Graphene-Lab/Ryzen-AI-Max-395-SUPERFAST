@@ -1084,11 +1084,23 @@ model that never earned a slot. Nemotron compiles more of what it writes than an
 model measured (151 of 158) and still finishes second.
 
 The 122B is 12 tasks better here than the October run that reported 70, and gemma
-20 better than the 19 it reported: those rows were measured with the thinking on,
-before the harness could switch it off, and on a serving path that left gemma 133
-of 158 answers uncompilable. They are not a baseline and they are not kept; every
-row above is one protocol — thinking off, the benchmark's own 512-token budget,
-each model's card sampling.
+20 better than the 19 it reported. **Nothing about gemma changed** — same weights, same
+`llama-rocmfpx:7.2.4` image, same launcher line, verified in the history of
+`deploy/profiles/gemma.service`. What changed is the request: the harness now sends
+`chat_template_kwargs.enable_thinking = false`, and gemma's chat template has a reasoning
+channel. A control on 2026-11-07, the same 20 tasks both ways, says exactly that:
+
+| gemma, 20 tasks | passed | compiled | median tokens | hitting the 512 cap |
+|---|---|---|---|---|
+| thinking on (what October measured) | 4 | 5 | **512** | **20 of 20** |
+| thinking off (what the table above measures) | **12** | **18** | 66 | 1 of 20 |
+
+With reasoning on, gemma spends the benchmark's 512 tokens thinking and then writes a
+whole program inside markdown fences: the October record still carries the error that
+proves it, `CS1056: Unexpected character '`'`. So the old row was measuring the budget,
+not the model — those rows are not a baseline and they are not kept. Every row above is
+one protocol: thinking off, the benchmark's own 512-token budget, each model's card
+sampling.
 
 **The second column is the sampling experiment.** Two runs per model, same day,
 same harness, same tasks: the difference is inside the noise — 98 against 96, 82
