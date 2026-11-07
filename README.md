@@ -1090,17 +1090,21 @@ The 122B is 12 tasks better here than the October run that reported 70, and gemm
 `chat_template_kwargs.enable_thinking = false`, and gemma's chat template has a reasoning
 channel. A control on 2026-11-07, the same 20 tasks both ways, says exactly that:
 
-| gemma, 20 tasks | passed | compiled | median tokens | hitting the 512 cap |
-|---|---|---|---|---|
-| thinking on (what October measured) | 4 | 5 | **512** | **20 of 20** |
-| thinking off (what the table above measures) | **12** | **18** | 66 | 1 of 20 |
+| gemma, same 20 tasks | budget | passed | compiled | median tokens | at the cap |
+|---|---|---|---|---|---|
+| thinking on (what October measured) | 512 | 4 | 5 | 512 | 20 of 20 |
+| thinking off (what the table above measures) | 512 | **12** | **18** | 66 | 1 of 20 |
+| thinking on | 2,048 | 7 | 15 | 2,048 | 18 of 20 |
+| thinking off | 2,048 | **12** | **18** | 66 | 1 of 20 |
 
 With reasoning on, gemma spends the benchmark's 512 tokens thinking and then writes a
 whole program inside markdown fences: the October record still carries the error that
-proves it, `CS1056: Unexpected character '`'`. So the old row was measuring the budget,
-not the model — those rows are not a baseline and they are not kept. Every row above is
-one protocol: thinking off, the benchmark's own 512-token budget, each model's card
-sampling.
+proves it, `CS1056: Unexpected character '`'`. Quadrupling the budget helps it — 4 to 7 —
+but does not close the gap, and 18 of the 20 answers still end at the ceiling: this
+reasoning does not converge on a single function, it keeps going until something cuts
+it. So the old row was measuring the budget, not the model — those rows are not a
+baseline and they are not kept. Every row above is one protocol: thinking off, the
+benchmark's own 512-token budget, each model's card sampling.
 
 **The second column is the sampling experiment.** Two runs per model, same day,
 same harness, same tasks: the difference is inside the noise — 98 against 96, 82
