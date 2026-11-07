@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- **The project is MIT-licensed.** `LICENSE.md` was a Peonist End User License
+  Agreement covering an engine binary that no longer ships; it is now the plain
+  MIT text, copyright Andrea Bruno, and it covers everything in this repository
+  — installer, profile units, tools, panel, benchmark harnesses and docs. Model
+  weights keep their authors' licenses and the components inside the container
+  images keep theirs (`THIRD-PARTY-NOTICES.md`); neither is covered by the MIT
+  grant. The README badge and License section say the same in one place.
+
 ### Removed
 
 - **The `dense` profile and the halogen engine it ran on are gone, and every

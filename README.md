@@ -4,7 +4,7 @@
 [![Target: Fedora 44, Strix Halo gfx1151](https://img.shields.io/badge/target-Fedora%2044%20%C2%B7%20gfx1151-8957e5)](#install-a-machine)
 [![Engines: llama.cpp Vulkan + ROCmFPX](https://img.shields.io/badge/engines-llama.cpp%20Vulkan%20%2B%20ROCmFPX-1f6feb)](docs/FLAGS.md)
 [![Runtime image build](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml/badge.svg)](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml)
-[![License](https://img.shields.io/badge/license-see%20LICENSE.md-lightgrey)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE.md)
 
 ![SUPERFAST logo — a speedometer](assets/superfast.gif)
 
@@ -1862,15 +1862,19 @@ build-outs find harder to justify.
 
 ## License
 
-The engine is licensed by Peonist: free for any use, including commercial use,
-unmodified redistribution permitted, and benchmark publication expressly
-permitted. See [`LICENSE.md`](LICENSE.md), the engine's End User License
-Agreement — it covers the engine binary, its serving front-end and the
-container packaging. **This repository's own files — the installer, the tools,
-the documentation — are not covered by it.** For what is redistributed inside
-the images (ROCm and the rest) see
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md); the images ship the same two
-documents as `/licenses/EULA.md` and `/licenses/THIRD-PARTY-NOTICES.md`.
+**MIT.** Everything this repository contains — the installer, the profile units,
+the switch, the tools, the GNOME panel, the benchmark harnesses and the
+documentation — is released under the MIT license in
+[`LICENSE.md`](LICENSE.md): use it, change it, ship it, commercially or not, as
+long as the copyright notice travels with it. There is no EULA to accept and no
+key to obtain.
 
-**Model weights are not included and are not covered** by that license. They
-are obtained separately and are licensed by their original authors.
+That does not extend to what the machine runs:
+
+- **Model weights** are not included and keep the licenses of their authors.
+  Each downloader names the repository it pulls from
+  ([`deploy/profiles/download-weights.sh`](deploy/profiles/download-weights.sh)),
+  and some of those repositories are gated.
+- **The container images** carry llama.cpp (MIT) and, in the ROCmFPX image,
+  AMD's ROCm runtime under its own terms. See
+  [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

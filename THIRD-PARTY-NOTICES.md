@@ -2,8 +2,8 @@
 
 The containers this project ships redistribute the components below. Each is
 governed by its own license, whose text lives inside the image at the path
-given. Where any of these conflicts with the superfast EULA, **the license of
-the component governs that component.**
+given. Where any of these conflicts with the MIT license of this repository,
+**the license of the component governs that component.**
 
 | image | base | what it adds |
 |---|---|---|
