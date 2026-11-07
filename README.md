@@ -1699,9 +1699,21 @@ JSON tool calls, answering reasoning questions exactly, and extracting facts fro
 documents — and each task is scored by its own checker, not by a judge model, into a 0-100
 composite with a tier band. It compares quality, not speed.
 
-The runs of 2026-10-22 were made **on the host itself**, so the leaderboard page describes the
-machine that really serves the model. Each run switched the profile, warmed it with three short
-calls until the latency settled, and was submitted (`--user andrea-bruno`). One seed per profile.
+The runs of 2026-10-22, and the reference runs of 2026-11-06 and 2026-11-07, were made **on the
+host itself**, so the leaderboard page describes the machine that really serves the model. Each
+run switched the profile, warmed it with three short calls until the latency settled, and was
+submitted (`--user andrea-bruno`). One seed per profile.
+
+*Nemotron 3.5 Super VL 120B-A12B* is the second reference measurement, run on 2026-11-07 on an
+engine built for it from mainline (llama.cpp `ca89968`, no patches) with its vision projector.
+It is **the slowest profile measured here**: speed 12.1 against 23.5 for the 122B, which matches
+its own probe of 17.9 t/s decode and 190-320 t/s prefill — a 120B MoE with 12B active on a
+hybrid Mamba-2 architecture, whose Vulkan kernels are plainly less mature. Its four quality
+families are **identical to the 122B's** (code 100, reason 80, tool use 87.5, RAG 100), so the
+whole gap is speed. The CLI's 2048-token budget cannot hold a reasoning trace, so it had to run
+with thinking off; the row to read it against is therefore the 122B's thinking-off **73.5**, not
+81.9. Card:
+[de191deb](https://pipelinescore.ai/s/de191deb-97b8-4539-92c8-df69a98bf20a).
 
 | profile | client model id | score | tier |
 |---|---|---|---|
@@ -1710,9 +1722,16 @@ calls until the latency settled, and was submitted (`--user andrea-bruno`). One 
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
 | ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
 | ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
+| ornith122, thinking off | `ornith-1.5-122b` | 73.5 | FEEDER |
 | *Qwen3.8-Flash-Next, shipped flags — removed* | `qwen3.8-flash-next` | 83.8 | MAINLINE |
 | *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
+
+**Every run above is published.** The ten of them, with their tiers, are listed on the
+[andrea-bruno profile](https://pipelinescore.ai/users/andrea-bruno) alongside everyone else's
+runs, which is the comparison the numbers are for; the individual cards are linked in the
+paragraphs below.
 
 
 Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8, gemma 81.1)
