@@ -2,7 +2,7 @@
 
 [![Install: one script, unattended](https://img.shields.io/badge/install-one%20script%2C%20unattended-2ea44f?logo=linux&logoColor=white)](#install-a-machine)
 [![Target: Fedora 44, Strix Halo gfx1151](https://img.shields.io/badge/target-Fedora%2044%20%C2%B7%20gfx1151-8957e5)](#install-a-machine)
-[![Engines: halogen dense + llama.cpp Vulkan](https://img.shields.io/badge/engines-halogen%20dense%20%2B%20llama.cpp%20Vulkan-1f6feb)](docs/FLAGS.md)
+[![Engines: llama.cpp Vulkan + ROCmFPX](https://img.shields.io/badge/engines-llama.cpp%20Vulkan%20%2B%20ROCmFPX-1f6feb)](docs/FLAGS.md)
 [![Runtime image build](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml/badge.svg)](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/actions/workflows/publish-runtime.yml)
 [![License](https://img.shields.io/badge/license-see%20LICENSE.md-lightgrey)](LICENSE.md)
 
@@ -39,7 +39,7 @@ install by hand, and one command per mode**:
 ```bash
 # on the machine, as the admin user (not root: rootless podman is the point)
 curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
-PROFILES="dense gemma ornith ornith122 small" bash setup-fedora.sh
+PROFILES="gemma ornith ornith122 small" bash setup-fedora.sh
 ```
 
 Add `UNATTENDED=1` in front of `bash` for a run that is never interrupted: it
@@ -48,7 +48,7 @@ parameters, reboots the machine by itself and continues through a one-shot
 system unit. Nothing needs typing, then or after:
 
 ```bash
-PROFILES="dense gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
+PROFILES="gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
 journalctl -u superfast-setup-resume -f      # the part after the reboot
 ```
 
@@ -57,8 +57,8 @@ What it needs, and what it does:
 | | |
 |---|---|
 | a host | Fedora Workstation 44 on AMD Strix Halo (gfx1151). It refuses anything else, and it refuses to run as root |
-| disk | about 158 GB: the checkpoints are 35.9 GB (dense), 14.9 GB (Gemma-4), 69.7 GB (Ornith-1.5-122B), 19.0 GB (Ornith-1.5-35B-A3B) and 1.0 GB (the two orchestrator models), plus about 18 GB of container images |
-| time | hours, not minutes: the dense checkpoint alone is 35.9 GB, and the extra profiles download in the background |
+| disk | about 123 GB — this was 158 GB while the removed `dense` profile was installed, and the total is recomputed here from what remains: the checkpoints are 14.9 GB (Gemma-4), 69.7 GB (Ornith-1.5-122B), 19.0 GB (Ornith-1.5-35B-A3B) and 1.0 GB (the two orchestrator models), plus about 18 GB of container images |
+| time | hours, not minutes: the Ornith-1.5-122B checkpoint alone is 69.7 GB, and the profiles download in the background |
 | sudo | used for the packages, the firewall, the SSH service, the groups and the kernel parameters. Passwordless for `UNATTENDED=1` |
 | it sets up | the packages and the kernel parameters, SSH, the firewalld rules (8741 open, 8731 closed), the model downloads with SHA-256 verification, the container images, the systemd units per profile, the switch, the terminal menu, the GNOME panel, and the API-key gateway |
 
@@ -73,9 +73,9 @@ passphrase prompt on every reboot, which is not headless). Both are in
 The guided path is what was validated on the reference machine. Every phase
 has also been exercised since on a Fedora 44 machine with no GPU and no
 checkpoints (`SKIP_WEIGHTS=1 SKIP_IMAGE=1`, which is what those flags are for):
-phases 1 to 7 and 9 to 10 complete, and phase 8 stops where it should, at the
+they all run, and the installer stops where it should, at the
 GPU groups a fresh session does not have yet. That run is what found five
-installer bugs, including one that corrupted the generated dense unit. What has
+installer bugs, including one that corrupted a generated profile unit. What has
 not happened yet is a first run on a fresh host with the hardware and the room
 for the weights, so that may be yours. If the script stops, or the machine does
 not end up serving a model, report it — the form asks for exactly what makes it
@@ -84,8 +84,9 @@ fixable:
 **→ [The installer did not finish](https://github.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/issues/new?template=installer-failure.yml)**
 
 Three things are usually enough: the last line that looks like
-`== phase 7/10: engine image ==`, the error under it, and whether it was the
-run before the reboot or the one after. The second half logs to the journal,
+`== phase 7/8: model switch, profile units, weights ==`, the error under it,
+and whether it was the run before the reboot or the one after. The second half
+logs to the journal,
 so `journalctl -u superfast-setup-resume --no-pager | tail -40` is the report.
 
 Installer breakage goes to the top of the list. We look at a report as soon as
@@ -98,12 +99,11 @@ The full walkthrough, phase by phase, with what each step verifies, is
 [Set up a new machine](#set-up-a-new-machine). The installer prints its own
 progress and, at the end, what is running and what to check.
 
-What it runs — four open-weight models, everything below measured on this
+What it runs — three open-weight models, everything below measured on this
 machine except where a row says otherwise:
 
 | profile | model | id for the client | speed here (prose / code) | best for |
 |---|---|---|---|---|
-| `dense` | **Qwen3.8-27B**, dense, 27B parameters | `qwen3.8-27b` | 21.0 / 26.1 t/s | the highest quality per token; quality before speed |
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
 | `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, q8_0 KV, MTP inside the weights, vision when the projector is added |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision on a quarter of the 122B's memory |
@@ -148,18 +148,15 @@ document quotes somebody else's figures, it says so next to the table.
 
 ### A note on names
 
-The project is called SUPERFAST. The dense engine image and its model
-repository were published before the rename, so they still use the old name
-`halogen`. The commands below use that name, because it is the name that
-exists today. The GGUF profiles (gemma, ornith, ornith122) do not use it: they
-run llama.cpp, whose flags follow the GGUF conventions.
+The project is called SUPERFAST. Each profile is named after the model it
+serves: `gemma`, `ornith` (the 35B) and `ornith122`.
 
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
-machine runs four profiles, in order of size: Ornith-1.5-122B (122B in total,
-~6B active), Ornith-1.5-35B-A3B (35B in total, 3B active), the dense
-Qwen3.8-27B (27B parameters) and Gemma-4 (25.2B) — that is, up to a
+machine runs three profiles, in order of size: Ornith-1.5-122B (122B in total,
+~6B active), Ornith-1.5-35B-A3B (35B in total, 3B active) and Gemma-4
+(25.2B) — that is, up to a
 122-billion-parameter model running entirely on the machine.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
@@ -172,47 +169,19 @@ the measured comparison that moved it out of the fifth slot is in
 **Why one model at a time.** This is a deliberate architecture choice, not a
 limitation. A single model gets the whole machine: all of the unified memory
 for its weights and its KV cache, and therefore the largest context window the
-machine can hold for it — 262,144 tokens for the Qwen, Ornith and Gemma
-profiles. Running two large models at once would mean
-splitting that memory, and the first thing to shrink would be the context
-window — which is exactly what an agent needs most: a long window that holds
-the conversation, the tool definitions, and the files being worked on. That is
-also why every profile ships an agent-ready configuration: tool calling, a
-large answer budget, prompt cache, and sampling defaults from the vendor.
+machine can hold for it — 262,144 tokens for the Ornith and Gemma profiles.
+Running two large models at once would mean splitting that memory, and the
+first thing to shrink would be the context window — which is exactly what an
+agent needs most: a long window that holds the conversation, the tool
+definitions, and the files being worked on. That is also why every profile
+ships an agent-ready configuration: tool calling, a large answer budget,
+prompt cache, and sampling defaults from the vendor.
 
 The one companion allowed to share the machine is the small orchestrator: a
 1.2B-parameter model that decodes at about 220 tokens per second and occupies
 a couple of gigabytes — insignificant on a machine with 124 GB of unified
 memory. It can stay resident while a large model works, and it costs that
 model one to two percent of memory bandwidth. Everything else waits its turn.
-
-### A measured starting point
-
-On the reference machine, the dense Qwen3.8-27B profile answers a 32K prompt
-with a 256-token answer faster than the fastest published numbers for the
-same model on the same silicon from other runtimes:
-
-| | prefill | decode | **total** |
-|---|---|---|---|
-| **SUPERFAST** dense profile (6.32 bpw) | **57.9 s** | 8.1 s | **66.0 s** |
-| [KyaniteLabs](https://github.com/KyaniteLabs/qwen38-27b-strix-halo) (Q4_K_XL) | 84.0 s | 8.5 s | 92.5 s |
-| [q38rocm](https://github.com/julianmb/q38rocm) (4.26 bpw) | 133.7 s | 7.8 s | 141.5 s |
-
-That is **2.1× faster than q38rocm and 1.4× faster than KyaniteLabs** end to
-end, with about 1.5× their weight precision. Most of the gain is in prefill,
-and prefill is most of the wall-clock time on any prompt with real context.
-Speculative decoding in this engine produces byte-identical output to serial
-greedy decode: it is a speed optimization, not a quality trade, and it is
-checked on every release.
-
-**Read that table together with the memory layout.** These engine-level
-numbers were measured with the 64 GB UMA carve (the older layout of this
-machine). The current layout uses a 1 GB UMA carve, which the large MoE
-checkpoints require; in that layout the same dense profile measures about 12%
-lower (21.0 t/s prose, 26.1 t/s code — see the
-[measured profiles](#performance-tuning-on-fedora-44--what-we-tested)). The
-comparison above is still the right one for the engine itself, because the
-other projects were measured under comparable settings.
 
 If you do not have the machine yet, [build it step by
 step](#set-up-a-new-machine). If you already have it, pick a model with
@@ -329,7 +298,7 @@ Workstation 44. There are two ways to get there:
 - **Automated:** `bash deploy/setup-fedora.sh` takes a fresh machine to a
   running SUPERFAST service: system update, SSH, GPU groups, auto-suspend off,
   the kernel memory parameters, checkpoint download with exact-offset resume,
-  and the engine installed as `superfast.service`, waiting for `/health`. On a
+  and each profile installed as its own systemd user unit, waiting for `/health`. On a
   fresh machine the **first run stops on purpose** after adding your user to
   the GPU groups: that change only applies to a new session, so it prints
   "log out, log back in, then run this script again" instead of failing ten
@@ -337,11 +306,11 @@ Workstation 44. There are two ways to get there:
   finishes the job. Add more profiles with `PROFILES`:
 
   ```bash
-  # dense (default) is prepared alone
+  # the default set: three llama.cpp profiles and the small router
   bash deploy/setup-fedora.sh
 
-  # the whole set: the dense engine, three GGUF profiles, the small router
-  PROFILES="dense gemma ornith ornith122 small" bash deploy/setup-fedora.sh
+  # the same set, named explicitly
+  PROFILES="gemma ornith ornith122 small" bash deploy/setup-fedora.sh
   ```
 
   For a run that nobody has to watch, add `UNATTENDED=1`. It needs
@@ -354,7 +323,7 @@ Workstation 44. There are two ways to get there:
   `journalctl -u superfast-setup-resume -f`.
 
   ```bash
-  PROFILES="dense gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
+  PROFILES="gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
   ```
 
   Get the script with `curl` rather than copying it from a Windows machine:
@@ -367,29 +336,21 @@ Workstation 44. There are two ways to get there:
   one later with `systemctl --user start superfast-download@ornith122`), and
   `SKIP_IMAGE=1` skips the container images, the 3.7 GB GGUF runtime included.
 
-  If you installed before 2026-09-11, the dense profile on your machine still
-  carries the old engine settings, and parallel agents on it are slow. Re-run
-  the profiles phase to pick up the new ones (the KV pool, see
-  [Many agents at once](#many-agents-at-once)):
+  The profiles phase alone can be re-run on a machine that is already
+  installed, which is how a unit-file change reaches the machine without
+  downloading anything again:
 
   ```bash
-  PROFILES="dense gemma ornith ornith122 small" ONLY="profiles" bash deploy/setup-fedora.sh
+  PROFILES="gemma ornith ornith122 small" ONLY="profiles" bash deploy/setup-fedora.sh
   ```
 
   It rewrites the unit files (and refreshes the tools in `~/.local/bin`) and
   does not stop a profile that is already running: the new settings apply the
-  next time that profile starts. Run `superfast-switch use dense` for that,
-  which also makes dense the profile that starts at boot. Until you pick one,
-  the machine comes up on whichever profile was enabled before (dense, on a
-  machine from the automated install).
-
-  Keep `dense` in the `PROFILES` list of that command: until 2026-09-13 the
-  dense unit was written by the engine phase alone, so `ONLY=profiles` rewrote
-  every unit except `superfast.service`, and a machine that followed this
-  paragraph kept a dense unit with no `HALOGEN_QUEUE_TIMEOUT` and no
-  `HALOGEN_MAX_TOKENS_CAP` in it. Both are now installed from
-  `deploy/profiles/dense.service`, and the profiles phase refreshes that too.
-  The phase also installs the [sampler](#watch-a-busy-machine).
+  next time that profile starts. Run `superfast-switch use ornith122` for that,
+  which also makes ornith122 the profile that starts at boot. Until you pick
+  one, the machine comes up on whichever profile was enabled before
+  (`ornith122`, on a machine from the automated install). The phase also
+  installs the [sampler](#watch-a-busy-machine).
 
   The weights of the extra profiles are fetched by one systemd service per
   profile, so the script returns instead of waiting hours for them, the
@@ -439,21 +400,19 @@ Things we learned on the reference machine:
   future option.
 - **SELinux stays Enforcing.** Passing `/dev/kfd` and `/dev/dri` into
   rootless Podman works without changes.
-- **The engine runs as a systemd user service** (`superfast.service`): it
-  starts at boot, restarts on failure, and serves the OpenAI-compatible API
-  on port 8731.
+- **Each profile runs as its own systemd user service** (`gemma.service`,
+  `ornith.service`, `ornith122.service`): it starts at boot, restarts on
+  failure, and serves the OpenAI-compatible API on port 8731.
 
 ---
 
 ## Get the weights
 
-Images contain the engine, not the weights: the dense image is 3.5 GB of
-engine, and its checkpoint is 35.9 GB. Each profile keeps its weights in its
-own directory, and the setup script and the switch know those paths.
+Images contain the engine, not the weights. Each profile keeps its weights in
+its own directory, and the setup script and the switch know those paths.
 
 | profile | weights directory | files (size in bytes) | source |
 |---|---|---|---|
-| dense | `~/superfast-models` | `qwen3.8-27b-p1w4d-d2.hgn` (35,865,565,184) + `tokenizer/` | HF `peonist-ai/halogen-qwen3.8-27b` |
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
 | ornith122 | `~/ornith122-models` | `Ornith-1.5-122B.MXFP4_MOE.gguf` (69,666,316,288) | HF `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
@@ -472,35 +431,36 @@ rejects, and the DeepSeek DSpark file is built for another runtime (`unknown
 model architecture`). The measured Gemma and DeepSeek numbers are therefore
 without speculation.
 
-For the dense profile, download the checkpoint once and mount it:
+To fetch the largest checkpoint by hand — one file, with the MTP head inside
+it — download it into its directory and start it with the flags its unit
+carries:
 
 ```bash
 pip install -U "huggingface_hub[cli]"
-hf download peonist-ai/halogen-qwen3.8-27b \
-  --local-dir ~/superfast-models
+hf download prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP \
+  --local-dir ~/ornith122-models
 ```
 
-That repository holds both the `.hgn` checkpoint and **a flat tokenizer
-directory**, so there is nothing to assemble by hand:
-
 ```
-~/superfast-models/
-  qwen3.8-27b-p1w4d-d2.hgn      35.9 GB   the checkpoint
-  tokenizer/                              tokenizer.json, chat template, ...
+~/ornith122-models/
+  Ornith-1.5-122B.MXFP4_MOE.gguf   69.7 GB   weights, the MTP head inside
 ```
-
-Then point the container at both:
 
 ```bash
 podman run --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
-  -v ~/superfast-models:/models:ro \
-  -v ~/superfast-models/tokenizer:/tokenizer:ro \
-  ghcr.io/peonist-ai/halogen:0.1.3
+  -v ~/ornith122-models:/models:ro \
+  localhost/superfast-vk:patch0012 \
+  -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
+  --host 0.0.0.0 --port 8731 -c 262144 \
+  --alias ornith-1.5-122b --jinja \
+  -ctk q8_0 -ctv q8_0 -fa on --parallel 1 --timeout 0 \
+  --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 \
+  --spec-mtp-strict-qwen
 ```
 
-This manual run is optional: `superfast-switch use dense` starts the same
+This manual run is optional: `superfast-switch use ornith122` starts the same
 profile as a managed service. On Docker instead of Podman, replace
 `--group-add keep-groups` with `--group-add video --group-add render`;
 `keep-groups` is a Podman keyword that Docker cannot resolve.
@@ -512,7 +472,7 @@ profile as a managed service. On Docker instead of Podman, replace
 > weight used here is checked.
 >
 > ```bash
-> sha256sum ~/superfast-models/qwen3.8-27b-p1w4d-d2.hgn
+> sha256sum ~/ornith122-models/Ornith-1.5-122B.MXFP4_MOE.gguf
 > # compare with the LFS SHA-256 shown on the file's page on Hugging Face
 > ```
 >
@@ -528,39 +488,6 @@ profile as a managed service. On Docker instead of Podman, replace
 > first copy of it was damaged because two downloads wrote the same file, so
 > the downloader now takes a lock and checks the sum before renaming the file.
 
-### Or let SUPERFAST fetch the weights for you
-
-If you do not want to download separately, set `HALOGEN_DOWNLOAD` and the
-container fetches the weights on the first start:
-
-```bash
-podman run --rm -p 127.0.0.1:8731:8731 \
-  --device /dev/kfd --device /dev/dri --group-add keep-groups \
-  --security-opt seccomp=unconfined --ipc=host \
-  -e HALOGEN_DOWNLOAD=peonist-ai/halogen-qwen3.8-27b \
-  -e HALOGEN_TOKENIZER=/models/tokenizer \
-  -v ~/superfast-models:/models \
-  ghcr.io/peonist-ai/halogen:0.1.3
-```
-
-Two differences from the manual route. The models volume is mounted
-**read-write**, because the download writes into it. And there is only *one*
-mount: the download brings the tokenizer with it, so `HALOGEN_TOKENIZER`
-points inside `/models` instead of at a second volume. Mounting
-`~/superfast-models/tokenizer` here would fail on a first run, because the
-container runtime would create it as an empty directory before the download
-could fill it.
-
-The download starts only when the checkpoint is missing, so a restart does
-not download it again, and an interrupted transfer resumes.
-
-**With `HALOGEN_DOWNLOAD` unset, the container opens no outbound network
-connection at all** — no telemetry, no license check, no model fetch. If the
-checkpoint is not on disk where `HALOGEN_CHECKPOINT` points, the container
-says so and exits instead of reaching for the network. That default is
-deliberate: a 35.9 GB transfer should not start because someone ran
-`podman run` to see what happens.
-
 Model weights are licensed separately from the engine, by their original
 authors; see the model repository for those terms.
 
@@ -568,59 +495,12 @@ authors; see the model repository for those terms.
 
 ## Performance
 
-> **Which machine produced these numbers.** The engine-level figures in this
-> section (prefill, decode distribution, the comparison table) come from the
-> reference machine *before* it moved to the UMA 1 GB layout, and from the
-> engine's own `bench`/`sweep` tools. The profile table further down uses the
-> current layout and a different tool. Do not compare the two line by line:
-> in the current layout the dense profile measures about 12% lower (see
-> [A measured starting point](#a-measured-starting-point)).
+> **Which machine produced these numbers.** Everything in this section was
+> measured on the reference machine, with every row in the same memory layout
+> (BIOS UMA 1 GB, one unified pool) and the instrument named next to the table.
 
 Measured on a Ryzen AI Max+ 395 (Radeon 8060S, 128 GB LPDDR5X), ROCm 7.14.0,
-checkpoint `p1w4d-d2` (~6.3 bits per weight effective at decode), 262,144
-context.
-
-### Prefill
-
-All three values were measured over the HTTP endpoint with the bundled
-`sweep`, so one instrument produced them all.
-
-| test | t/s |
-|---|---|
-| pp512 | 620 |
-| pp2048 | 710 |
-| pp32768 | **566** |
-
-### Decode
-
-Over the HTTP endpoint, ten prompt shapes, greedy, DFlash2 drafter:
-
-| | mean t/s | range |
-|---|---|---|
-| **DFlash2** (default) | **31.71** | 20.8 – 44.2 |
-| MTP | 26.88 | 19.8 – 34.2 |
-| serial (no speculation) | 10.58 | — |
-
-Aggregate throughput at 8 concurrent requests: **48.6 t/s** (4.87× the 9.98 t/s
-one request gets in the same test).
-
-### Read the range, not only the mean
-
-**The decode rate of this engine is a range, not one number.** Speculative
-decoding accepts more drafted tokens when the text is predictable, so the
-same build on the same hardware does:
-
-- **prose / chat: 20.8 – 23.5 t/s**
-- **procedures: 25.6 – 38.7 t/s**
-- **code / proofs: 32.7 – 44.2 t/s**
-
-A single headline number hides a factor of two. A decode number from this
-project — quoted by us or by anyone else — should name the prompt set that
-produced it, or it cannot be reproduced. `bench` prints the mean; `sweep`
-prints the mean, the standard deviation and the min–max, for this reason.
-
-An engine without speculative decoding has a decode rate that does not depend
-on the text, so it can quote a single number. This engine cannot.
+262,144 tokens of context.
 
 ### Performance tuning on Fedora 44 — what we tested
 
@@ -633,7 +513,6 @@ note):
 
 | profile | runtime | prose | code | context probe (~2.2K) |
 |---|---|---|---|---|
-| Qwen3.8-27B dense, p1w4d-d2 (~6.3 bpw) | halogen engine | **21.0 t/s** | **26.1 t/s** | ~528 t/s |
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
 | Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw), q8_0 KV | llama.cpp (Vulkan) | **25.0 t/s** | **28.2 t/s** | ~512 t/s |
 | DeepSeek-V4-Flash ROCmFPX (~2.6 bpw), optional | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
@@ -681,7 +560,7 @@ sub-gigabyte buffers under memory pressure, so it is not a substitute here.
 
 The optional DeepSeek profile is the slowest of the profiles, and that is expected: it has
 about 284 billion parameters, and even at ~2.6 bits per weight it reads far
-more per token than the 27B dense model. The row above is a 192-token budget;
+more per token than the 26B Gemma. The row above is a 192-token budget;
 measured with a 512-token budget it is 10.9 t/s on prose and 11.0 on code, so
 the numbers agree within about two percent across three independent runs.
 Two things lower it in practice, both measured:
@@ -712,55 +591,27 @@ current runtime on 2026-09-11: the same error). So the numbers above
 are what the profile gives without speculation, and there is no flag we can
 add today that changes that.
 
-Two notes on the dense row. Its numbers are **23.9/29.5 t/s under the old
-BIOS with a 64 GB GPU carve**; moving to UMA 1 GB (which the large MoE
-checkpoints need, and which matches AMD's guidance for large models) costs
-the dense profile about 12%, because its weights now live in the shared
-system pool. Every A/B on this machine is therefore measured in the same
-memory layout. And the Gemma row is **without its MTP drafter** (the
-speculative head): we keep it disabled until the draft-context flag is
-resolved in the runtime, and the few percent it adds are not included.
+One note on the Gemma row: it is **without its MTP drafter** (the speculative
+head): we keep it disabled until the draft-context flag is resolved in the
+runtime, and the few percent it adds are not included.
 
-Where the weights live is the one placement lever that matters: the dense
-profile is ~12% faster when its weights sit in the GPU carve instead of the
-shared pool, because decode is limited by DRAM bandwidth, and this APU has a
-single LPDDR5X bus (there is no closer cache or HBM to move to). Inside a
-region, small levers change nothing: on Gemma-4 ROCmFP4, `llama-bench`
-reports pp512 ~1480 t/s and tg128 **60.6 t/s** (the publisher's own ceiling)
-with default settings, and thread counts or batch sizes move those numbers by
-less than 1%. N-gram self-speculation changes nothing either (measured:
-prose 51.5 against 52.2 without it).
+Decode is limited by DRAM bandwidth, and this APU has a single LPDDR5X bus
+(there is no closer cache or HBM to move to). Small levers change nothing: on
+Gemma-4 ROCmFP4, `llama-bench` reports pp512 ~1480 t/s and tg128 **60.6 t/s**
+(the publisher's own ceiling) with default settings, and thread counts or
+batch sizes move those numbers by less than 1%. N-gram self-speculation
+changes nothing either (measured: prose 51.5 against 52.2 without it).
 
-How the profiles behave, beyond speed: both answer the same probes correctly
+How the profiles behave, beyond speed: they answer the same probes correctly
 when they have enough budget — a logic riddle, arithmetic and a code-bug
-question all came back right. They differ in *how*. The dense Qwen profile
-answers briefly and directly (a few reasoning tokens). Gemma-4 reasons at
+question all came back right. They differ in *how*. Gemma-4 reasons at
 length before answering and needs a generous `max_tokens`: with a 192-token
 budget its answers came back empty, because all the budget went into
 thinking. That is why the Gemma row above uses a 512-token budget. Cutting
 Gemma's thinking short also hurts accuracy, not only style: with thinking
 effectively disabled it answered the arithmetic probe wrongly (65 instead of
-67). The practical rule for clients: dense Qwen suits tight budgets and quick
-turns; Gemma-4 needs room to think but stays correct, and its raw decode is
-much faster.
-
-We also tested three well-known tuning levers against the dense baseline and
-rolled them back, because none of them changed anything:
-
-| setting tried | effect | outcome |
-|---|---|---|
-| `tuned-adm profile accelerator-performance` (CPU performance governor + EPP) | prose 23.90, code 29.47 (old layout) | **no change** — reverted to `balanced` |
-| GPU performance level `high` (force maximum clocks) | prose 23.90, code 29.49 | **no change** — reverted to `auto` |
-| `transparent_hugepage=always` | prose 23.89, code 29.49 | **no change** — reverted to `madvise` |
-
-Why nothing moved: batch-1 decode runs at the memory-bandwidth wall
-(the decode rate implies 249 GB/s; the bandwidth tests put the ceiling at about
-240 GB/s, so the two are within a few percent of each other), and these levers
-change clocks or page granularity, not bandwidth. Prefill did not change either.
-Overclocking advice from specialists (`ppfeaturemask`/`pp_od_clk_voltage`, or
-UXTU on Windows) targets clock-limited paths. It does not apply to a
-bandwidth-limited decode workload, and it would need a kernel parameter and a
-reboot.
+67). The practical rule for clients: give Gemma-4 room to think; it stays
+correct, and its raw decode is the fastest of the three profiles.
 
 Context depth and the KV cache were measured on Gemma-4: decode ran at 56.1
 tokens per second on a 442-token prompt, 50.0 on 1,325 tokens and 46.0 on
@@ -772,29 +623,27 @@ revision, not a setting we ship.
 
 **Conclusion:** the stock Fedora 44 configuration already performs at the
 practical ceiling for this machine. Real gains come from choosing the right
-profile (MoE/FP4 for speed, dense for precision), not from tuning knobs.
+profile — the mixture-of-experts models are the fast ones here — not from
+tuning knobs.
 You can re-measure any profile at any time with:
 
 ```bash
 python3 tools/quick-bench.py --api http://<host>:8731
 ```
 
-### A faster family of this model: Ornith-1.5-122B (MoE)
+### The largest profile: Ornith-1.5-122B (MoE)
 
-The dense checkpoint, Qwen3.8-27B, is a dense model. A dense model reads
-every parameter from memory for every token it generates, and on this machine
-memory bandwidth is the hard limit. That is why generation lands at about 24
-tokens per second on prose and 29 on code, end to end.
-
-Ornith-1.5-122B belongs to the same family but uses a mixture-of-experts
-design. It holds far more parameters in total, but for each single token only
-a small subset of its experts is active. Reading fewer weights per token
-means more tokens per second on the same memory bandwidth. This is why a
-larger model can be the faster model on this kind of hardware, and it is also
-why `ornith122` is the profile this project is built around: **122 billion
-parameters (124.6 billion measured) on a desktop machine that sits at home, at
-the speed the table above reports**, is what makes running this class of model
-yourself practical rather than a demonstration.
+A model without experts reads every parameter from memory for every token it
+generates, and on this machine memory bandwidth is the hard limit, so its
+decode rate is set by its own size. Ornith-1.5-122B sidesteps that with a
+mixture-of-experts design. It holds far more parameters in total, but for each
+single token only a small subset of its experts is active. Reading fewer
+weights per token means more tokens per second on the same memory bandwidth.
+This is why a larger model can be the faster model on this kind of hardware,
+and it is also why `ornith122` is the profile this project is built around:
+**122 billion parameters (124.6 billion measured) on a desktop machine that
+sits at home, at the speed the table above reports**, is what makes running
+this class of model yourself practical rather than a demonstration.
 
 The profile runs a GGUF quant of that checkpoint on llama.cpp with the Vulkan
 backend: one MXFP4 file, 69.7 GB, at about 4.45 bits per weight. The MTP head
@@ -816,9 +665,7 @@ slice for the GPU, and llama.cpp draws what it needs from the shared pool.
 Measured on the reference machine with the same prompt and procedure as the
 table above: **25.0 tokens per second** of decode on prose and **28.2** on
 code, with MTP accepting 85% of its drafts. Without speculation the same run
-measured 20.4 and 20.6, so the drafter is worth about 20%. Against the dense
-profile's 21.0 and 26.1 it is faster with five times the parameters, at the
-same 262,144-token context.
+measured 20.4 and 20.6, so the drafter is worth about 20%.
 
 **Vision is available but not installed.** The base model has a projector and
 the quant repository ships none, so the profile starts text-only: its `mmproj`
@@ -827,269 +674,91 @@ has to be added before it can read an image. See
 
 ---
 
-## How it compares
-
-Published numbers from other projects running **the same model on the same
-silicon**. These are *their* figures on *their* configurations, not a
-head-to-head run by us. Quantization, KV-cache settings and context differ,
-so use the table as a rough guide, not as a controlled comparison.
-
-| | SUPERFAST | [q38rocm](https://github.com/julianmb/q38rocm) | [KyaniteLabs](https://github.com/KyaniteLabs/qwen38-27b-strix-halo) |
-|---|---|---|---|
-| backend | custom HIP | ROCm/RADV | llama.cpp |
-| weights | ~6.3 bpw | 4.26 bpw | UD-Q4_K_XL |
-| **prefill @32K** | **566 t/s** | 245 t/s | ~390 t/s |
-| decode, speculated | 30.98 mean (20.8–44.2) | 30.56 – 36.04 | prose 11–24, code 29–40 |
-| decode, unassisted *(diagnostic)* | 10.58 t/s | **14.02 t/s** | — |
-
-**Where SUPERFAST wins:** prefill, by 1.4–2.3×, and end-to-end on any prompt
-with real context. That is what the engine was built for.
-
-**Where SUPERFAST loses:** unassisted decode — and that row is a diagnostic,
-not a product configuration. No project in this table uses serial decode in
-production; every one of them runs speculation by default. The gap is also
-not a kernel-quality issue: decode is bandwidth-limited. q38rocm streams
-about 17 GB per token against our 23.5, and fewer bits is simply faster.
-SUPERFAST spends those bits deliberately (see
-[`docs/QUANT.md`](docs/QUANT.md)): the only 4-bit tensors in our trunk are
-ones calibrated by somebody else, and the aggressive technique is fenced to
-prefill, where it never touches token generation.
-
-**Batch-1 decode is at the hardware wall.** 10.58 t/s × 23.51 GB per token =
-249 GB/s implied by the decode rate, against a measured ceiling of 240 GB/s —
-the two agree to within a few percent. No kernel win is left there
-for anyone; what is left is fewer bits, better draft acceptance, and
-batching.
-
-**About the 148–163 t/s figure** that circulates for llama.cpp on this
-hardware: it is an artifact of n-gram repetition on back-to-back identical
-runs, and KyaniteLabs — whose benchmark it is — says so, and warns against
-quoting it. We think that is the right way to publish, and we have tried to
-match it.
-
----
-
-## Benchmark it yourself
-
-The image ships both benchmarks. There are no fixtures to prepare, no extra
-download, and nothing you have to ask us for.
-
-```bash
-# ten real prompt shapes over the HTTP endpoint — the reference number
-podman run --rm --device /dev/kfd --device /dev/dri --group-add keep-groups \
-  --security-opt seccomp=unconfined --ipc=host \
-  -v /path/to/models:/models:ro -v /path/to/tokenizer:/tokenizer:ro \
-  ghcr.io/peonist-ai/halogen:0.1.3 bench dflash2 256 low 3
-
-# llama-bench-shaped pp/tg sweep, to put a number next to another engine
-podman run --rm ... ghcr.io/peonist-ai/halogen:0.1.3 \
-  sweep -p 512,2048,8192 -n 128,256 -d dflash2,mtp -r 3
-```
-
-`sweep --json` produces machine-readable output.
-
-**Publishing the results is expressly permitted** — no approval, no notice, no
-review. We only ask that figures name the version and the prompt set, for the
-reason given above. That request is not a licensing condition.
-
----
-
 ## What every profile inherits from the engine
 
-All profiles run on one of two engines. The dense Qwen3.8-27B runs on the
-halogen engine; Ornith-1.5-122B and Ornith-1.5-35B-A3B run on llama.cpp with
-the Vulkan backend; and Gemma-4, DeepSeek and the orchestrator run on the
-ROCmFPX llama.cpp runtime. Only the dense profile reads `HALOGEN_*` settings
-— the others take command-line flags. `SUPERFAST_*` names belong to this
-project's own tools, and [`docs/FLAGS.md`](docs/FLAGS.md) says which is which.
+All profiles run on llama.cpp, in two builds: Ornith-1.5-122B and
+Ornith-1.5-35B-A3B on the Vulkan engine image, and Gemma-4, DeepSeek and the
+orchestrator on the ROCmFPX runtime. Their settings are the command-line flags
+in their systemd units; `SUPERFAST_*` names belong to this project's own
+tools, and [`docs/FLAGS.md`](docs/FLAGS.md) says which is which.
 
 **Byte-identical speculative decoding.** Draft-then-verify commits only the
 tokens the full model would have produced, so the output is bit-for-bit
-identical to serial greedy decode. This is checked on every release, for all
-three drafters — measured, not asserted. Speculation here is a pure speed
-optimization with no quality cost, and you can turn it off per request to
-check.
+identical to serial greedy decode. This is checked on every release —
+measured, not asserted. Speculation here is a pure speed
+optimization with no quality cost.
 
 **Native 262,144-token context**, with decode that barely degrades at depth.
-Gated DeltaNet carries O(1) state, so 48 of 64 layers have no KV cache at all.
+The 122B is a hybrid: 12 of its 48 layers use full attention, and the rest
+carry O(1) recurrent state, so most of the network has no KV cache at all.
 
 **Prompt cache** — a follow-up turn in a long conversation resumes instead of
-re-prefilling, worth roughly 20× on time-to-first-token at 32K. Byte-identity
-of a warm answer depends on the profile, and each engine reports it: the dense
-profile aligns its snapshots and its log states "warm decode is BITWISE
-identical to cold", while llama.cpp keeps the cached prefix and makes no such
-promise. Both resume the conversation; only the dense profile guarantees
-byte-identity.
+re-prefilling, worth roughly 20× on time-to-first-token at 32K. llama.cpp
+keeps the cached prefix in the profile's single slot and makes no promise of
+byte-identity: a warm answer is not bit-for-bit the cold one.
 
-**Batched decode** — several sequences decoded together, each byte-identical
-to running alone. The dense engine serves one request at a time by default
-(`HALOGEN_KV_SLOTS=1`) and reaches 8 concurrent sequences at 4.87× aggregate
-(it goes from 9.98 t/s for one request to 48.6 t/s for eight) when you raise
-it; the GGUF profiles ship `--parallel 1` in their units, which is what keeps a
-session's prefix in its own slot. Batching trades away speculation for the
-streams that are not alone — see
+**One slot, one queue** — the GGUF profiles ship `--parallel 1` in their
+units, which is what keeps a session's prefix in its own slot. Raising the
+slot count splits the window and trades the cached prefix for throughput — see
 [Concurrency](#concurrency-and-the-one-trap) before changing it.
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control, and
 image input (vision) on the gemma and ornith profiles.
 
-**Selectable drafters** — the dense engine has three (`dflash2` by default,
-plus `mtp` and `serial`); the ornith122 profile runs MTP with two drafts per
-step, configured in the unit rather than per request. The output is identical,
-only the speed changes.
+**Speculative decoding in the unit** — the ornith122 profile runs MTP with two
+drafts per step, configured in the unit rather than per request. The output is
+identical, only the speed changes.
 
 ---
 
 ## Configuration
 
-Everything is set by environment variable; there is no configuration file.
-The complete list, with defaults and whether each one can change the output,
-is in [`docs/FLAGS.md`](docs/FLAGS.md). These are the ones most people touch.
-The tables below describe the dense profile; every other profile image ships
-its own tuned defaults and reports them through `/health`.
+There is no configuration file. A profile's engine settings are the
+command-line flags in its systemd unit, under
+[`deploy/profiles/`](deploy/profiles/README.md); everything a request carries
+goes in the JSON body. [`docs/FLAGS.md`](docs/FLAGS.md) lists both kinds and
+says who reads what.
 
-| variable | default | what it does |
-|---|---|---|
-| `HALOGEN_CHECKPOINT` | `/models/qwen3.8-27b-p1w4d-d2.hgn` | which checkpoint to load |
-| `HALOGEN_TOKENIZER` | `/tokenizer` | flat tokenizer directory |
-| `HALOGEN_API_PORT` | `8731` | the published port |
-| `HALOGEN_DRAFTER` | `2` (DFlash2, dense) | default drafter: `0` serial, `1` MTP, `2` DFlash2 |
-| `HALOGEN_MAX_TOKENS_CAP` | `65536` | largest `max_tokens` a request may ask for — above it is a **400**, never a silent truncation |
-| `HALOGEN_QUEUE_TIMEOUT` | `7200` (dense) | seconds a queued request will wait — **coupled to the cap**, see below |
-| `HALOGEN_KV_SLOTS` | `1` (dense) | concurrent resident sequences — see below |
-| `HALOGEN_SLOT_CTX` | `262144` (dense) | context each dense slot holds — see below |
+`SUPERFAST_*` names belong to this project's own tools (the installer, the
+switch, the TUI, the gateway, the benchmarks) and to the client's `envKey`. No
+image reads them: **an engine setting written as `SUPERFAST_*` is read by
+nobody**, so the engine keeps its default and says nothing.
 
-The prefix is part of the name: the dense engine reads `HALOGEN_*`, while
-`SUPERFAST_*` belongs to this project's own tools (the installer, the switch,
-the TUI, the gateway, the benchmarks) and to the client's `envKey`. **An engine
-setting written as `SUPERFAST_*` is read by nobody** — no image contains that
-string, so the engine keeps its default and says nothing. The other profiles
-take no environment variables at all: their settings are the flags in their
-systemd units. The complete list, with which engine reads what, is in
-[`docs/FLAGS.md`](docs/FLAGS.md).
-
-Per-request settings — drafter, temperature, top_p, seed, reasoning effort,
-tools — go in the JSON body and override the server defaults.
+Per-request settings — temperature, top_p, seed, reasoning effort, tools and
+the answer budget — go in the JSON body.
 
 ### The token budget covers thinking, not only the answer
 
-This model reasons before it replies, and those tokens count against the
+A reasoning model thinks before it replies, and those tokens count against the
 budget. If the budget runs out in the middle of the reasoning, it does not
 shorten the answer: it removes it. The reply comes back with
 `finish_reason: "length"`, an empty `content`, and the partial reasoning in
-`reasoning_content`, which most OpenAI clients do not display. The
-per-request default is **8192**, which finished every ordinary prompt we
-measured with room to spare. The ceiling is `HALOGEN_MAX_TOKENS_CAP`.
-
-Three field names work, and they mean the same thing here:
-`max_completion_tokens` (current OpenAI Chat Completions),
-`max_output_tokens` (OpenAI Responses), or `max_tokens` (deprecated upstream,
-but still widely sent). Send one, or send several as long as they agree; two
-different values return a 400 instead of a guess about which one you meant.
-`/health` lists all three under `token_budget_aliases` and reports the
-default as `max_tokens_default`.
+`reasoning_content`, which most OpenAI clients do not display. Send a budget
+large enough for the thinking and the answer — the client table below says how
+large for each profile.
 
 If a reply looks empty or cut short, read `finish_reason` first: `"stop"`
 means you have the whole answer, `"length"` means you ran out of budget. Pass
-a larger budget, or use `"reasoning_effort": "low"` to make the model think
-less.
+a larger budget. A truncated response and a model that stopped on its own both
+end with `"length"`, so that field alone will not tell you which happened.
 
 ### Concurrency, and the one trap
 
-The two Qwen profiles run different engines, and they handle concurrency
-differently.
-
-**The dense profile serves one request at a time, with speculative decoding
-on** — 21.0 t/s on prose and 26.1 on code, which is the right setting for a
-single user. Its engine does read `HALOGEN_KV_SLOTS` and `HALOGEN_SLOT_CTX` (the
-names are in the shipped binary; the entrypoint does not forward them, so pass
-them with `-e`), and each slot then owns a private KV cache. **The trap is the
-product:** `slots × slot_ctx × 64 KiB`, so raising the slots without lowering
-the per-slot context multiplies the allocation. Eight slots at the native
-262,144 context asks for **137 GB** and will not fit. Keep the product at or
-below the native context:
-
-| `HALOGEN_KV_SLOTS` | `HALOGEN_SLOT_CTX` | pool |
-|---|---|---|
-| 1 | 262144 | 17.2 GB *(default)* |
-| 2 | 131072 | 17.2 GB |
-| 4 | 65536 | 17.2 GB |
-| 8 | 32768 | 17.2 GB |
-| 8 | 262144 | 137 GB — **will not fit** |
-
-A prompt longer than `HALOGEN_SLOT_CTX` is a hard error naming the limit. It is
-never silently truncated.
-
-**The GGUF profiles run llama.cpp with `--parallel 1`**, so one KV cache and
+**The profiles run llama.cpp with `--parallel 1`**, so one KV cache and
 one queue: a second request waits for the first, and a session always finds
 its own cached prefix. Its context is a single `-c 262144`. Raising the slot
 count (`--parallel N`) splits that window into N slots, which is the trap the
 GGUF profiles already paid for — see
 [Many agents at once](#many-agents-at-once).
 
-The dense engine speculates only while a stream is alone: with several streams
-live, decode is batched instead. That is why a single user
-gets the fastest numbers, and why parallel agents each run slower than one
-agent would.
-
-### Raising the output cap
-
-`HALOGEN_MAX_TOKENS_CAP` and `HALOGEN_QUEUE_TIMEOUT` are coupled and
-should not be moved independently. The cap bounds how long one request can
-hold the GPU; the timeout bounds how long the next client waits for it. **If
-a full-length request can outlast the timeout, everyone queued behind it gets
-a 503.**
-
-At high reasoning effort decode runs at around 10 t/s, so:
-
-| cap | worst-case request | needs a timeout above |
-|---|---|---|
-| 4,096 | 6.8 min | 410 s |
-| 16,384 | 27.3 min | 1,640 s |
-| 32,768 | 54.6 min | 3,280 s |
-| **65,536** *(default)* | **109.2 min** | **6,550 s**, and the default timeout is 7,200 s |
-
-The cap is a ceiling on what a client may ask for, not a promise about
-throughput. Almost nothing reaches it: the model stops on its own when the
-answer is done. It is set high so that a long reasoning problem is not cut
-off by server policy, and the timeout is set above it so that a client who
-does ask for a full-length reply does not 503 the next request in the queue.
-Lower both together if you would rather bound how long one request can hold
-the GPU.
-
-**One shipped value is below that rule, and it is worth knowing which.** The
-dense unit sets `HALOGEN_QUEUE_TIMEOUT=6000`, not the image's 7,200: it is
-above the queue wait that unit was sized for (4,980 s — see
-[the queue-timeout note](#timeouts-and-why-they-are-what-they-are)) and below
-the 6,550 s this table derives for a full-length 65,536-token request. It is
-sized for the queue wait its profile actually produces with one slot, not for
-the 109-minute worst case the cap allows, so a request that does run that long
-can 503 whatever is queued behind it. The llama.cpp units have no such setting:
-each one runs a single slot, with its own `--timeout`. Raising the dense timeout to
-match the cap is the other way to read the same table; it is a choice about
-who waits, not about correctness.
-
-Asking for more than the cap returns a **400** naming the limit. It is never
-silently truncated — but note that a truncated response and a model that
-stopped on its own both end with `finish_reason: "length"`, so a client
-cannot tell them apart.
-
 ### Prompt cache
 
-Both engines cache the prompt, and both key the cache on **the token prefix
-itself**. There is no per-conversation key to send: `prompt_cache_key`, the
-field OpenAI's API accepts for this purpose, is accepted here and deliberately
-ignored for exactly that reason — a client cannot name a conversation, because
-the prefix already is the name. The front-end's source says so in one line:
-"the prefix cache keys on the PREFIX already".
+The profiles cache the prompt, and the cache is keyed on **the token prefix
+itself**. There is no per-conversation key to send, and `prompt_cache_key` —
+the field OpenAI's API accepts for this purpose — changes nothing here: a
+client cannot name a conversation, because the prefix already is the name.
 
-- **Dense:** `HALOGEN_CACHE_ALIGN=2048` aligns the snapshots, and that value is
-  what makes a warm answer byte-identical to a cold one. `HALOGEN_CACHE_MB` is
-  empty by default, which means **auto** — the engine sizes the cache from the
-  available memory at startup. Pin it only with a value large enough to matter:
-  a single full-context entry is about 18.4 GB at 262K, so a small explicit
-  budget produces a cache that reports itself enabled and never hits.
 - **Gemma and DeepSeek:** llama.cpp keeps the processed prefix in its slot
   cache, so a follow-up turn resumes instead of re-prefilling. Nothing to tune:
   the unit ships `--parallel 1`, which is what keeps a session's prefix in the
@@ -1108,20 +777,6 @@ the prefix already is the name. The front-end's source says so in one line:
   zero: measured at 126,977 tokens, 273 s with the extra traffic against 0.7 s
   without it. [`docs/PROMPT-CACHE.md`](docs/PROMPT-CACHE.md) has the numbers,
   the instrument, and what can be done about it.
-
-**Where to read the cache.** The API response does not carry it: `usage` reports
-`prompt_tokens`, `completion_tokens` and `total_tokens`, and adds
-`prompt_tokens_details.cached_tokens` only when the cache served part of the prompt. Two places
-report it in full, and both are worth knowing when you measure an agent:
-
-- `GET /cache` returns the counters — `prompt_tokens_saved` (tokens the cache kept out of the
-  prefill), `hits`, `misses`, `stores`, `evicted`, `hit_rate`.
-- The engine's journal logs one line per request, for example
-  `serve_api: mtp 24 tok in 0.57s = 42.16 t/s | prompt 6276 (4791 cached), prefill 2.37s`.
-  A warm request shows its cached share and a prefill of a second or two; a cold one shows no
-  cached share and a prefill that grows with the prompt.
-
-Both go through the gateway unchanged, so a client on the network can read them with the same key.
 
 ### Many agents at once
 
@@ -1153,345 +808,25 @@ history again, which on a long session is far more than the wait.
 
 **In plain words.** The engine remembers the start of every conversation it has
 already read, so the next turn does not read it again. That memory has a fixed
-size, and the size the engine chose for itself held about four conversations of
-131,072 tokens. Longer conversations went past it, so the engine had to forget
-one conversation in order to keep another, and the conversation that was
-forgotten read its whole history again. That is the pause of a minute or more.
-The GGUF profiles keep the cached prefix in their single slot (`--parallel 1`).
-The pool tuning below belongs to the halogen engine, which serves the dense
-profile, where those knobs are live.
+size: llama.cpp keeps at most the window's worth of tokens across every saved
+prompt — 262,144 here. A conversation that goes past it is forgotten, and a
+conversation that is forgotten reads its whole history again. That is the
+pause of a minute or more. The GGUF profiles keep the cached prefix in their
+single slot (`--parallel 1`), and a client keeps it usable by keeping the
+prefix stable.
 
-The details, for anyone who wants to tune it:
-
-A coding agent that opens subagents runs several conversations at the same
-time, each with its own history. What the subagents share — the system prompt,
-the tool definitions — is computed once, because the cache is per-prefix. What
-they do not share is not shared, and then two numbers decide whether a turn
-takes a second or a minute:
-
-1. **How many positions stay resident across all conversations.** Each request
-   reserves its prompt plus its `max_tokens`, so four agents carrying 90,000
-   tokens of history with a 65,536-token answer budget reserve about 622,000
-   positions between them. The image's default pool holds 524,288: the working
-   set does not fit, and the engine has to drop what it cannot keep.
-2. **How many conversations the cache can keep resumable at once.** The image
-   ships 8 (`HALOGEN_CACHE_ENTRIES`), which is enough for one user and a few
-   subagents; the unit raises it to 32 for a fleet.
-
-Both show up in the engine's own log. From a real session, before this was
-changed:
-
-```
-serve_api: mtp 356 tok … | prompt 120102 (30408 cached), prefill 71.20s
-serve_api: mtp 478 tok … | prompt 123293 (120097 cached), prefill  4.65s
-```
-
-The `…` stands for the middle of each line as the engine prints it
-(`in 17.15s = 20.76 t/s`) and for the `detok` field at the end; the rest is
-verbatim.
-
-Only the shared system prompt (30,408 tokens) was still cached; the
-conversation's own 90,000 tokens had to be prefilled again, which is the 71
-seconds — about 1,260 tokens per second, against the 709 the timeout table
-below uses as the slowest measured prefill. The next line is the same
-conversation one turn later, once its KV was back in place: 4.65 seconds.
-
-The halogen unit ships a pool of 655,360 positions,
-`HALOGEN_KV_POOL_FIT=0`, an arena of 16384 and `HALOGEN_CACHE_ENTRIES=32`;
-those are the knobs the dense profile reads today.
-Measured on the reference host with four agents asking **at the same time**,
-each carrying 139,541 tokens of history and `max_tokens: 8192` — 560,000
-positions of KV between them, more than the 524,288 the image's pool holds and
-inside the 655,360 that ships today:
-
-| four concurrent agents, 139.5K tokens each | image defaults, pool 524288 | the pool this was measured with (786,432, and 1,048,576 before that) |
-|---|---|---|
-| first turn, all four | 533.8 s | 419.2 s |
-| follow-up turn, all four | 229.5 s | **2.2 s** |
-| tokens served from cache, per agent | 139,534 for two of four; **21 and 0 for the other two** | **139,534 for all four** |
-| prefill of the follow-up, per agent | 0.44 s twice, then 119.53 s and 108.53 s | 0.44 s four times |
-
-So on the defaults two of the four agents pay for their whole history again,
-and none does with the larger pool — and 655,360 is enough for it, because four
-agents at 139.5K with an 8,192-token budget reserve 590,932 positions, and
-623,700 with the 16,384-token budget the client table recommends. What the
-pool cannot do is hold four conversations of 200,000 tokens or more: that would
-need 1,048,576, which no longer starts here (see
-[the startup table](#the-pool-also-decides-whether-the-engine-starts)). That is
-the same failure the real session above shows at 120K, and it is what the pool
-is for: 524,288 positions is about four conversations of 131,072 tokens, which
-is why this went unnoticed — four agents at 90,000 tokens are 360,000 positions
-and fit — and why it starts to hurt on longer sessions.
-
-The engine prints the cache it armed at startup — `prompt cache ON,
-resume-anywhere (8 entries, …)` on the image defaults, `(32 entries, …)` from
-this unit, 111 MiB each at the native context. `/cache` counts something
-narrower than that allowance: the snapshots currently stored and their
-per-entry size, which is why it can report `entries: 1, cap_bytes: 116 MB` on
-a machine that is allowed eight — read the startup line, not that field, for
-the number of entries.
-
-A live read on the running host confirms this, and shows what the cache does
-not change. With the 64-entry allowance the unit shipped at the time (32
-today), a resumed conversation of about 120,000 tokens that is still cached
-prefills in 1 to 6 seconds — only its new tokens. The same conversation with
-its entry evicted prefills in 79 to 237 seconds. That cold number is the
-multi-minute wait on resume. More entries keep more conversations warm, so
-fewer resumes pay it.
-
-The entry count does **not** change output speed. Decode stays at about 33 to
-46 tokens/s, warm or cold, the same as the figures above. A warm resume feels
-faster because the first token arrives sooner, not because tokens stream
-faster. Raise the entry count to cut the wait before the first token, not to
-chase tokens per second — and only if the machine has memory to give, which is
-why the unit ships 32 and not 64.
-
-Four things to know if you tune it:
-
-- **The client has nothing to send.** Keep the prefix stable instead: the
-  system prompt, the tool definitions and the order of the messages identical
-  across turns, with volatile content (the clock, command output) at the end. A
-  subagent whose system prompt differs from its siblings' shares nothing with
-  them and starts cold by construction — that is expected, not a bug.
-- **The sizes are one budget, not four knobs.** A pool this size fits only with
-  the prefill arena at 16384 — the arena is not a second answer budget — and the
-  engine enforces the relationships (pool at least the context, arena at most
-  32768). Raising the pool without checking the arena is one way to get a
-  profile that will not start.
-- **A bigger pool costs memory the model also wants, and can cost the engine
-  itself.** The shipped 655,360 positions is ~18 GiB, against ~14.9 GiB for the
-  image default and ~21.6 GiB for the 786,432 this unit shipped until
-  2026-10-11 (the engine prints its own figure in the pre-flight line), and
-  1,048,576 is ~29 GiB which, measured on 2026-09-13, no longer starts on this
-  host. If you want a larger pool, change it, restart, and read the startup
-  line: do not assume it comes up.
-- **Do not reach for the disk.** `HALOGEN_CACHE_FILE` exists, but only with
-  `HALOGEN_CACHE_INPLACE=0`, where each entry copies the whole KV (~26 KiB per
-  position, ~6.5 GB at the native context). On this machine the host RAM is the
-  same pool the GPU allocates from, so a disk tier gives back memory you
-  already have and pays NVMe reads for it. Raising the pool and the entry count
-  is what pays.
-
-The llama.cpp units have none of these knobs: their settings are the flags in
+The llama.cpp units have no knobs for this: their settings are the flags in
 their unit files (`-c 262144`, `--parallel 1`, the KV cache type and the MTP
 flags), and the engine sizes everything else itself.
 
-#### What a real fleet looks like on this pool
-
-The table above measures four agents at 139,541 tokens. Agents in practice run
-longer conversations than that, and the pool is a budget, so it is worth
-knowing what it does when the sessions grow. Everything in this section was
-measured on the reference host on 2026-09-13, in three ways: 30 hours of the
-engine's own log from ordinary agent use, a live four-agent test with the
-[sampler](#watch-a-busy-machine) recording beside it, and
-[`tools/bench-concurrent.py`](#benchmark-several-agents-at-once), which was
-written for it.
-
-**From 30 hours of ordinary use** (2,029 requests, one client, all answered
-200, no restarts):
-
-| conversations decoding at once | tokens/s per conversation |
-|---|---|
-| 1 | 38.5 |
-| 2 | 21.3 |
-| 3 | 16.9 |
-| 4 | 14.4 |
-| more than 4 | 12–14 (the extra requests queue for a slot) |
-
-Read the first column as slots, not as clients: the profile has four, and a
-fifth request waits. The consequences over the same 30 hours:
-
-- **The prompt cache is not the problem, and it does work.** 94.9% of all
-  prompt tokens were served from cache (`/cache`: 1,791 hits, 173 misses,
-  hit_rate 0.91, 214 M tokens saved). The prefix cache is keyed on the prompt
-  itself, so a stateless client costs nothing as long as the beginning of the
-  prompt is stable.
-- **Queueing is the cost.** At least 143 requests (7.5%) took more than a minute
-  longer than their own decoding needed, and the worst cases are unambiguous: a
-  20-token answer that took 280–444 s, and 65 tokens that took 272 s. That is
-  not a slow model, it is a request waiting for a slot. Over the same 30 hours,
-  at least 54% of the total wall clock was spent waiting rather than decoding.
-  Those two figures are lower bounds for a reason worth knowing: the engine's
-  own duration on its ledger line is measured from the moment it admits a
-  request, so a request that waited before admission is counted as shorter than
-  the client experienced it (see
-  [what the numbers measure](#what-the-numbers-measure)).
-- **Dropping a conversation is the other cost.** 77 requests had to prefill a
-  prompt longer than 20,000 tokens from zero (mean 214 s, worst 475 s), and 21
-  of those were the *same* conversation continued minutes after it had been
-  served — its cached state had been dropped to make room. The engine's own
-  watchdog agrees: it logged `the engine has not answered PING for 45s` 32
-  times, once an hour, always while a long request was in flight. The kill
-  threshold is 180 s and was never reached, so this is a symptom of a busy
-  engine, not of a stuck one.
-
-**From the live four-agent test**, where two agents were coding and two were
-driving the same endpoint from different clients: a 777-token answer with a
-fully cached prefix (prefill 0.1 s, 100% cache) took **141 s** on one client and
-**51 s** on the identical one sent at the same moment; a single agent that had
-to re-prefill a 221,000-token context paid **351 s** of prefill while six other
-requests were in flight; and the first turns of the two coding agents — which
-were to write their first file — had not completed after **14 minutes**, with
-both project directories still empty. The sampler shows what the engine thinks
-it is doing: `in_flight` 4 with `queued` 2, and the GPU only 61% busy on
-average while four conversations were open.
-
-#### The pool is a residency budget, and on long conversations it is the whole story
-
-[`tools/bench-concurrent.py`](#benchmark-several-agents-at-once) fires N clients
-at the same time, in one of two modes, and reads each request's own numbers out
-of the engine's log. Both shapes below are labelled with the prompt sizes the
-engine actually reported, not with the arguments the tool was given — its prefix
-argument counts *words*, and this word list tokenizes to about 1.25 tokens per
-word.
-
-**Eight clients: more conversations than slots.** `8 × 38K` (argument 30000) is
-eight reservations that fit inside any pool here, so only slot arbitration can
-make a client wait; `8 × 101K` (argument 80000) is eight reservations of ~810K
-positions, which exceeds *both* pools at once — so that row cannot separate a
-pool that is big enough from one that is not, and it is not there to.
-
-| configuration | shape | aggregate | per client | mean wall | cache hit |
-|---|---|---|---|---|---|
-| pool **786432**, 4 slots | 8 × 101K | 33.8 t/s | 4.97 t/s | 159.9 s | 87% |
-| pool **786432**, 4 slots | 8 × 38K, run 1 | 53.7 t/s | 8.70 t/s | 94.2 s | 87% |
-| pool **786432**, 4 slots | 8 × 38K, run 2 | 72.2 t/s | 13.53 t/s | 64.6 s | 100% |
-| pool 524288 (engine-fitted), 4 slots | 8 × 101K | 35.5 t/s | 5.28 t/s | 151.0 s | 87% |
-| pool **786432**, **8 slots** | 8 × 38K, run 1 | 59.5 t/s | 7.45 t/s | 104.3 s | 87% |
-| pool **786432**, **8 slots** | 8 × 38K, run 2 | **86.5 t/s** | 10.84 t/s | 71.7 s | 100% |
-
-- **Eight slots buy throughput and cost latency.** All eight conversations
-  decode at once: aggregate rises 20% (72.2 → 86.5 t/s) while each client's own
-  rate falls 20% (13.53 → 10.84 t/s) and its answer arrives later (64.6 →
-  71.7 s). An interactive agent feels the second number, so the profile keeps
-  four slots.
-- **Once the pool is exhausted, its size stops being what is slow**: with all
-  eight clients over-subscribed in both configurations, halving the pool
-  (786432 → 524288) measured 35.5 t/s aggregate against 33.8 — the same, within
-  noise, because eight clients against four slots is what they are all waiting
-  for.
-
-**Four long conversations: the shape that separates the pools.** 4 clients ×
-163,199 tokens is 656,000 positions of reservations — above the fitted pool
-(524288), below the shipped one (786432), and with four clients against four
-slots so that nothing waits for a slot. Only the pool can make a difference
-here, and it does:
-
-| | pool **786432** | pool 524288 (fitted) |
-|---|---|---|
-| run 1 (cold): aggregate | **16.6 t/s** | 9.2 t/s |
-| run 1: mean wall clock | 187.5 s | 243.0 s |
-| run 1: conversations that had to prefill from zero | 1 of 4 (the first) | **2 of 4** |
-| run 2 (warm): aggregate | **57.7 t/s** | 15.5 t/s |
-| run 2: mean per client | **14.49 t/s** | 7.50 t/s |
-| run 2: mean wall clock | **53.6 s** | 144.4 s |
-| spread across the four clients | 0.4 s / 0.2 s | **155 s / 154 s** |
-
-With the shipped pool the four clients are indistinguishable from each other —
-all four prefill once (or resume from cache) and then decode together, and the
-warm run is 3.7× the aggregate of the smaller pool. With the fitted pool the
-engine cannot keep four conversations of that length resident: it drops what it
-cannot hold, the two requests that lose their state pay 130 s of history again,
-and the aggregate collapses because that prefill takes the machine away from
-everyone's decode. That is the same failure the four-agent measurement above
-shows at 120K, now measured with only the pool varying.
-
-One thing that does **not** happen, and it is worth knowing where to look: in
-neither arm did `queued` rise above zero (the 10-second sampler recorded a
-maximum of 0 throughout). The pool does not show up as requests waiting for
-admission — it shows up as conversations that lose their prompt cache. A
-`queued` of zero is not evidence that the pool is big enough.
-
-#### The pool also decides whether the engine starts
-
-This section, like the pool tuning above, describes the halogen engine, which
-serves the dense profile. The llama.cpp units have no pool: each is one
-process with `-c 262144` and `--parallel 1`.
-
-With `HALOGEN_KV_POOL_POSITIONS=1048576` and `HALOGEN_KV_POOL_FIT=0` — what this
-project shipped until 2026-09-13 — **the engine stops starting on a host that
-has been running for a while**:
-
-| pool | `FIT` | what happened |
-|---|---|---|
-| 1048576 | 0 | reaches `model ready`, then `reserving 3 more serving slot(s)`, then spins at 80–90% of a core **forever**: no listening socket, no error, three attempts |
-| 1048576 | 1 | serves in 75 s, and the engine arms **524288** — it halved the request |
-| 786432 | 0 | serves, arms 786432: three verified starts — what the unit shipped until 2026-10-11 |
-| 786432 | 1 | arms 786432 when it starts; one attempt livelocked and exited after 594 s |
-| **655360** | 0 | **what the unit ships now**: one step below the largest that starts, because the pool is the only part of the engine's footprint a host can give back — see [when the host runs out of memory](#when-the-host-runs-out-of-memory-and-how-to-recover-without-rebooting) |
-
-The startup log explains it: after reserving the pool, only 140–312 MiB of the
-engine's contiguous 2 MiB blocks are left, and the three remaining serving slots
-want ~333 MiB (4 × 111 MiB). The engine does not fail when it cannot find them —
-it spins, so `Restart=on-failure` never fires and the machine simply stops
-serving. Two lessons are in the shipped unit because of this: ask for a pool the
-host can back, and check the startup line rather than the port, because a hung
-engine holds the port's process without ever listening on it.
-
-**A second way to hang, which does recover.** Later the same night, after many
-profile restarts while these measurements were being taken, the same 786432 unit
-did something else: it loaded completely — `model ready`, then `prompt cache ON`
-with its 32 entries, then uvicorn's `Started server process` — and then answered
-nothing, while serving, for three minutes. That is the case
-`HALOGEN_ENGINE_WATCHDOG_S` exists for: the container printed `this is a wedged
-engine and not a slow one`, killed the process at 180 s, and systemd restarted
-it. The difference between the two matters, and it is why the diagnostics look
-for both: the startup livelock never recovers on its own (the watchdog is
-satisfied — the engine is alive — and no restart happens because the process
-never exits), while this one recovers but can recover into a loop. What the two
-have in common is the host state: a machine that has been through many container
-starts is where both appear, and a reboot is what clears it.
-
-If it happens to you, you should not have to work it out from the log: the
-installer and `superfast-switch use` both wait for `/health`, and when that wait
-expires they now print the diagnosis themselves — which of the two it is, the
-`model ready` line with no `prompt cache ON` after it (or the `wedged engine`
-line, if that is the one), the engine's CPU, the pool the unit asks for, and the
-remedies. By hand the same three checks are `journalctl --user -u
-superfast` (looking for `model ready` followed by `reserving ... slot(s)`,
-or for `wedged engine`), `ps` (a `halogen` process at 80%+ of a core), and
-`/health` answering nothing at all. Then lower `HALOGEN_KV_POOL_POSITIONS` in the unit, or
-reboot the host so the engine gets unfragmented memory, and start the profile
-again.
-
-One more check is automatic now, because it is silent otherwise: after the
-engine answers, the installer reads its `/health` and compares the pool it
-armed with the pool the unit asks for. With `HALOGEN_KV_POOL_FIT=1` the engine
-may fit it smaller — a request for 1048576 came up as 524288 — and a machine
-that quietly holds half the conversations its unit promises is a slow machine
-nobody can explain. The installer says which of the two happened, by number.
-
 #### When the host runs out of memory, and how to recover without rebooting
 
-The pool is not only a start-up budget. The engine holds most of the machine — on
-the reference host it reports `68.0 GiB of weights locked in RAM, 18.0 GiB of KV
-pool, 12.3 GiB of working memory, 98.2 GiB in all` — and its 47.7 GiB lookup
-table is **not** held in RAM: it is read from disk through the page cache, which
-never fits in what is left. That works while the host has room. It stops working
-once the host's memory has accumulated. Measured 2026-10-11, after a few hours of
-use: the page cache and the zram swap had filled, the pool reservation consumed
-the last of the engine's contiguous 2 MiB blocks (59–80 left, 120–160 MiB), and
-the engine stalled for minutes at a time while a request was in flight.
-
-The engine says so itself, in the note it prints at every start-up:
-
-> this server now holds most of the machine … BOTH they and this server can stall
-> for minutes at a time at full CPU with no disk activity and no output, **which
-> is not a crash and needs no restart**
-
-The container's 180 s watchdog cannot tell that stall from a dead engine, so it
-killed the process, systemd restarted it, and the restart began with less room
-than the one before: 28 kills and 33 starts in one day, and the machine served
-almost nothing while it looped. **A host reboot clears it**, and this is why the
-shipped pool is one step below the largest that starts.
-
-What the step buys, measured on the same machine:
-
-| | pool 786432 | pool **655360** |
-|---|---|---|
-| engine footprint | 101.8 GiB | **98.2 GiB** |
-| contiguous blocks left after the pool reservation | 5559–5604 (11.1 GiB) | **8442 (16.5 GiB)** |
-| memory left for everything else | 13.5 GiB | **16.9 GiB** |
+The largest profile holds most of the machine: 75 GB resident at the
+262,144-token window, and the rest of the system shares what is left, including
+the page cache the checkpoint is read through. That works while there is room.
+It stops working once the host's memory has accumulated: the page cache and the
+zram swap fill up, and the engine stalls for minutes at a time while a request
+is in flight. **A host reboot clears it.**
 
 When a machine does stall, a reboot is not the only way out:
 
@@ -1515,67 +850,16 @@ rule that allowed arguments to a root command would be a rule that can run
 anything. Without the rule the tool asks for the password, and if it cannot ask
 it says so and restarts the profile anyway, so the machine is never left down.
 
-### Benchmark several agents at once
-
-`tools/bench-concurrent.py` is the instrument behind the tables above. It runs
-on the machine and takes clients, prefix length, answer budget, repeats and a
-mode:
-
-```bash
-python3 tools/bench-concurrent.py 8 30000 777 2 shared    # the slot shape
-python3 tools/bench-concurrent.py 8 80000 777 1 shared    # the pool shape
-```
-
-- `shared` sends every client the same prefix, like subagents sharing one system
-  prompt and tool set; `distinct` gives every client its own, which is the worst
-  case for prefill.
-- It reports, per request, the wall clock it measured itself and the engine's
-  own numbers for that request (prompt, cached, prefill) taken from the
-  engine's ledger lines. Recognising which ledger lines are its own is the
-  whole difficulty of measuring a live box, and it is done with a fingerprint —
-  a distinctive `max_tokens` plus the prompt length each client reports — after
-  two other approaches were tried and failed on this machine: counting log tail
-  lines (the window scrolls, and live agents' requests get counted as yours) and
-  tagging requests with the non-speculative `serial` drafter (which prints no
-  ledger line at all).
-- It also reports the aggregate: tokens per second across all clients, which is
-  the number that says whether the machine is being used well, next to the
-  per-client rate that says whether one agent feels fast.
-
-`tools/bench-serving.py` remains the benchmark of record for *drafter* speed —
-one request at a time, 11–30-token prompts, byte-identical output checked. The
-two are not interchangeable, and neither replaces the other.
-
-#### What the numbers measure
-
-Every table above that quotes a wall clock uses **the client's own
-measurement**: from sending the request to receiving the last token, including
-any time spent waiting before the engine admits it. The engine's ledger line
-measures from admission, so it can be shorter, and on a loaded machine it
-usually is. Both are honest; they answer different questions, and mixing them
-is how the same run can look like two different runs.
-
-- A request that sat in the queue shows the gap plainly: one measured
-  `20 tok in 295.93s = 0.07 t/s` with a prefill of 10.29 s, which leaves about
-  285 s that can only be waiting.
-- In the eight-client runs above, a client's wall clock is up to ~30 s longer
-  than the engine's own duration for the same request, and that difference
-  disappears in the second, cache-warm run.
-
-This is also why the two waiting figures in
-[what a real fleet looks like](#what-a-real-fleet-looks-like-on-this-pool) are
-stated as lower bounds: they are derived from the engine's ledger, which does
-not count the wait it never saw.
-
 ### Watch a busy machine
 
 The engine's log says how long each request took, but not how many were
 waiting, and on a machine with several agents that is the difference between an
 answer that is slow and an answer that is queued. `superfast-monitor.timer`
-closes that gap: every 30 seconds it reads the engine's `/health` and `/cache`,
-the GPU counters and the memory, and appends one line to
-`~/.local/share/superfast-monitor/samples.jsonl` (rotating at 20 MiB). The setup
-script installs and starts it; nothing has to be enabled by hand.
+closes that gap: every 30 seconds it reads the engine's `/health` and, where
+the engine has one, `/cache`, plus the GPU counters and the memory, and
+appends one line to `~/.local/share/superfast-monitor/samples.jsonl` (rotating
+at 20 MiB). The setup script installs and starts it; nothing has to be enabled
+by hand.
 
 ```bash
 superfast-monitor.py --report 24     # the last 24 hours, in one screen
@@ -1586,18 +870,14 @@ Three fields are worth knowing by heart, all in `/health`:
 
 | field | what it tells you |
 |---|---|
-| `in_flight` | conversations being decoded right now. This is what the tokens/s table above keys on |
-| `queued` | requests that arrived and are waiting: for room in the KV pool, or for one of the profile's slots to free. `/health` does not say which — the depth and the duration do. **A queue that never empties is the number the budgets have to answer for** |
+| `in_flight` | conversations being decoded right now |
+| `queued` | requests that arrived and are waiting for the profile's single slot to free. **A queue that never empties is the number the budgets have to answer for** |
 | `busy_for_s` | how long the request currently in flight has been running |
 
 A `queued` above zero for minutes at a time is the signal something needs
-changing, and which thing depends on the depth: a queue that stays one or two
-deep with four conversations running is the profile's four slots, which is what
-they are for; a queue that grows while fewer than four conversations are
-decoding is the pool — see
-[what a real fleet looks like](#what-a-real-fleet-looks-like-on-this-pool).
-A `queued` that is always zero while answers feel slow is a different problem,
-and the report's cache section separates the rest: a low hit rate means the
+changing: a request that arrives while the profile is busy waits for the one
+slot, and on a long session it can wait a while. The report's cache section
+separates the rest: a low hit rate means the
 prompt prefix is changing between turns, a high `evicted` count means
 conversations are being dropped to make room.
 
@@ -1619,8 +899,6 @@ so they are connected to this repository and appear in its Packages section.
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
 | `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1` | GHCR (ours) | the Vulkan engine image as it was first published. It predates patch 0012, so `deploy/build-vulkan-image.sh` tries it, checks that its `llama-server` knows `--reasoning`, and otherwise builds `localhost/superfast-vk:patch0012` from the `qwen4exp-conv-ring-slots` branch |
 | `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:image-1` | GHCR (ours) | `sd-server` from stable-diffusion.cpp: the optional image generator on `:8733`. Pulled the same way, with the build from `runtime/Dockerfile.sd` as fallback |
-| `ghcr.io/peonist-ai/halogen:0.1.3` | GHCR (upstream) | the engine that serves the dense Qwen3.8-27B profile |
-| `peonist-ai/halogen-qwen3.8-27b` | Hugging Face | the dense checkpoint and its tokenizer |
 | `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` | Hugging Face | the Gemma-4 weights used by the `gemma` profile |
 | `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` | Hugging Face | the DeepSeek-V4-Flash weights used by the `deepseek` profile |
 | `LiquidAI/LFM2.5-350M-GGUF`, `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` | Hugging Face | the small models used by the orchestrator |
@@ -1657,16 +935,14 @@ credits and the licences of every upstream component are in
 - **AMD Strix Halo (gfx1151)** — Ryzen AI Max+ 395 or equivalent. The build
   refuses every other architecture; this will not run on a discrete GPU, and
   that is deliberate.
-- **128 GB unified memory** recommended. The checkpoint is 35.9 GB and is
-  mapped, not copied.
+- **128 GB unified memory** recommended. The largest checkpoint is 69.7 GB and
+  is mapped, not copied.
 - **A ROCm-capable kernel** with `/dev/kfd` and `/dev/dri` accessible, plus
   the two kernel parameters described in
   [step 3](#3-configure-the-machine-for-superfast) for the largest models.
-- **A checkpoint and a tokenizer**, mounted at `/models` and `/tokenizer` —
-  see [Get the weights](#get-the-weights). The tokenizer directory must be
-  flat. The published model repository is already flat; this only matters if
-  you point at a HuggingFace *cache* snapshot, whose entries are symlinks into
-  a sibling `blobs/` directory and dangle inside a container.
+- **A checkpoint**, mounted at `/models` — see
+  [Get the weights](#get-the-weights). A profile refuses to start until its
+  files are complete and their sums verified.
 
 In practice the memory is comfortable: with the Gemma profile loaded, the host
 reported about 18 GB in use and 106 GB available, and the largest profile,
@@ -1674,20 +950,6 @@ Ornith-1.5-122B, is 75 GB resident. Both were measured. The switch still runs
 one profile at a time by design, so the big
 models never compete. The orchestrator is the one auxiliary that is allowed
 to share.
-
-### Modes
-
-| command | what it does |
-|---|---|
-| *(default)* | engine + API in one container, one published port |
-| `engine` / `api` | split roles for a two-container deployment |
-| `bench` | ten real prompt shapes over HTTP |
-| `sweep` | pp/tg size sweep |
-
-**The engine's token protocol has no authentication.** In the default mode it
-binds loopback *inside* the container and only the API port is published. If
-you split the roles, keeping the engine port unpublished is your
-responsibility.
 
 ---
 
@@ -1718,7 +980,7 @@ with thinking off; the row to read it against is therefore the 122B's thinking-o
 | profile | client model id | score | tier |
 |---|---|---|---|
 | ornith | `ornith-1.5-35b-a3b` | **90.1** | TRUNK |
-| dense | `qwen3.8-27b` | 85.9 | MAINLINE |
+| *Qwen3.8-27B dense — removed* | `qwen3.8-27b` | 85.9 | MAINLINE |
 | gemma | `gemma-4-26b-a4b` | 81.2 | MAINLINE |
 | ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
 | ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
@@ -1734,7 +996,7 @@ runs, which is the comparison the numbers are for; the individual cards are link
 paragraphs below.
 
 
-Earlier figures taken from the Windows PC over the LAN (ornith 89.3, dense 85.8, gemma 81.1)
+Earlier figures taken from the Windows PC over the LAN (ornith 89.3, gemma 81.1)
 are kept as a note: they measured the same models under the same conditions and agree in
 ranking, but they were not published.
 
@@ -1756,8 +1018,17 @@ it shipped — one slot, ubatch 128, q8_0 KV — and **80.7** with the four slot
 and f16 KV it ran before 2026-10-21, so those flags were a gain and not a quality trade.
 The best run reads code 100, reason 80, tool use 87.5, RAG 100, speed 36.1, and the model
 page is [qwen3.8-flash-next](https://pipelinescore.ai/models/qwen3.8-flash-next). It lost
-its slot on the code axis rather than on this one: 51 of 158 on MultiPL-E against 70 for
-both Ornith-1.5-122B and ornith, for a decode of 33-35 t/s.
+its slot on the code axis rather than on this one: 51 of 158 on MultiPL-E against 98 for
+gemma, 92 for the Nemotron reference and 82 for Ornith-1.5-122B, each at its own card
+sampling, for a decode of 33-35 t/s.
+
+The italic `Qwen3.8-27B dense` row is the profile **removed on 2026-11-07**, kept for the
+same reason as the flash rows. It is the only profile measured here that won nothing: second
+on this axis behind the 35B at about twice its memory, last on code, the only one whose
+repository carries no vision projector, and the only one that needed a third engine image of
+its own. Its 11 of 158 on MultiPL-E is not a measure of capacity — 140 of its 158 answers ran
+into the 512-token budget writing a whole program, so the number records a format failure —
+and it was not re-measured under another budget.
 
 The `GLM-5.3-Flash` row in italics is a **reference measurement, not a profile**: it was run on
 2026-11-06 to decide whether the model deserved a slot, and it did not. On this axis it is a peer of
@@ -1782,38 +1053,59 @@ is prompt + body + tests, built and run with `dotnet` against a net8.0 console p
 uses to score pass@1, so the numbers mean the same thing for every profile. No cap of ours is
 involved and no judge: the tests decide.
 
-| profile | tasks | passed | compiled | pass % | median s/task | total |
-|---|---|---|---|---|---|---|
-| ornith-1.5-35b-a3b | 158 | 70 | 116 | 44 | 3.2 | 0h08m |
-| ornith-1.5-122b, q8_0 KV | 158 | 70 | 105 | 44 | 17.8 | 0h41m |
-| ornith-1.5-122b, f16 KV | 158 | 72 | 103 | 46 | 18.4 | 0h42m |
-| halogen-qwen3.8-27b | 158 | 21 | 28 | 13 | 10.6 | 0h27m |
-| gemma-4-26b-a4b | 158 | 19 | 25 | 12 | 10.6 | 0h28m |
-| *Qwen3.8-Flash-Next — removed* | 158 | 51 | 79 | 32 | 13.6 | 0h35m |
-| *GLM-5.3-Flash, reference* | 158 | 72 | **111** | 46 | 18.1 | 0h44m |
+Every model is run with the sampling its own card recommends for coding, and then
+again greedy, on the same day and the same 158 tasks. The first column is the
+classification; the second is the setting experiment.
 
-Ornith-1.5-122B passes 70 with the q8_0 cache, level with the 35B, and 72 with
-f16; both take about 18 s per task, six times the 35B's median. The 35B compiles
-far more of what it writes (116 against 103-105)
-and is the fastest by a wide margin. Gemma and dense are within one task of
-each other and are not separated by this benchmark.
+| profile | card sampling | greedy | compiled | pass % | median s/task | total |
+|---|---|---|---|---|---|---|
+| gemma-4-26b-a4b | **98** | 96 | 147 | 62 | 5.1 | 0h16m |
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | **92** | — | **151** | 58 | 7.9 | 0h22m |
+| ornith-1.5-122b | **82** | 83 | 141 | 52 | 6.2 | 0h20m |
+| *GLM-5.3-Flash, reference* | 72 | — | 111 | 46 | 18.1 | 0h44m |
+| ornith-1.5-35b-a3b | 67 | **69** | 103 | 42 | 10.7 | 0h25m |
+| *Qwen3.8-Flash-Next — removed* | 51 | — | 79 | 32 | 13.6 | 0h35m |
+| *Qwen3.8-27B dense — removed* | 11 | 12 | 18 | 7 | 22.3 | 0h58m |
+
+Gemma leads at 98 of 158, ahead of the 120B Nemotron (92) and the 122B (82). Code
+synthesis is one axis where a 26B mixture beats both, and it costs 16 minutes
+against 22 and 20. The 35B is the surprise in the other direction: it is the model
+this machine runs for agentic work, and here it lands fourth, below a reference
+model that never earned a slot. Nemotron compiles more of what it writes than any
+model measured (151 of 158) and still finishes second.
+
+The 122B is 12 tasks better here than the October run that reported 70, and gemma
+20 better than the 19 it reported: those rows were measured with the thinking on,
+before the harness could switch it off, and on a serving path that left gemma 133
+of 158 answers uncompilable. They are not a baseline and they are not kept; every
+row above is one protocol — thinking off, the benchmark's own 512-token budget,
+each model's card sampling.
+
+**The second column is the sampling experiment.** Two runs per model, same day,
+same harness, same tasks: the difference is inside the noise — 98 against 96, 82
+against 83, 67 against 69, 11 against 12, two passes over 632 tasks while the two
+settings disagree on 66. Temperature changes *which* tasks pass, not how many.
+What it does change is the bill: at its card's set ornith-35b compiles 103 of 158
+and spends 7.2 s generating each body, greedy compiles 121 and spends 2.1 s. On
+gemma and the 122B the two costs are identical.
 
 The italic `Qwen3.8-Flash-Next` row is the 125B profile removed on 2026-11-05: 51 of 158,
-a third, against 70 for both the models that outrank it here. That gap is why it left,
-and it is far wider than the one- or two-task differences this benchmark otherwise shows.
+a third, against 98 for gemma, 92 for the Nemotron reference and 82 for the 122B. That
+gap is why it left, and it is far wider than the one- or two-task differences this
+benchmark otherwise shows.
 
 The italic `GLM-5.3-Flash` row is the same reference measurement described
-under PipelineScore: it ties the 122B's best result at 72 passed, compiles more
-than any profile (111), and still did not earn a slot — same correctness
-ceiling, half the context, no vision, a third engine. Its 18,1 s median is the
-122B's own, which is the point: a faster decoder pays it back in prefill,
-because every task here is a fresh prompt.
+under PipelineScore: it took 72 passed, between the 122B's 82 and the 35B's 67,
+compiles more than any profile (111), and still did not earn a slot — same
+correctness ceiling, half the context, no vision, a third engine. Its 18,1 s median
+is three times the 122B's 6,2 while it generates faster per token: half the prefill
+rate is what a third engine costs here, because every task is a fresh prompt.
 
 What this does and does not say:
 
 - **Function level, not repository level.** 158 single functions from the HumanEval lineage, no
   cross-file context, no tools. It ranks the profiles on code synthesis, not on agentic work; for
-  that axis the README reports PipelineScore (ornith 90,1 · dense 85,9 ·
+  that axis the README reports PipelineScore (ornith 90,1 ·
   ornith122 84,0 · gemma 81,2).
 - **512 tokens is the benchmark's budget, not a saving measure.** Without a cap the same models
   generate tens of thousands of tokens for one body and never stop; gemma reached 900 s on the first
@@ -1829,20 +1121,12 @@ What this does and does not say:
   models read images: their projector is downloaded at setup and **loaded by
   default**, so the machine comes up able to see. `VISION_DEFAULT=0` keeps it
   text-only. `superfast-switch vision on|off` (or the panel toggle) changes it
-  later, which restarts the profile with or without the encoder. The dense and
-  deepseek profiles are text-only — no encoder exists in their repositories —
+  later, which restarts the profile with or without the encoder. The optional
+  `deepseek` profile is text-only — no encoder exists in its repository —
   and ornith122 has one, but its projector is not installed by default.
-- **Unassisted decode is not our strong point** — see the comparison above.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
   turn fast; it cannot make the first one fast.
-- **One default is not byte-identical to the engine's built-in one.** The
-  image ships full W4A4 promotion, worth +9% prefill, against about −0.45 pt
-  top-1 aggregate (better at deep context, worse in the first ~12%). It does
-  not affect the guarantees above: speculation is still exact against serial
-  greedy, warm cache still matches cold, batched still matches solo. Roll it
-  back with one environment variable; see
-  [`docs/FLAGS.md`](docs/FLAGS.md).
 - **Coding quality is not measured here yet.** The table above measures
   speed, not whether the code a profile writes is correct. The plan is
   EvalPlus — HumanEval+ (164 problems) and MBPP+ (378), `pass@1`, greedy, one
@@ -1853,9 +1137,6 @@ What this does and does not say:
   A second axis belongs in the same plan: the same batch of issues run on two
   profiles, scored by issues closed per hour and by repeated tool calls. That
   separates a weak model from a weak prompt, which a pass@1 table cannot do.
-- **The comparison table is cross-published, not head-to-head.** We have not
-  run the other engines ourselves on our box under matched settings. When we
-  do, we will publish whatever it says.
 
 ---
 
@@ -1865,6 +1146,18 @@ Quality here is measured on this machine, not quoted. The runs we performed are 
 `## Benchmark: PipelineScore` and `## Benchmark: MultiPL-E (C#)` above, and
 `docs/MODEL-CARDS.md` collects what the model authors say about serving them.
 
+The same two runs are also how the settings are chosen, and that is the second reason
+they exist. A model has three things a user can change without touching the weights —
+its sampling (temperature, top-p, top-k), whether it reasons before answering, and the
+context it is served — and the cards disagree about all three, sometimes for the same
+model within the same week. 158 identical tasks turn that disagreement into a number,
+because the tests decide and no judge is involved: run them twice with one thing
+changed and the difference is either the setting or the proof that it makes no
+difference. It is why the temperature paragraph above can name a cost per model, why
+the presets in the client configs are a decision with a measurement behind it instead
+of a copy of a card, and why the reasoning switch is now treated as a benchmarking
+constraint rather than a preference.
+
 Vendor benchmark tables are deliberately not reproduced: they measure other builds,
 other quantizations and other harnesses, and none of them answers the question that
 matters here, which is how a profile behaves on your documents and in your language.
@@ -1873,7 +1166,7 @@ that made that decision, next to the measurement that confirmed it.
 
 ## The orchestrator: a small, fast model that hands work to the right specialist
 
-This profile does not appear in the comparison table, because it does not
+This profile does not appear in the profile table, because it does not
 compete with the big models. It has a different job.
 
 An orchestrator decides what has to be done and who should do it: it reads a
@@ -1889,10 +1182,11 @@ intelligence. Routing, classifying, choosing a tool and planning a short
 sequence of steps are simple tasks. A 350M-to-1.5B model does them in
 milliseconds. Doing them with a big model means paying the big model's memory
 bandwidth for work that does not need it. The numbers on this machine make
-that clear: the dense 27B profile reads about 23.5 GB for every token it
-generates, while a 1.2B model at 4-bit reads under 1 GB. The orchestrator can
-therefore run all the time, answer immediately, and cost the specialist model
-barely 1–2% of its bandwidth when both are resident.
+that clear: a 122B specialist answers at 25 to 28 tokens per second, while the
+1.2B orchestrator answers at 204 and makes a routing decision in about a tenth
+of a second. The orchestrator can therefore run all the time, answer
+immediately, and cost the specialist model barely 1–2% of its bandwidth when
+both are resident.
 
 The pattern is old and familiar: a conductor does not play the violin better
 than the musicians; the work is deciding who plays when, and keeping the
@@ -1945,7 +1239,7 @@ those are marketing numbers, but the mechanism is real, and it is why the
 pattern is everywhere in agentic stacks.
 
 On this machine the plan is concrete, and it is measured. A small Liquid
-LFM2.5 model becomes a resident orchestrator on its own port, while the dense,
+LFM2.5 model becomes a resident orchestrator on its own port, while the
 ornith122 or DeepSeek profile stays on the main endpoint for the work that
 needs a big model. Clients keep talking to the same address; the orchestrator
 decides whether the request is simple enough to answer itself or worth waking
@@ -1974,7 +1268,7 @@ ready: almost nothing while it waits, a few percent while it works.
 
 The orchestrator has its own systemd unit and is toggled with
 `superfast-switch orchestrator on|off`, so enabling it never disturbs the
-active profile. Its numbers stay out of the comparison table, which is about
+active profile. Its numbers stay out of the profile table, which is about
 the specialist models.
 
 ---
@@ -1985,11 +1279,11 @@ The machine runs **one model profile at a time**, and every profile serves the
 same OpenAI-compatible endpoint on port 8731. Clients — scripts, apps,
 AgentBridge — never change their configuration when you switch: only the
 model behind the endpoint changes. Stopping one profile releases its memory
-before the next one loads, so the dense 27B, Ornith-1.5-122B and any future
+before the next one loads, so Ornith-1.5-122B, Gemma-4 and any future
 profile do not compete for resources.
 
 The setup script ([`deploy/setup-fedora.sh`](deploy/setup-fedora.sh), phases
-8–10) installs everything: the profile units, the switch itself into
+7 and 8) installs everything: the profile units, the switch itself into
 `~/.local/bin/superfast-switch`, the TUI, the API-key gateway and the GNOME
 panel. Which profiles it prepares depends on `PROFILES` (see
 [step 3](#3-configure-the-machine-for-superfast)); the units live in
@@ -2007,7 +1301,6 @@ Use the switch on the machine:
 ```bash
 superfast-switch status          # what is running now
 superfast-switch list            # available profiles
-superfast-switch use dense       # Qwen3.8-27B (halogen engine)
 superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
 superfast-switch use ornith122  # Ornith-1.5-122B MXFP4
 superfast-switch mode auto       # let the client's model field pick the profile
@@ -2074,16 +1367,15 @@ reference machine:
 
 | profile | context | memory in use while serving | notes |
 |---|---|---|---|
-| Qwen3.8-27B dense | 262,144 | ~36 GB | the engine's native maximum, one slot holds the whole window |
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
 | Ornith-1.5-122B | 262,144 | ~75 GB | native maximum; only 12 of its 48 layers use full attention and the q8_0 KV cache is ~3 GB for the whole window |
 
 Three properties that matter when a program uses this machine as its model:
 
-- **The KV cache follows the slot.** On the halogen engine one slot can use the
-  whole window; on llama.cpp each slot owns a private KV, which is why the
-  GGUF profiles ship one slot (`--parallel 1`): four sessions share the window,
-  and a session that lands on another slot loses its cached prefix.
+- **The KV cache follows the slot.** On llama.cpp each slot owns a private
+  KV, which is why the GGUF profiles ship one slot (`--parallel 1`): four
+  sessions share the window, and a session that lands on another slot loses
+  its cached prefix.
 - **Tool calling works on the profile we could verify it on.** The GGUF
   profiles run with `--jinja`, so the model's own chat template handles tools.
   Verified on Gemma-4: asked for a tool call, and the answer was a proper
@@ -2127,8 +1419,8 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 | model name | the `id for the client` column of the profile table at the top; it changes with the active profile, and it is what `/health` reports as `"model"` |
 | context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
 | answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
-| sampling | on the Qwen profiles leave it alone: the engine's default is greedy, which is what a coding agent wants, and it says so in `/health` ("greedy at temperature 0 (the default)"). On the Gemma and DeepSeek profiles the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client has to choose (greedy is what we measured with) |
-| reasoning effort | on the Qwen profiles send `reasoning_effort` per request (`low` for chat and code, `medium` for hard problems): the vendor default over-thinks and that is the documented cause of long thinking loops. The GGUF profiles ignore the field |
+| sampling | the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client chooses. Greedy (`temperature: 0`) is what a coding agent wants, and it is what the numbers in this README were measured with |
+| reasoning effort | the field is ignored: thinking is switched in the unit, with `--chat-template-kwargs`, not per request |
 
 **Where each client keeps that id.** The `id for the client` column of the
 profile table at the top of this document is what goes in the `model` field,
@@ -2164,8 +1456,8 @@ Two limits that only show up in long agentic sessions:
   volatile content (the clock, command output) at the end. Two consequences
   when an agent opens subagents: each subagent carries its own history, so
   only what it shares with its siblings is free, and the machine keeps warm
-  only what fits its KV pool while it decodes at most as many conversations at
-  once as the profile has slots (one, on every unit) — see
+  only what fits its context window while it decodes at most as many
+  conversations at once as the profile has slots (one, on every unit) — see
   [Many agents at once](#many-agents-at-once). Qwen Code shows the cache work
   in `/stats`.
 
@@ -2213,7 +1505,7 @@ it.
 content straight to it instead of refusing it or routing it elsewhere.
 `"agent": true` lets the same model run as the full-turn agent with vision on.
 Add `"vision": true` to the `gemma` and `ornith` entries; leave it off for
-`dense`, `ornith122` and the optional `deepseek`, which have no projector
+`ornith122` and the optional `deepseek`, which have no projector
 loaded (ornith122 has one, but it is not installed by default).
 
 Add the other profiles as further objects in the same array, using the values in
@@ -2226,7 +1518,6 @@ client sends as the model name, so it must match what `/health` reports, and
 
 | profile | `id` | context window | answer budget | `streamIdleTimeoutMs` | `timeout` | `temperature` | `extra_body` |
 |---|---|---|---|---|---|---|---|
-| Dense 27B | `halogen-qwen3.8-27b` | 262,144 | 16,384 | 7,200,000 | 9,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | Gemma-4-26B | `gemma-4-26b-a4b` | 262,144 | 32,768 | 3,600,000 | 4,800,000 | **0** | none, the profile ignores it |
 | Ornith-1.5-122B | `ornith-1.5-122b` | 262,144 | 16,384 | 4,200,000 | 6,000,000 | leave unset | `{"reasoning_effort":"low"}` |
 | DeepSeek-V4-Flash (optional) | `deepseek-v4-flash` | 524,288 | 16,384 | 8,400,000 | 10,800,000 | **0** | none, the profile ignores it |
@@ -2265,23 +1556,17 @@ running, while a timeout that is too large only means a client takes longer to
 notice a server that has stopped answering. A smaller answer budget makes the
 sum smaller, so these values stay valid when a profile's budget goes down.
 
-The dense budget is 16,384 and not more because of the KV pool, and this is the
-one client value that has to follow the server. Every request reserves
-`prompt + max_tokens` positions of the pool, so the answer budget decides how
-many long conversations stay resident at once, and the pool the dense unit
-ships holds 655,360 positions.
-
-The other reason is speed. Dense answers at 21.0 tokens per second on prose and
-26.1 on code, so the same number of tokens takes longer there and the client's
-15-minute stream limit would cut the answer before the model finished.
+The answer budget also follows the speed of the profile, and that is the second
+reason for the numbers above: the same number of tokens takes longer on a
+slower model, and the client's 15-minute stream limit would cut the answer
+before the model finished.
 Ornith-1.5-122B answers at 25.0 and 28.2, Gemma at 57.3 and holds 32,768 inside
 the limit; DeepSeek answers at 11.2, so a full 16,384-token answer takes about
 24 minutes and needs the longer limit below.
 
 `temperature` is only set on Gemma and DeepSeek, because those two declare no
 sampling default of their own: without the field the client's own default
-applies, and the numbers in this README were measured greedy. The Qwen profiles
-are already greedy and say so in `/health`.
+applies, and the numbers in this README were measured greedy.
 
 `envKey` names an environment variable, not the key itself: point it at the
 gateway key, read with `superfast-switch api-key show`, and set it with
@@ -2309,12 +1594,8 @@ total   = silence + answer_budget / decode_rate
 ```
 
 `wait_in_queue` is the longest a request can legitimately sit in silence while
-the machine serves others. Where the engine has a queue timeout of its own
-(`HALOGEN_QUEUE_TIMEOUT`, set below), that timeout is the bound: it is the
-point where the engine stops waiting and answers 503, so a client must be
-willing to wait longer than that or it gives up on a request the engine was
-still holding. The llama.cpp profiles have no queue timeout, so theirs is the
-estimate of the requests ahead of the last one.
+the machine serves others. The llama.cpp profiles have no queue timeout of
+their own, so theirs is the estimate of the requests ahead of the last one.
 
 The inputs are the measurements in [Performance](#performance), each taken at
 its slowest value, and the largest prompt is the profile's context minus its
@@ -2322,7 +1603,6 @@ answer budget:
 
 | profile | largest prompt | prefill | answer | wait in queue | silence | whole request |
 |---|---|---|---|---|---|---|
-| Dense 27B | 245,760 tok @ 528 t/s | 465 s | 780 s | 6,000 s (the engine's queue timeout) | 6,465 s → **7,200,000 ms** | 7,245 s → **9,000,000 ms** |
 | Gemma-4-26B | 229,376 tok @ 1,527 t/s | 150 s | 572 s | 2,888 s (four requests ahead) | 3,038 s → **3,600,000 ms** | 3,610 s → **4,800,000 ms** |
 | DeepSeek-V4-Flash (optional) | 507,904 tok @ 163 t/s | 3,116 s | 1,463 s | 4,579 s (one request ahead) | 7,695 s → **8,400,000 ms** | 9,158 s → **10,800,000 ms** |
 
@@ -2332,15 +1612,11 @@ while it prefills. A client left at its defaults — 4 minutes of silence, 2
 minutes per request — cannot see that turn finish, and the answer is lost with
 the work.
 
-Three consequences worth knowing:
+Two consequences worth knowing:
 
-- **The engine's own timeout is set to match, and deliberately.**
-  `HALOGEN_QUEUE_TIMEOUT` is 6000 s on dense, above the longest queue wait
-  estimated for that profile (4,980 s with one slot) and below what the table
-  above allows in the absolute worst case, where three worst-case requests
-  ahead of you would exceed it. It exists to stop a client waiting forever,
-  not to bound the queue. The llama.cpp units have no queue to size: each
-  runs `--parallel 1` with its own `--timeout` on the socket.
+- **No unit sizes a queue, because there is none to size.** Each unit runs
+  `--parallel 1`, so a second request waits for the slot, and the socket
+  timeout below is the only bound on how long one request may run.
 - **llama.cpp has a timeout of its own**, `--timeout`, 600 s by default, on the
   *socket*. The gemma and deepseek units raise it (1800 s and 3600 s) because
   their prefills are long enough to trip the default — see the comments in
@@ -2387,8 +1663,8 @@ part — and the model looks at it and answers. Vision is **on by default** for
 these two: the setup installs the projector active, so the machine can already
 read images. Set `VISION_DEFAULT=0` at setup for a text-only machine. Turning
 vision on or off later restarts the profile and costs extra memory. The
-**dense** and the optional **deepseek** profiles have no image encoder and
-stay text-only; **ornith122** has one, but its projector is not installed by
+optional **deepseek** profile has no image encoder and
+stays text-only; **ornith122** has one, but its projector is not installed by
 default, so it is text-only until that `mmproj` is added.
 
 ```bash
@@ -2468,13 +1744,13 @@ script already puts on the gateway unit; `tools/gateway-retry-selftest.py`
 reproduces both shapes and the retry budget against a fake engine, and
 `switch.log` records each repair.
 
-**Roadmap: other model families.** A second runtime is already in use —
-llama.cpp with the ROCmFPX fork, which serves GGUF models with AMD's FP4
-tensor types. One such runtime can host several profiles, because a profile
-is only a weight folder plus a systemd unit. Gemma-4-26B-A4B and
-DeepSeek-V4-Flash are the two families validated on it so far. Nothing enters
-the switch before it is measured on this exact machine and its numbers are
-published here.
+**Roadmap: other model families.** Two llama.cpp builds are in use — the
+Vulkan engine image for the two Ornith profiles, and the ROCmFPX fork, which
+adds AMD's FP4 tensor types, for Gemma-4 and DeepSeek. One such runtime can
+host several profiles, because a profile is only a weight folder plus a
+systemd unit. Gemma-4-26B-A4B and DeepSeek-V4-Flash are the two families
+validated on ROCmFPX so far. Nothing enters the switch before it is measured
+on this exact machine and its numbers are published here.
 
 ---
 
@@ -2557,7 +1833,7 @@ curl -s localhost:8731/health         # -> "model":"gemma-4-26b-a4b"
 From any computer on the network, the OpenAI-compatible endpoint is the
 key-protected gateway, `http://<machine-ip>:8741`, and the model name is
 whatever `/health` reports — `gemma-4-26b-a4b`, `deepseek-v4-flash` or the
-Qwen name, depending on the active profile. One caution learned the hard way:
+Ornith name, depending on the active profile. One caution learned the hard way:
 give the model a generous `max_tokens`. In our own test, a 256-token budget
 was consumed entirely by Gemma's reasoning phase and the answer came back
 empty; 1,024 tokens produced a normal reply. The gateway requires the key

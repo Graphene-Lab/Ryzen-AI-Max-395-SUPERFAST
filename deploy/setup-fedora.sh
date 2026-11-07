@@ -23,24 +23,24 @@
 #
 # Fully unattended, including the reboot the kernel parameters need:
 #   curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
-#   PROFILES="dense gemma ornith small" UNATTENDED=1 bash setup-fedora.sh
+#   PROFILES="gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
 # With UNATTENDED=1 the script refuses to wait for anything: sudo must be
 # passwordless (it says how), the script must be a file on disk (it re-runs
 # itself after the reboot), and when the kernel parameters are set it installs
 # a one-shot system unit, reboots after 15 s, and continues by itself. Follow
 # the second half with `journalctl -u superfast-setup-resume -f`. Expect the
-# whole thing to take hours: the dense checkpoint alone is 35.9 GB, and the
-# other profiles start their own downloads in the background.
+# whole thing to take hours: the Ornith-1.5-122B checkpoint alone is 69.7 GB,
+# and the other profiles start their own downloads in the background.
 #
 # Env overrides:
-#   SUPERFAST_IMAGE   image to run (default: the published halogen tag).
-#                     A `superfast` tag does not exist yet; when it is
-#                     published it will be the same content.
-#   MODELS_DIR        where the dense checkpoint lives (default: ~/superfast-models)
+#   MODELS_DIR_ORNITH, MODELS_DIR_ORNITH122, MODELS_DIR_GEMMA,
+#   MODELS_DIR_DEEPSEEK, MODELS_DIR_SMALL
+#                     where each checkpoint lives (defaults: ~/<profile>-models,
+#                     and ~/small-models for the orchestrator).
 #   PROFILES          which profiles to prepare, space separated. Default
-#                     "dense". Also accepted: gemma, ornith, ornith122, deepseek, small
-#                     (the small orchestrator). Example:
-#                       PROFILES="dense gemma ornith small" bash deploy/setup-fedora.sh
+#                     "gemma ornith ornith122 small". Also accepted: deepseek.
+#                     Example:
+#                       PROFILES="gemma ornith small" bash deploy/setup-fedora.sh
 #                     Weights for the extra profiles are fetched by a systemd
 #                     unit per profile, so this script returns without waiting
 #                     for tens of gigabytes to arrive.
@@ -77,7 +77,7 @@
 # Memory layout: the reference host BIOS has the UMA frame buffer set to its
 # minimum (1 GB), so the full unified memory is one pool. This is required for
 # large checkpoints (e.g. the ~115 GB Flash-Next MoE); it is harmless for the
-# dense 27B checkpoint. Phase 5 also raises the shared-memory limits the GPU
+# smaller checkpoints. Phase 5 also raises the shared-memory limits the GPU
 # may allocate from (amdgpu.gttsize + ttm.pages_limit, both on the kernel
 # command line), which the largest checkpoints need.
 # `-E` matters: without it bash does not inherit the ERR trap into shell
@@ -85,7 +85,6 @@
 # never fire. Verified the hard way: a phase failed and nothing was printed.
 set -eEuo pipefail
 
-IMAGE="${SUPERFAST_IMAGE:-ghcr.io/peonist-ai/halogen:0.1.3}"
 RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
 # Published candidates, in order. The first is built and published by this
 # repository's workflow and is public, so no login is needed. If you mirror the
@@ -95,15 +94,14 @@ RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
 RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
 RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
 REBOOT_NEEDED=0
-# The reference machine runs four profiles plus the small orchestrator;
+# The reference machine runs three profiles plus the small orchestrator;
 # a fresh install creates the same machine unless PROFILES says otherwise.
-PROFILES="${PROFILES:-dense gemma ornith ornith122 small}"
+PROFILES="${PROFILES:-gemma ornith ornith122 small}"
 # The Vulkan engine image serves ornith and ornith122. VULKAN_FLASH was the
 # name before the flash profile was removed, so it is still honoured.
 VULKAN_ENGINE="${VULKAN_ENGINE:-${VULKAN_FLASH:-1}}"
 MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
 MODELS_DIR_ORNITH122="${MODELS_DIR_ORNITH122:-$HOME/ornith122-models}"
-MODELS_DIR="${MODELS_DIR:-$HOME/superfast-models}"
 MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
 MODELS_DIR_DEEPSEEK="${MODELS_DIR_DEEPSEEK:-$HOME/deepseek-models}"
 MODELS_DIR_SMALL="${MODELS_DIR_SMALL:-$HOME/small-models}"
@@ -156,80 +154,6 @@ in_profiles() {
     is_in "$PROFILES" "$1"
 }
 
-# The numeric value of one -e setting in an installed unit. The unit name may
-# come with or without its .service suffix: a caller that passes the bare name
-# would otherwise get an empty answer and a diagnostic that says nothing.
-unit_env() { # unit, VAR
-    local f="$HOME/.config/systemd/user/$1"
-    [ -f "$f" ] || f="${f}.service"
-    sed -n "s/^[[:space:]]*-e ${2}=\([0-9]*\).*/\1/p" "$f" 2>/dev/null | tail -n 1
-}
-
-# What to do about an engine that is not answering. The failure this catches is
-# not a slow load: after "model ready" the engine can livelock in its own
-# allocator while it reserves the serving slots, and spin at 80-90% of a core
-# forever without ever listening. From outside that is indistinguishable from a
-# cold load, and waiting does not help — measured 2026-09-13, three hangs, no
-# error line to report. So the diagnosis is printed where the wait already timed
-# out, and it names the remedies instead of a log command.
-engine_not_ready_hint() { # unit
-    local unit="$1" pool proc
-    if journalctl --user -u "$unit" --no-pager --since '20 min ago' 2>/dev/null \
-       | tail -n 500 | grep -q 'model ready' \
-       && ! journalctl --user -u "$unit" --no-pager --since '20 min ago' 2>/dev/null \
-            | tail -n 500 | grep -qE 'prompt cache ON|listening on'; then
-        log "the engine reached 'model ready' and then stopped making progress:"
-        log "  it is spinning while it reserves its serving slots, not loading, so"
-        log "  waiting will not help and the port will not open."
-        journalctl --user -u "$unit" --no-pager --since '20 min ago' 2>/dev/null \
-            | grep -E 'KV pool reserved|reserving .* slot|slots: 1 ->' | tail -n 3 |
-            sed 's/^/  /' || true
-    elif journalctl --user -u "$unit" --no-pager --since '20 min ago' 2>/dev/null \
-            | tail -n 500 | grep -q 'wedged engine'; then
-        # A different failure, with a different outcome: the engine loaded and
-        # then stopped answering PING while serving. The container's own
-        # watchdog kills it at HALOGEN_ENGINE_WATCHDOG_S (180 s) and systemd
-        # restarts it, so this one does recover — but in a loop, if the host is
-        # in the state that caused it.
-        log "the engine loaded, then wedged while serving and answered no PING:"
-        log "  the container's watchdog killed it and systemd restarted it. If you"
-        log "  are seeing this repeatedly, the host needs a reboot — a host that has"
-        log "  been through many container starts is what both failures have in common."
-    fi
-    proc="$(ps -eo pcpu=,comm= 2>/dev/null \
-        | awk '$2 == "llama-server" || $2 == "halogen" {print $1"% CPU ("$2")"}' \
-        | sort -rn | head -n 1)"
-    [ -n "$proc" ] && log "  engine process: $proc — a spinning engine burns a core, a loading one does not"
-    pool="$(unit_env "$unit" HALOGEN_KV_POOL_POSITIONS)"
-    [ -n "$pool" ] && log "  the unit asks for a $pool-position pool"
-    log "  remedies, in order: lower HALOGEN_KV_POOL_POSITIONS in"
-    log "  ~/.config/systemd/user/$unit, or reboot the host so the engine starts"
-    log "  with unfragmented memory. Then restart the unit."
-}
-
-# The engine can quietly arm a different pool than the unit asks for: with
-# HALOGEN_KV_POOL_FIT=1 it fits the pool to what the host can back, which is the
-# safe behaviour but means fewer conversations stay resident than the unit
-# promises. Saying which of the two happened costs one request and saves
-# wondering later why turns queue.
-check_armed_pool() { # unit
-    local unit="$1" want armed
-    want="$(unit_env "$unit" HALOGEN_KV_POOL_POSITIONS)"
-    [ -n "$want" ] || return 0
-    armed="$(curl -s --max-time 10 http://127.0.0.1:8731/health 2>/dev/null \
-        | sed -n 's/.*"kv_pool_positions"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
-    [ -n "$armed" ] || return 0
-    if [ "$armed" = "$want" ]; then
-        log "kv pool armed as asked: $armed positions"
-    else
-        log "NOTE: the unit asks for $want positions and the engine armed $armed."
-        log "  That is HALOGEN_KV_POOL_FIT=1 fitting the pool to this host, so fewer"
-        log "  conversations stay resident than the unit asks for. Set"
-        log "  HALOGEN_KV_POOL_FIT=0 to take the number as given, or lower"
-        log "  HALOGEN_KV_POOL_POSITIONS to a pool this host can back."
-    fi
-}
-
 # The shared-memory kernel parameters are what the large checkpoints need, and
 # whether they are ACTIVE can only be read from /proc/cmdline. A machine that
 # has them written but has not booted into them fails later with "cudaMalloc
@@ -254,7 +178,6 @@ kernel_args_state() {
 # Weights directory of a profile.
 profile_dir() {
     case "$1" in
-        dense)    echo "$MODELS_DIR" ;;
         gemma)    echo "$MODELS_DIR_GEMMA" ;;
         deepseek) echo "$MODELS_DIR_DEEPSEEK" ;;
         small)    echo "$MODELS_DIR_SMALL" ;;
@@ -282,15 +205,12 @@ weights_complete() {
 install_template() { # src dst
     sed -e "s#__HOME__#$HOME#g" \
         -e "s#__XDG__#/run/user/$UID_NUM#g" \
-        -e "s#__DENSE_DIR__#$MODELS_DIR#g" \
         -e "s#__GEMMA_DIR__#$MODELS_DIR_GEMMA#g" \
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
         -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
         -e "s#__ORNITH122_DIR__#$MODELS_DIR_ORNITH122#g" \
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
-        -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" \
-        -e "s#__DENSE_IMAGE__#$IMAGE#g" \
-        -e "s#__DENSE_IMAGE__#$IMAGE#g" "$1" > "$2"
+        -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" "$1" > "$2"
 }
 
 # Install the shared weights downloader (one script, one unit template).
@@ -313,7 +233,7 @@ install_downloader() {
 }
 
 phase_os_check() {
-    log "== phase 1/10: OS check =="
+    log "== phase 1/8: OS check =="
     [ -f /etc/os-release ] || { echo "not a Fedora system (no /etc/os-release)"; exit 1; }
     . /etc/os-release
     [ "$ID" = "fedora" ] || { echo "not Fedora (ID=$ID); this script targets Fedora Workstation 44"; exit 1; }
@@ -360,14 +280,14 @@ phase_os_check() {
 }
 
 phase_update() {
-    log "== phase 2/10: system update =="
+    log "== phase 2/8: system update =="
     if [ "${SKIP_UPDATE:-0}" = "1" ]; then log "SKIP_UPDATE set — skipping"; return; fi
     sudo dnf upgrade --refresh -y
     log "system updated; a reboot is recommended before continuing"
 }
 
 phase_sshd() {
-    log "== phase 3/10: SSH server =="
+    log "== phase 3/8: SSH server =="
     sudo dnf install -y openssh-server
     sudo systemctl enable --now sshd
     firewall_rule --add-service=ssh --permanent
@@ -376,7 +296,7 @@ phase_sshd() {
 }
 
 phase_groups() {
-    log "== phase 4/10: GPU groups =="
+    log "== phase 4/8: GPU groups =="
     # Fedora Workstation has both; a minimal image (a container rootfs, the WSL
     # image) may not, and `usermod -aG` fails outright on a group that does not
     # exist. Create what is missing rather than stopping the install.
@@ -391,7 +311,7 @@ phase_groups() {
 }
 
 phase_suspend_mask() {
-    log "== phase 5/10: disable auto-suspend + raise shared-memory limit =="
+    log "== phase 5/8: disable auto-suspend + raise shared-memory limit =="
     # Required for unattended big downloads: GNOME suspended the reference
     # host mid-download once (see runbook).
     sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
@@ -422,64 +342,8 @@ phase_suspend_mask() {
     log "sleep/suspend/hibernate masked; shared-memory limit set"
 }
 
-phase_weights() {
-    log "== phase 6/10: dense checkpoint download (resumable, sha256-verified) =="
-    if ! in_profiles dense; then
-        log "dense is not in PROFILES ($PROFILES); skipping its checkpoint"
-        return 0
-    fi
-    install_downloader || return 0
-    if [ "${SKIP_WEIGHTS:-0}" = "1" ]; then
-        log "SKIP_WEIGHTS set — the downloader is installed, nothing is fetched"
-        return 0
-    fi
-    # Run in the foreground: the unit installed later in this script expects
-    # the checkpoint to be there. The downloader resumes at the exact byte
-    # offset if it is interrupted, keeps one writer per file, and checks the
-    # SHA-256 published by Hugging Face before the final rename.
-    log "dense: downloading into $MODELS_DIR (log: $MODELS_DIR/.download.log)"
-    log "dense: the checkpoint is 35.9 GB, so on a slow link this phase takes hours."
-    log "dense: stopping it is safe - the transfer resumes at the byte it reached,"
-    log "dense: and re-running this script continues from there."
-    bash "$HOME/.local/bin/superfast-downloads/download-weights.sh" dense
-    log "dense: checkpoint ready"
-}
-
-phase_image() {
-    log "== phase 7/10: engine image =="
-    if ! in_profiles dense; then
-        log "dense is not in PROFILES ($PROFILES); skipping the engine image"
-        return 0
-    fi
-    if podman image exists "$IMAGE"; then
-        log "image already present: $IMAGE"
-        return 0
-    fi
-    if [ "${SKIP_IMAGE:-0}" = "1" ]; then
-        log "SKIP_IMAGE set — not pulling $IMAGE"
-        return 0
-    fi
-    # Bounded retries: an unbounded loop would spin forever on a tag that no
-    # longer exists (upstream renamed it, or a typo in SUPERFAST_IMAGE).
-    pulled=""
-    for attempt in 1 2 3 4 5; do
-        if podman pull "$IMAGE"; then
-            pulled=1
-            break
-        fi
-        log "image pull failed (attempt $attempt/5); retrying in 60s"
-        sleep 60
-    done
-    if [ -z "$pulled" ]; then
-        log "could not pull $IMAGE after 5 attempts."
-        log "Check that the tag still exists, or point SUPERFAST_IMAGE at another reference."
-        return 1
-    fi
-    log "image pulled: $IMAGE"
-}
-
 phase_smoke() {
-    log "== phase 7b/10: container device test (SMOKE=1) =="
+    log "== phase 6a/8: container device test (SMOKE=1) =="
     podman run --rm --device /dev/kfd --device /dev/dri docker.io/library/fedora:44 \
         ls -l /dev/kfd /dev/dri
 }
@@ -518,7 +382,7 @@ phase_engine() {
     if [ ! -f "$HOME/ideogram-models/ideogram4-Q4_0.gguf" ]; then
         log "image generator: weights missing in ~/ideogram-models; see the README, section 'Get the weights'"
     fi
-    log "== phase 8/10: engine service (systemd user unit) =="
+    log "== phase 6/8: engine service (systemd user unit) =="
     # The optional image generator is not a profile: it runs beside one on its
     # own loopback port. Installed stopped, and placed before the group check
     # below, because that check can end this phase early: the unit file must
@@ -528,14 +392,11 @@ phase_engine() {
             "$HOME/.config/systemd/user/superfast-image.service"
         log "superfast-image.service installed (stopped; 'superfast-switch image on')"
     fi
-    # The dense unit is installed only when dense is requested, but the rest of
-    # this phase must still run: an install with PROFILES=ornith used to return
-    # here and install no unit at all.
     # The container reaches /dev/kfd and /dev/dri through the video and render
     # groups, and a user added to them in phase 4 only gets them in a NEW
-    # session. Without this check the first run on a fresh machine would start
-    # the engine, wait ten minutes for a health check that cannot succeed, and
-    # blame the engine. A clear instruction instead.
+    # session. Without this check the first run on a fresh machine would try to
+    # start an engine, wait ten minutes for a health check that cannot succeed,
+    # and blame the engine. A clear instruction instead.
     if ! id -nG | grep -qw video || ! id -nG | grep -qw render; then
         if [ "${UNATTENDED:-0}" = "1" ] || [ "${AUTO_REBOOT:-0}" = "1" ]; then
             # Unattended runs reboot anyway, and the reboot is exactly what the
@@ -566,55 +427,21 @@ phase_engine() {
     # unit works everywhere. Linger must be on for the unit to start at boot:
     sudo loginctl enable-linger "$TARGET_USER"
 
-    # Only one profile can own port 8731. Stop the others first, exactly like
-    # the switch does, so that re-running this script on a machine that is
-    # already serving does not fail to bind the port.
-    for q in gemma deepseek; do
+    # Only one profile can own port 8731. Stop anything already serving, exactly
+    # like the switch does, so that re-running this script on a machine that is
+    # already up does not leave two units fighting for the port.
+    for q in gemma ornith ornith122 deepseek; do
         XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user stop "$q.service" 2>/dev/null || true
     done
 
     UID_NUM="$(id -u)"
     mkdir -p "$HOME/.config/systemd/user"
-    # The dense unit comes from deploy/profiles/dense.service, like the other
-    # four, and not from a heredoc here. Two reasons: phase_profiles can then
-    # refresh it too (an upgraded machine reaches the dense unit through
-    # `ONLY=profiles`, which used to rewrite every unit except this one), and a
-    # file cannot be corrupted by the shell that installs it — the heredoc this
-    # replaces once ran a command substitution from its own comment text.
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$script_dir/profiles/dense.service" ]; then
-        install_template "$script_dir/profiles/dense.service" \
-            "$HOME/.config/systemd/user/superfast.service"
-    else
-        log "$script_dir/profiles/dense.service missing; cannot install the dense unit"
-        return 1
-    fi
-
     XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user daemon-reload
-    # enable, then restart: `enable --now` does nothing to a unit that is
-    # already running, so re-running this script after changing anything in
-    # this phase would keep the old unit file loaded. restart also starts a
-    # unit that is not running.
-    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user enable superfast.service
-    XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user restart superfast.service
-    log "superfast.service enabled and started; waiting for /health on :8731"
-    for i in $(seq 1 40); do
-        # Require 200: the port can be open while the engine is still loading.
-        if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8731/health)" = "200" ]; then
-            log "engine healthy after ~$((i * 10))s"
-            check_armed_pool superfast.service
-            return 0
-        fi
-        sleep 10
-    done
-    log "engine not healthy after ~400 s"
-    engine_not_ready_hint superfast.service
-    return 1
+    log "engine prerequisites ready; no profile is started here (phase profiles enables one)"
 }
 
 phase_profiles() {
-    log "== phase 9/10: model switch, profile units, weights (PROFILES=$PROFILES) =="
+    log "== phase 7/8: model switch, profile units, weights (PROFILES=$PROFILES) =="
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROF_DIR="$SCRIPT_DIR/profiles"
     if [ ! -d "$PROF_DIR" ]; then
@@ -725,21 +552,6 @@ phase_profiles() {
         [ -f "$MODELS_DIR_SMALL/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ] && requested="$requested small"
     ;; esac
 
-    #    The dense unit is installed here as well, from the same template the
-    #    engine phase uses. It used to be written only by the engine phase, so
-    #    `ONLY=profiles` — the documented way to pick up changed engine
-    #    settings on a machine that is already installed — refreshed every unit
-    #    except the dense one, and a machine following that documentation kept
-    #    a `superfast.service` without the request policy in it.
-    if in_profiles dense; then
-        if [ -f "$PROF_DIR/dense.service" ]; then
-            install_template "$PROF_DIR/dense.service" "$HOME/.config/systemd/user/superfast.service"
-            log "superfast.service (dense) refreshed from deploy/profiles/dense.service"
-        else
-            log "$PROF_DIR/dense.service missing; skipping the dense unit"
-        fi
-    fi
-
     for p in gemma ornith ornith122 small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
@@ -849,12 +661,20 @@ phase_profiles() {
 
     systemctl --user daemon-reload
     log "profiles prepared: $requested"
-    log "switch between them with: superfast-switch use dense|gemma|ornith|ornith122"
+    # A fresh machine must come up on something. Enable the first requested
+    # profile so the next boot serves it; starting it here would mean waiting
+    # for tens of gigabytes to load at the end of an install.
+    local first; first="${PROFILES%% *}"
+    if [ -n "$first" ] && [ -f "$HOME/.config/systemd/user/$(unit_for "$first").service" ]; then
+        systemctl --user enable "$(unit_for "$first").service" 2>/dev/null || true
+        log "$(unit_for "$first").service enabled for the next boot; start it now with: superfast-switch use $first"
+    fi
+    log "switch between them with: superfast-switch use gemma|ornith|ornith122"
     log "the small router runs beside the active profile: superfast-switch orchestrator on|off"
 }
 
 phase_ui_auth() {
-    log "== phase 10/10: control panel (TUI + GNOME extension) and API-key gateway =="
+    log "== phase 8/8: control panel (TUI + GNOME extension) and API-key gateway =="
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     UID_NUM="$(id -u)"
     CONF_DIR="$HOME/.config/superfast"
@@ -1074,7 +894,7 @@ WorkingDirectory=$(cd "$(dirname "$0")" && pwd)
 Environment=UNATTENDED=1
 Environment=SKIP_UPDATE=1
 Environment="PROFILES=$PROFILES"
-Environment="ONLY=weights image engine profiles ui_auth"
+Environment="ONLY=engine profiles ui_auth"
 # Carry the two skip flags over: a run that was told not to download must not
 # start downloading in its second half.
 Environment=SKIP_WEIGHTS=${SKIP_WEIGHTS:-0}
@@ -1115,15 +935,13 @@ main() {
     run_phase sshd
     run_phase groups
     run_phase suspend_mask
-    run_phase weights
-    run_phase image
     [ "${SMOKE:-0}" = "1" ] && phase_smoke
     run_phase engine
     run_phase profiles
     run_phase ui_auth
     run_phase verify
     log "setup complete — profiles prepared: $PROFILES"
-    log "start one with: superfast-switch use dense|gemma|ornith|ornith122"
+    log "start one with: superfast-switch use gemma|ornith|ornith122"
     log "control: superfast-tui (terminal) or the GNOME extension"
     # The one thing a re-run cannot tell by looking at the machine: whether the
     # parameters are in the running kernel yet.
@@ -1139,7 +957,7 @@ main() {
         fi
         log "After rebooting, the large profiles (deepseek, ornith122) can load; check with:"
         log "  cat /proc/cmdline   # must show amdgpu.gttsize=122880 ttm.pages_limit=31457280"
-        log "If PROFILES named more than dense, the other checkpoints were started in the"
+        log "If PROFILES named more than one profile, the other checkpoints were started in the"
         log "background and may still be downloading:"
         log "  systemctl --user list-units 'superfast-download*'"
     fi

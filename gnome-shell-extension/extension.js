@@ -16,7 +16,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const PROFILES = ['dense', 'gemma', 'ornith', 'ornith122'];
+const PROFILES = ['gemma', 'ornith', 'ornith122'];
 
 // How to start a terminal that runs a command. The first two use the
 // `program -- command args` form, the last two the older `-e` form. Ptyxis is
@@ -107,7 +107,7 @@ class SuperfastMenu extends PanelMenu.Button {
 
         // Vision toggle for the active profile. It is sensitive only when the
         // running model can carry a vision component (gemma, ornith) and no
-        // restart is in flight; on the text-only profiles (dense, deepseek)
+        // restart is in flight; on the text-only profile (deepseek)
         // it stays off and greyed out. Toggling restarts the profile and drops
         // its prompt cache, so it is meant to be used between conversations.
         this._visionSwitch = new PopupMenu.PopupSwitchMenuItem('Vision', false);

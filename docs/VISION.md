@@ -21,13 +21,12 @@ Two of the four profiles carry an image encoder:
 | `gemma` | Gemma-4-26B-A4B | `mmproj-BF16.gguf` | 1,194,828,256 B (~1.1 GiB) |
 | `ornith` | Ornith-1.5-35B-A3B | `mmproj-Ornith-1.5-35B-BF16.gguf` | 902,822,016 B (~861 MiB) |
 
-The **dense** profile (Qwen3.8-27B) and the optional **deepseek**
-(DeepSeek-V4-Flash) have no image encoder in their repositories: they are
-text-only, and the vision control is unavailable for them (greyed out in the
-panel, refused by the CLI). **ornith122** (Ornith-1.5-122B) is built from a
-base model that has an encoder, but its quant repository ships none and the
-setup does not download one, so it ships text-only until that `mmproj` is
-added.
+The optional **deepseek** (DeepSeek-V4-Flash) has no image encoder in its
+repository: it is text-only, and the vision control is unavailable for it
+(greyed out in the panel, refused by the CLI). **ornith122** (Ornith-1.5-122B)
+is built from a base model that has an encoder, but its quant repository ships
+none and the setup does not download one, so it ships text-only until that
+`mmproj` is added.
 
 ## What turning it on actually does
 
@@ -86,13 +85,13 @@ superfast-switch vision off    # back to text-only
 
 `status` reports three things: whether the **running** profile can carry vision
 at all (`supported`), whether it is currently **enabled**, and which profile is
-active. On dense, deepseek or ornith122 it reads `supported=no`, so you always
+active. On deepseek or ornith122 it reads `supported=no`, so you always
 know whether a toggle would even apply.
 
 On the desktop the same control is the **Vision** switch in the GNOME panel
 menu:
 
-- on **dense**, **deepseek** and **ornith122** it is greyed out and labelled
+- on **deepseek** and **ornith122** it is greyed out and labelled
   "Vision (not on this model)" — never clickable;
 - on **gemma** and **ornith** it toggles on and off;
 - while a restart is in flight the switch is **locked** (as are the model

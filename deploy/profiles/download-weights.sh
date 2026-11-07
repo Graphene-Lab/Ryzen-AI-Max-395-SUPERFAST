@@ -1,5 +1,5 @@
 #!/bin/bash
-# download-weights.sh <dense|gemma|ornith|ornith122|deepseek|small>
+# download-weights.sh <gemma|ornith|ornith122|deepseek|small>
 #
 # Downloads one profile's weights into its own directory. Installed by
 # deploy/setup-fedora.sh as ~/.local/bin/superfast-downloads/download-weights.sh
@@ -24,20 +24,19 @@ set -u
 
 PROFILE="${1:-}"
 case "$PROFILE" in
-    dense)    DIR="__DENSE_DIR__";    TOKENIZER=1 ;;
-    gemma)    DIR="__GEMMA_DIR__";    TOKENIZER=0 ;;
-    deepseek) DIR="__DEEPSEEK_DIR__"; TOKENIZER=0 ;;
-    ornith)   DIR="__ORNITH_DIR__";   TOKENIZER=0 ;;
-    ornith122) DIR="__ORNITH122_DIR__"; TOKENIZER=0 ;;
-    small)    DIR="__SMALL_DIR__";    TOKENIZER=0 ;;
-    *) echo "usage: $0 dense|gemma|ornith|ornith122|deepseek|small" >&2; exit 2 ;;
+    gemma)    DIR="__GEMMA_DIR__" ;;
+    deepseek) DIR="__DEEPSEEK_DIR__" ;;
+    ornith)   DIR="__ORNITH_DIR__" ;;
+    ornith122) DIR="__ORNITH122_DIR__" ;;
+    small)    DIR="__SMALL_DIR__" ;;
+    *) echo "usage: $0 gemma|ornith|ornith122|deepseek|small" >&2; exit 2 ;;
 esac
 
 LOG="$DIR/.download.log"
 
 # This file is a TEMPLATE: the directories arrive as __..._DIR__ placeholders
 # that deploy/setup-fedora.sh substitutes while installing it. Running the
-# template itself would create a directory literally named __DENSE_DIR__ in the
+# template itself would create a directory literally named __GEMMA_DIR__ in the
 # current working directory, so refuse instead of leaving that behind.
 case "$DIR" in
     *__*DIR__*)
@@ -59,9 +58,6 @@ log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 # 'deepseek4-dflash-draft'"), so downloading it would waste 10.9 GB.
 files() {
     case "$PROFILE" in
-        dense)
-            echo "qwen3.8-27b-p1w4d-d2.hgn|35865565184|274c3fc767fb57faf025dd03c76376b1fc1b32448aef45aaf02d1898fa962089|https://huggingface.co/peonist-ai/halogen-qwen3.8-27b/resolve/main/qwen3.8-27b-p1w4d-d2.hgn"
-            ;;
         gemma)
             echo "gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf|14439364064|76559759aee76a4a29f233f3279c4470ce2c47c206fac3ec60f33d00e3daecdb|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf"
             echo "mtp-gemma-4-26B-A4B-it-Q8_0.gguf|461766816|6326fb9f5e487aa8dcdd313a091e3c67724cb2a666ec3b7d2895b5b26d93ed1b|https://huggingface.co/kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF/resolve/main/mtp-gemma-4-26B-A4B-it-Q8_0.gguf"
@@ -143,26 +139,7 @@ get() { # url name wanted_bytes sha256
     done
 }
 
-tokenizer() { # repo base url (flat tokenizer/, five small files)
-    local base="$1"
-    mkdir -p "$DIR/tokenizer"
-    for f in chat_template.jinja merges.txt tokenizer_config.json tokenizer.json vocab.json; do
-        [ -s "$DIR/tokenizer/$f" ] && continue
-        until curl -sfL --max-time 120 -o "$DIR/tokenizer/$f" "$base/tokenizer/$f"; do
-            log "tokenizer/$f: retry"
-            sleep 30
-        done
-        log "tokenizer/$f: ok"
-    done
-}
-
 log "=== $PROFILE: started ==="
-
-if [ "$TOKENIZER" = "1" ]; then
-    case "$PROFILE" in
-        dense) tokenizer "https://huggingface.co/peonist-ai/halogen-qwen3.8-27b/resolve/main" ;;
-    esac
-fi
 
 files | while IFS='|' read -r name size sha url; do
     [ -n "${name:-}" ] || continue

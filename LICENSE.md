@@ -93,11 +93,11 @@ information whatsoever about your use of it**, and there is no configuration
 that changes that.
 
 By default it opens **no outbound network connections at all** — it listens
-for the requests you send it and talks to nothing else. There is exactly one
-exception, and it is off unless you switch it on: if you set
-`HALOGEN_DOWNLOAD`, the Software fetches model weights at startup from the
-repository you name. That is a connection to a third-party host of your
-choosing, not to us, and it happens only when the weights are absent.
+for the requests you send it and talks to nothing else. The installer is the
+one part that fetches: it downloads the model weights with `curl` from the
+repositories named in `deploy/profiles/download-weights.sh`. Those are
+connections to third-party hosts, and they happen only when the weights are
+absent.
 
 ## 6. No warranty
 

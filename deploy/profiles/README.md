@@ -6,27 +6,21 @@ installs them, replacing the placeholders
 
 - `__HOME__` — the home directory of the user running the script,
 - `__XDG__` — `/run/user/<uid>`, which rootless Podman needs,
-- `__DENSE_DIR__`, `__GEMMA_DIR__`, `__DEEPSEEK_DIR__`, `__SMALL_DIR__` — where
-  each profile's weights live, so a `MODELS_DIR_*` override reaches the
-  installed units,
-- `__DENSE_IMAGE__` — the dense engine image, so `SUPERFAST_IMAGE` does too.
+- `__GEMMA_DIR__`, `__DEEPSEEK_DIR__`, `__SMALL_DIR__`, `__ORNITH_DIR__`,
+  `__ORNITH122_DIR__` — where each profile's weights live, so a
+  `MODELS_DIR_*` override reaches the installed units.
 
 | file | what it is |
 |---|---|
-| `dense.service` | Qwen3.8-27B, the quality profile, installed as `superfast.service` |
 | `gemma.service` | Gemma-4-26B-A4B ROCmFP4, on the local `llama-rocmfpx` image |
+| `ornith.service` | Ornith-1.5-35B-A3B ROCmFP4, on the Vulkan engine image |
+| `ornith122.service` | Ornith-1.5-122B MXFP4, on the Vulkan engine image |
 | `deepseek.service` | DeepSeek-V4-Flash ROCmFPX, on the local `llama-rocmfpx` image |
 | `orchestrator.service` | the small LFM2.5 router, on port 8732 (runs beside a profile) |
 | `superfast-download@.service` | one downloader per profile: `superfast-download@gemma`, `@deepseek`, `@small` |
 | `download-weights.sh` | the downloader itself: resume at the exact byte offset, one writer per file, SHA-256 verified before the final rename |
 | `superfast-monitor.service`, `superfast-monitor.timer` | the engine sampler: one read of `/health`, `/cache`, the GPU and memory every 30 s, for telling a slow machine apart from a queueing one |
-| `gemma.service.vision.conf`, `ornith.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with gemma and ornith able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (`--mmproj` for both). Each mirrors its base unit's `ExecStart` — keep them in sync. dense and deepseek have no such file: no encoder exists for them |
-
-The dense unit has a `.service` file of its own because it is installed by two
-phases: the engine phase starts it on a fresh machine, and the profiles phase
-refreshes it. It used to be written by the engine phase alone, so
-`ONLY=profiles` — the documented way to pick up changed engine settings on an
-already-installed machine — rewrote every unit except that one.
+| `gemma.service.vision.conf`, `ornith.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with gemma and ornith able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (`--mmproj` for both). Each mirrors its base unit's `ExecStart` — keep them in sync. deepseek has no such file: no encoder exists for it |
 
 Only one profile serves port 8731 at a time; `superfast-switch use <profile>`
 stops the others first. All these units stay disabled until the switch starts
@@ -47,23 +41,11 @@ Multi-turn conversations reuse the KV prefix of the previous turn
 automatically; the rest of the context handling is described in the README
 under "What each profile ships: context, tokens, tools".
 
-The dense unit's settings are the engine's own names, and they are written explicitly
-rather than left to the image: they decide whether a long turn is refused, and a
-default that changes under a new image tag is not something to discover in production.
-The values, and the client-side ones that pair with them, are derived in the
-README under "Timeouts, and why they are what they are".
-
 The two llama.cpp units set `--timeout` for a different reason: it is the
 *socket* timeout (600 s by default, `LLAMA_ARG_TIMEOUT`), and the server sends
 nothing while it prefills. Gemma ships 1800 s, deepseek 3600 s, because a
 507,904-token prompt on deepseek is 3,116 s of silence. See the comments in
 those units.
-
-The names are the engine's, and they are `HALOGEN_*`: `SUPERFAST_*` belongs to
-this project's own tools and no image contains it, so an engine setting written
-that way is read by nobody. The measurements for these values, and how to
-put the image defaults back, are in the README under "Many agents at once";
-every name is listed in [`docs/FLAGS.md`](../../docs/FLAGS.md).
 
 The Gemma and DeepSeek units need `llama-rocmfpx:7.2.4`, the GGUF runtime built
 from [`runtime/`](../../runtime/README.md). It is published by this repository's

@@ -8,13 +8,13 @@
 # also the one that starts at boot: `use` enables it and disables the other
 # profile units, which the setup script installs disabled.
 #
-# Profiles can run on any runtime (halogen engine containers or llama.cpp
-# servers); readiness is detected by HTTP 200 on /health.
+# Every profile is a llama.cpp server, on a Vulkan build or the ROCmFPX one;
+# readiness is detected by HTTP 200 on /health.
 #
 # Usage:
 #   superfast-switch status
 #   superfast-switch list
-#   superfast-switch use dense|gemma|ornith|ornith122
+#   superfast-switch use gemma|ornith|ornith122
 #   superfast-switch mode pinned|auto
 #   superfast-switch state
 #   superfast-switch profile-for <model-id>
@@ -36,7 +36,7 @@
 # works, no key needed there).
 #
 # `vision on|off` toggles the vision component of the ACTIVE profile (gemma
-# and ornith only; dense and deepseek are text-only). It restarts that profile
+# and ornith only; deepseek is text-only). It restarts that profile
 # and drops its prompt cache, so use it between conversations. The vision
 # files are downloaded at setup whether or not the toggle is used.
 set -euo pipefail
@@ -54,25 +54,22 @@ GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
 MODE_FILE="${SUPERFAST_MODE_FILE:-$HOME/.config/superfast/mode}"
 
 declare -A UNIT=(
-    [dense]="${SUPERFAST_DENSE_UNIT:-superfast.service}"
     [gemma]="${SUPERFAST_GEMMA_UNIT:-gemma.service}"
     [ornith]="${SUPERFAST_ORNITH_UNIT:-ornith.service}"
     [ornith122]="${SUPERFAST_ORNITH122_UNIT:-ornith122.service}"
 )
 declare -A LABEL=(
-    [dense]="Qwen3.8-27B dense (halogen)"
     [gemma]="Gemma-4-26B-A4B ROCmFP4 (llama-rocmfpx)"
     [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
     [ornith122]="Ornith-1.5-122B MXFP4 (llama.cpp Vulkan)"
 )
-PROFILES=(dense gemma ornith ornith122)
+PROFILES=(gemma ornith ornith122)
 
 # Served model id -> profile, for `mode auto`. These are the ids the units
-# answer with (`--alias`, or HALOGEN's own model name), never the display
-# labels: a client sends what its configuration lists, and a display name is
-# not a contract. A client that sends the profile name itself is accepted too.
+# answer with (`--alias`), never the display labels: a client sends what its
+# configuration lists, and a display name is not a contract. A client that
+# sends the profile name itself is accepted too.
 declare -A ALIAS=(
-    [qwen3.8-27b]=dense
     [gemma-4-26b-a4b]=gemma
     [ornith-1.5-35b-a3b]=ornith
     [ornith-1.5-122b]=ornith122
@@ -92,10 +89,10 @@ ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 # `vision on`, removed by `vision off`. Because the engine reads the flag once
 # at startup, toggling restarts the profile and drops its prompt cache.
 VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
-# Profiles whose engine can carry a vision component. dense and deepseek are
-# text-only: no encoder exists in their repositories, so the toggle is not
-# available for them. gemma and ornith load an --mmproj projector through
-# their drop-in, which is why the projector is still an opt-in.
+# Profiles whose engine can carry a vision component. deepseek is text-only:
+# no encoder exists in its repository, so the toggle is not available for it.
+# gemma and ornith load an --mmproj projector through their drop-in, which is
+# why the projector is still an opt-in.
 VISION_CAPABLE="gemma ornith"
 
 # Is a word in a space-separated list?
@@ -113,7 +110,7 @@ http_ok() {
 }
 
 model_name() {
-    # Best effort: halogen /health has "model"; llama.cpp exposes /v1/models.
+    # Best effort: llama.cpp exposes the served id on /v1/models.
     local m
     m="$(curl -s --max-time 5 "$HEALTH" 2>/dev/null \
         | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
@@ -145,7 +142,6 @@ unit_age() { # unit
 
 weights_ready() {
     case "$1" in
-        dense) return 0 ;;
         gemma)
             [ -f "$GEMMA_DIR/.download-complete" ] ;;
         ornith)
@@ -175,7 +171,7 @@ cmd_status() {
     echo "mode: $(mode_value)"
     # Vision state of the active profile, on one line so the desktop menu can
     # read it from the same `status` call. supported=no for the text-only
-    # profiles (dense, deepseek) and when nothing is running.
+    # profile (deepseek) and when nothing is running.
     local vp vsup ven
     vp="$(active_profile)"
     vsup=no; ven=no
@@ -360,11 +356,10 @@ cmd_profile_for() {
 
 # One line of key=value, read by the gateway before it touches anything.
 #
-# `busy` and `queued` come from HALOGEN's /health. llama.cpp — gemma, deepseek
-# and ornith — does not report them, so there the signal is
-# the slot being processed: /slots says `is_processing` per slot. A request
-# waiting in llama.cpp's queue sits behind a processing slot, so `busy` covers
-# it; `queued` stays 0 because that count does not exist.
+# llama.cpp does not report busy/queued on /health, so the signal is the slot
+# being processed: /slots says `is_processing` per slot. A request waiting in
+# llama.cpp's queue sits behind a processing slot, so `busy` covers it;
+# `queued` stays 0 because that count does not exist.
 cmd_state() {
     local p h resp=0 busy=0 queued=0
     p="$(active_profile)"
@@ -514,11 +509,11 @@ cmd_use() {
             systemctl --user stop "${UNIT[$q]}"
         fi
     done
-    # The setup script enables the dense unit and installs every other profile
-    # disabled, so the enabled unit is what starts at boot. Picking a profile
-    # here is what has to decide that: enable it and disable its siblings, or a
-    # reboot comes up on the previous model — or, with two enabled, on whichever
-    # one wins the race for port 8731.
+    # The setup script installs every profile unit disabled, so the enabled
+    # unit is what starts at boot. Picking a profile here is what has to decide
+    # that: enable it and disable its siblings, or a reboot comes up on the
+    # previous model — or, with two enabled, on whichever one wins the race for
+    # port 8731.
     for q in "${PROFILES[@]}"; do
         [ "$q" = "$p" ] && continue
         systemctl --user disable "${UNIT[$q]}" >/dev/null 2>&1 || true
@@ -575,11 +570,8 @@ not_ready_hint() { # unit
     fi
     f="$HOME/.config/systemd/user/$unit"
     [ -f "$f" ] || f="${f}.service"
-    pool="$(sed -n 's/^[[:space:]]*-e HALOGEN_KV_POOL_POSITIONS=\([0-9]*\).*/\1/p' \
-        "$f" 2>/dev/null | tail -n 1)"
-    [ -n "$pool" ] && echo "  This unit asks for a $pool-position KV pool." >&2
-    echo "  Remedies, in order: lower HALOGEN_KV_POOL_POSITIONS in" >&2
-    echo "  ~/.config/systemd/user/$unit, or reboot the host, then try again." >&2
+    echo "  Remedies, in order: reboot the host so the engine starts with" >&2
+    echo "  unfragmented memory, then try again." >&2
 }
 
 cmd_stop() {
@@ -615,7 +607,7 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 declare -A PROFILE_GB=(
-    [dense]=36 [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
+    [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
 )
 
 image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }

@@ -29,15 +29,13 @@ Think of it as owning a very good assistant instead of renting one:
 
 Several "models" live on the machine, and you pick one at a time:
 
-- **Qwen3.8-27B (dense)** — the careful, high-quality model. Best answers,
-  slower (about 21 words per second).
-
 - **Gemma-4-26B (MoE, FP4)** — very fast (about 57 words per second), and it
-  can look at pictures when you turn "vision" on (see *Everyday use*).
+  can look at pictures when you turn "vision" on (see *Everyday use*). It also
+  passes more coding tasks than any other profile on this machine.
 - **Ornith-1.5-122B (MoE)** — the largest model that still leaves room on the
   machine. It answers at about 25 words per second, has a 262K window, and
-  passes the most coding tasks of any profile, though it is slower per task
-  than the 35B Ornith.
+  passes 82 of 158 coding tasks — second to Gemma's 98, though it is slower
+  per task than the 35B Ornith.
 - **DeepSeek-V4-Flash (optional)** — a very large model (284 billion
   parameters) for a 512K window and hard problems. It is the **slowest**
   (about 11 words per second), it needs a large answer budget, and it
@@ -99,17 +97,6 @@ held about four conversations of 131,000 tokens. When the conversations grew
 past that, the engine had to forget one conversation to keep another, and the
 helper whose conversation was forgotten read its whole history again. That is
 the pause of a minute or more.
-
-The dense profile now reserves room for four long conversations. Measured on
-this machine with four helpers working together, each with about 140,000
-tokens of history:
-
-- **before:** the second turn took 229 seconds, and two of the four helpers
-  read everything again (120 and 109 seconds each);
-- **after:** the second turn takes 2 seconds, and all four answer from memory.
-
-Short conversations were never a problem, and one helper alone is not affected
-either. The full numbers are in the main README, under "Many agents at once".
 
 ## Honest notes
 

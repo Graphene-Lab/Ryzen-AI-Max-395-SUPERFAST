@@ -63,11 +63,8 @@ command -v systemctl >/dev/null 2>&1 || { say "systemctl not found; this tool is
 
 # Which profile is serving? The directory of units is the source of truth.
 active=""
-for p in dense gemma ornith ornith122; do
-    u="superfast${p#dense}"; [ "$p" = "dense" ] && u="superfast"
-    [ "$p" = "gemma" ]   && u="superfast-gemma"
-    [ "$p" = "ornith" ]  && u="superfast-ornith"
-    [ "$p" = "ornith122" ] && u="superfast-ornith122"
+for p in gemma ornith ornith122; do
+    u="superfast-$p"
     if [ "$(systemctl --user is-active "$u.service" 2>/dev/null)" = "active" ]; then
         active="$p"; unit="$u.service"; break
     fi

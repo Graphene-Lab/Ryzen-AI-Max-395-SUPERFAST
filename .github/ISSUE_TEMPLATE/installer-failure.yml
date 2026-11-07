@@ -33,7 +33,7 @@ body:
     attributes:
       label: The last phase line
       description: Copy the last line that starts with `== phase`
-      placeholder: "== phase 6/10: dense checkpoint download (resumable, sha256-verified) =="
+      placeholder: "== phase 7/8: model switch, profile units, weights (PROFILES=gemma ornith ornith122 small) =="
     validations:
       required: true
   - type: textarea

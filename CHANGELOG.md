@@ -4,6 +4,38 @@
 
 ### Removed
 
+- **The `dense` profile and the halogen engine it ran on are gone, and every
+  profile this repository ships now runs llama.cpp.** Qwen3.8-27B leaves the
+  installer (the default `PROFILES` is `gemma ornith ornith122 small`, so a
+  command that still names `dense` asks for a profile that no longer exists),
+  `deploy/profiles/` (its `dense.service` is deleted), `superfast-switch` (the
+  profile list, the unit map and the `qwen3.8-27b` alias), the TUI,
+  `superfast-recover` and the GNOME panel.
+  `docker-compose.yml` and `deploy/entrypoint.sh` — the two files that carried
+  the engine's `HALOGEN_*` environment — are deleted, and so is
+  `docs/QUANT.md`, which described that checkpoint's quantization. Its 35.9 GB
+  checkpoint and its tokenizer directory are deleted from the reference host:
+  `~/superfast-models` is gone. The image was
+  `ghcr.io/peonist-ai/halogen:0.1.3`, a third engine image that this repository
+  did not build, and it is no longer pulled. The README, `docs/FLAGS.md`,
+  `docs/VISION.md`, the plain guide, the weights table, the client examples and
+  the installer failure template are rewritten around what remains: `gemma`
+  (Gemma-4-26B-A4B, ROCmFPX), `ornith` (Ornith-1.5-35B-A3B, Vulkan) and
+  `ornith122` (Ornith-1.5-122B, Vulkan), plus the `small` orchestrator and the
+  optional `deepseek`. There is no `HALOGEN_*` variable any more: both
+  remaining engines are llama.cpp, a Vulkan build and `llama-rocmfpx:7.2.4`,
+  and their settings are the flags in the units.
+
+  Why it left, measured: it is the only profile in either benchmark table that
+  won nothing. On PipelineScore it scores 85.9 — second, behind the 35B and at
+  about twice that model's memory — and on MultiPL-E it is last at 11 of 158,
+  a number that measures a format failure rather than capacity, because 140 of
+  its 158 answers ran into the 512-token budget writing a whole program. It was
+  also the only profile whose repository carries no vision projector, so it
+  could not read an image at all, and the only one that needed an engine image
+  of its own. Both rows stay in the README, in italics and marked removed, next
+  to that reasoning.
+
 - **The 125B flash profile is gone, and `ornith122` is the largest profile the
   machine serves.** Qwen3.8-Flash-Next leaves the installer (the default
   `PROFILES` no longer offers it), `deploy/profiles/` (its four unit templates
