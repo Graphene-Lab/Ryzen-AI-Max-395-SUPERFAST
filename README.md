@@ -968,14 +968,22 @@ submitted (`--user andrea-bruno`). One seed per profile.
 
 *Nemotron 3.5 Super VL 120B-A12B* is the second reference measurement, run on 2026-11-07 on an
 engine built for it from mainline (llama.cpp `ca89968`, no patches) with its vision projector.
-It is **the slowest profile measured here**: speed 12.1 against 23.5 for the 122B, which matches
-its own probe of 17.9 t/s decode and 190-320 t/s prefill — a 120B MoE with 12B active on a
-hybrid Mamba-2 architecture, whose Vulkan kernels are plainly less mature. Its four quality
-families are **identical to the 122B's** (code 100, reason 80, tool use 87.5, RAG 100), so the
-whole gap is speed. The CLI's 2048-token budget cannot hold a reasoning trace, so it had to run
-with thinking off; the row to read it against is therefore the 122B's thinking-off **73.5**, not
-81.9. Card:
-[de191deb](https://pipelinescore.ai/s/de191deb-97b8-4539-92c8-df69a98bf20a).
+Its four quality families are **identical to the 122B's** (code 100, reason 80, tool use 87.5,
+RAG 100), so the whole gap to the others is speed — a 120B MoE with 12B active on a hybrid
+Mamba-2 architecture, whose Vulkan kernels are plainly less mature than the transformer ones.
+
+The score was run twice the same day, which is what makes the second number worth reading. The
+first run (80.2) served it plain and **was the slowest thing measured here**: speed 12.1 against
+23.5 for the 122B, matching its own probe of 17.9 t/s decode. The second (80.7) added its native
+MTP speculative decoding and a 256-token ubatch — `-md mtp-Q8_0.gguf --spec-type draft-mtp
+--spec-draft-n-max 2 -ub 256` — and **speed went to 15.5** while every quality family stayed
+identical to the digit, because speculative decoding verifies what it drafts and cannot change
+the output. Cards:
+[de191deb](https://pipelinescore.ai/s/de191deb-97b8-4539-92c8-df69a98bf20a) and
+[6c3f0804](https://pipelinescore.ai/s/6c3f0804-1816-447a-a17d-2df493dc7cc4).
+
+The CLI's 2048-token budget cannot hold a reasoning trace, so both runs were made with thinking
+off; the row to read them against is therefore the 122B's thinking-off **73.5**, not 81.9.
 
 | profile | client model id | score | tier |
 |---|---|---|---|
@@ -988,9 +996,10 @@ with thinking off; the row to read it against is therefore the 122B's thinking-o
 | *Qwen3.8-Flash-Next, shipped flags — removed* | `qwen3.8-flash-next` | 83.8 | MAINLINE |
 | *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
+| *Nemotron 3.5, reference — plain serving* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
+| *Nemotron 3.5, reference — MTP + ub 256* | `nemotron-3.5-super-vl-120b` | **80.7** | MAINLINE |
 
-**Every run above is published.** The ten of them, with their tiers, are listed on the
+**Every run above is published.** The eleven of them, with their tiers, are listed on the
 [andrea-bruno profile](https://pipelinescore.ai/users/andrea-bruno) alongside everyone else's
 runs, which is the comparison the numbers are for; the individual cards are linked in the
 paragraphs below.
