@@ -783,7 +783,7 @@ phase_verify() {
     local fails=0 spec profile want unit cmdline t gw_unit
     log "== verify: the machine matches the reference configuration =="
 
-    for spec in "ornith:--reasoning off" "ornith:--spec-mtp-strict-qwen" \
+    for spec in "ornith:--reasoning on" "ornith:--spec-mtp-strict-qwen" \
                 "ornith:--timeout 0" "ornith:--parallel 1" \
                 "gemma:--parallel 1" "gemma:--timeout 0"; do
         profile="${spec%%:*}"; want="${spec#*:}"
