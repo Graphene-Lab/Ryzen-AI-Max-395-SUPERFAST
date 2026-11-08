@@ -12,6 +12,19 @@
   images keep theirs (`THIRD-PARTY-NOTICES.md`); neither is covered by the MIT
   grant. The README badge and License section say the same in one place.
 
+- **MultiPL-E is re-measured at a 2,048-token budget, and the 512-token table is
+  withdrawn.** The 512 was our own setting, not the benchmark's: MultiPL-E's
+  `automodel_vllm.py` takes `max_tokens` as a request parameter and prescribes
+  nothing. Counting the answers that ended exactly at the old cap showed what it
+  cost — 56 of the 35B's 91 failures, 140 of dense's 147 and 55 of GLM's 86 — so
+  every model still on the machine was run again at 2,048 with its own card
+  sampling: **Nemotron 95, gemma 90, ornith-1.5-122b 85, ornith-1.5-35b-a3b 83**
+  of 158, with three answers in 632 reaching the ceiling. The rows produced under
+  the withdrawn budget (dense, flash, GLM) leave the table; their PipelineScore
+  rows stay, because that benchmark was not affected. The README's claim that
+  "coding quality is not measured here yet" contradicted the section above it and
+  is replaced by what is actually measured.
+
 ### Removed
 
 - **The `dense` profile and the halogen engine it ran on are gone, and every

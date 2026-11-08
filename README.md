@@ -1027,17 +1027,17 @@ it shipped — one slot, ubatch 128, q8_0 KV — and **80.7** with the four slot
 and f16 KV it ran before 2026-10-21, so those flags were a gain and not a quality trade.
 The best run reads code 100, reason 80, tool use 87.5, RAG 100, speed 36.1, and the model
 page is [qwen3.8-flash-next](https://pipelinescore.ai/models/qwen3.8-flash-next). It lost
-its slot on the code axis rather than on this one: 51 of 158 on MultiPL-E against 98 for
-gemma, 92 for the Nemotron reference and 82 for Ornith-1.5-122B, each at its own card
-sampling, for a decode of 33-35 t/s.
+its slot on the code axis rather than on this one — its code row was one of those withdrawn
+with the old budget, so this README no longer prints it — and on the size of the machine it
+needed: a 125B model for a decode of 33-35 t/s.
 
 The italic `Qwen3.8-27B dense` row is the profile **removed on 2026-11-07**, kept for the
 same reason as the flash rows. It is the only profile measured here that won nothing: second
 on this axis behind the 35B at about twice its memory, last on code, the only one whose
 repository carries no vision projector, and the only one that needed a third engine image of
-its own. Its 11 of 158 on MultiPL-E is not a measure of capacity — 140 of its 158 answers ran
-into the 512-token budget writing a whole program, so the number records a format failure —
-and it was not re-measured under another budget.
+its own. Its code number never settled — nearly all of its failures ended at the withdrawn
+cap, writing a whole program — so that row recorded a format failure, and the profile left
+the machine before the budget was fixed. The decision rests on the axis above and on cost.
 
 The `GLM-5.3-Flash` row in italics is a **reference measurement, not a profile**: it was run on
 2026-11-06 to decide whether the model deserved a slot, and it did not. On this axis it is a peer of
@@ -1058,79 +1058,68 @@ what makes it load at all — 116 GiB died on `Couldn't update BO_VA (-12)`.
 C# problems, each a function to complete plus the tests that check it. The model receives the prompt
 with the signature and the opening brace already written and returns the body only; the file compiled
 is prompt + body + tests, built and run with `dotnet` against a net8.0 console project, and a failed
-`Debug.Assert` is a failed task. The generation budget is 512 tokens, the one the benchmark itself
-uses to score pass@1, so the numbers mean the same thing for every profile. No cap of ours is
-involved and no judge: the tests decide.
+`Debug.Assert` is a failed task. **The generation budget is 2,048 tokens, and it is our choice** —
+MultiPL-E takes it as a request parameter and prescribes nothing: its own vLLM runner declares
+`max_model_len=2048` and passes `max_tokens` through. The number is deliberate, because the median
+answer on this machine is under 100 tokens. An earlier table used a smaller budget, a habit
+inherited from the original HumanEval, and it cut answers off mid-function; it was withdrawn with
+the rows it produced. No judge here either: the tests decide.
 
-Every model is run with the sampling its own card recommends for coding, and then
-again greedy, on the same day and the same 158 tasks. The first column is the
-classification; the second is the setting experiment.
+Every model runs once, with the sampling its own card recommends for coding and
+thinking off, on the same 158 tasks:
 
-| profile | card sampling | greedy | compiled | pass % | median s/task | total |
-|---|---|---|---|---|---|---|
-| gemma-4-26b-a4b | **98** | 96 | 147 | 62 | 5.1 | 0h16m |
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | **92** | **93** | **151** | 58 | 7.9 | 0h22m |
-| ornith-1.5-122b | **82** | 83 | 141 | 52 | 6.2 | 0h20m |
-| *GLM-5.3-Flash, reference* | 72 | — | 111 | 46 | 18.1 | 0h44m |
-| ornith-1.5-35b-a3b | 67 | **69** | 103 | 42 | 10.7 | 0h25m |
-| *Qwen3.8-Flash-Next — removed* | 51 | — | 79 | 32 | 13.6 | 0h35m |
-| *Qwen3.8-27B dense — removed* | 11 | 12 | 18 | 7 | 22.3 | 0h58m |
+| profile | passed | compiled | pass % | median s/task | total |
+|---|---|---|---|---|---|
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | **95** | **150** | 60 | 6.2 | 0h18m |
+| gemma-4-26b-a4b | 90 | 139 | 57 | 4.0 | 0h15m |
+| ornith-1.5-122b | 85 | 137 | 54 | 6.6 | 0h20m |
+| ornith-1.5-35b-a3b | 83 | 134 | 53 | 4.1 | 0h12m |
 
-Gemma leads at 98 of 158, ahead of the 120B Nemotron (92) and the 122B (82). Code
-synthesis is one axis where a 26B mixture beats both, and it costs 16 minutes
-against 22 and 20. The 35B is the surprise in the other direction: it is the model
-this machine runs for agentic work, and here it lands fourth, below a reference
-model that never earned a slot. Nemotron compiles more of what it writes than any
-model measured (151 of 158) and still finishes second.
+Nemotron leads at 95 of 158, ahead of gemma (90), the 122B (85) and the 35B (83),
+and it compiles more of what it writes than any model here (150 of 158). The 35B,
+which this machine runs for agentic work, lands last on code. Gemma — a 26B
+mixture that costs 15 minutes — is second, three tasks behind a 120B.
 
-The 122B is 12 tasks better here than the October run that reported 70, and gemma
-20 better than the 19 it reported. **Nothing about gemma changed** — same weights, same
+**The budget is a dial, and it was not free to choose.** A smaller one cut the 35B off
+mid-function — 56 of its 91 failures ended exactly at the old cap — while gemma writes past
+the body when it has room. So 2,048 was picked by counting answers that ended at the ceiling,
+not by assuming more is better, and this table is the first one where the ceiling is not doing
+the deciding: three answers in 632 reached it.
+
+The 122B is 15 tasks better here than the October run that reported 70, and gemma
+71 better than the 19 it reported. **Nothing about gemma changed** — same weights, same
 `llama-rocmfpx:7.2.4` image, same launcher line, verified in the history of
 `deploy/profiles/gemma.service`. What changed is the request: the harness now sends
 `chat_template_kwargs.enable_thinking = false`, and gemma's chat template has a reasoning
-channel. A control on 2026-11-07, the same 20 tasks both ways, says exactly that:
+channel. A control on the same 20 tasks says what that costs:
 
-| gemma, same 20 tasks | budget | passed | compiled | median tokens | at the cap |
-|---|---|---|---|---|---|
-| thinking on (what October measured) | 512 | 4 | 5 | 512 | 20 of 20 |
-| thinking off (what the table above measures) | 512 | **12** | **18** | 66 | 1 of 20 |
-| thinking on | 2,048 | 7 | 15 | 2,048 | 18 of 20 |
-| thinking off | 2,048 | **12** | **18** | 66 | 1 of 20 |
+| gemma, same 20 tasks | passed | compiled | median tokens | at the cap |
+|---|---|---|---|---|
+| thinking on | 7 | 15 | 2,048 | 18 of 20 |
+| thinking off | **12** | **18** | 66 | 1 of 20 |
 
-With reasoning on, gemma spends the benchmark's 512 tokens thinking and then writes a
-whole program inside markdown fences: the October record still carries the error that
-proves it, `CS1056: Unexpected character '`'`. Quadrupling the budget helps it — 4 to 7 —
-but does not close the gap, and 18 of the 20 answers still end at the ceiling: this
-reasoning does not converge on a single function, it keeps going until something cuts
-it. So the old row was measuring the budget, not the model — those rows are not a
-baseline and they are not kept. Every row above is one protocol: thinking off, the
-benchmark's own 512-token budget, each model's card sampling.
+With reasoning on, gemma writes a whole program inside markdown fences and stops only
+when something cuts it — the October record still carries the error that proves it,
+`CS1056: Unexpected character '`'`. Quadrupling the budget moves it from 4 to 7 tasks and
+leaves the gap to the thinking-off arm untouched, so this reasoning does not converge on
+a single function. That is why every row above is thinking off: the benchmark asks for a
+function body, and a model that keeps going past it is being measured on its stopping
+behaviour.
 
-**The second column is the sampling experiment.** Two runs per model, same day,
-same harness, same tasks: the difference is inside the noise — 98 against 96, 92
-against 93, 82 against 83, 67 against 69, 11 against 12, three passes over 790
-tasks while the two settings disagree on 83. Temperature changes *which* tasks
-pass, not how many. What it does change is the bill: at its card's set
-ornith-35b compiles 103 of 158 and spends 7.2 s generating each body, greedy
-compiles 121 and spends 2.1 s. On gemma and the 122B the two costs are identical.
+**The temperature arm is not in this table.** It was measured on 2026-11-07 over 790
+tasks and moved *which* tasks pass, not how many — three passes net across five models,
+with the two settings disagreeing on 83. But it was measured under the withdrawn
+protocol, so it points rather than files a result and its columns are not printed here.
 
-Nemotron is the one row where the two columns also differ in the engine: its
-card-sampling run was served plain (7.9 s per task) and its greedy run carried
-the MTP head and the 256-token ubatch (6.0 s, 16 minutes for the 158). So the
-two time figures are not the sampling talking — the pass count is what those
-two columns compare.
-
-The italic `Qwen3.8-Flash-Next` row is the 125B profile removed on 2026-11-05: 51 of 158,
-a third, against 98 for gemma, 92 for the Nemotron reference and 82 for the 122B. That
-gap is why it left, and it is far wider than the one- or two-task differences this
-benchmark otherwise shows.
-
-The italic `GLM-5.3-Flash` row is the same reference measurement described
-under PipelineScore: it took 72 passed, between the 122B's 82 and the 35B's 67,
-compiles more than any profile (111), and still did not earn a slot — same
-correctness ceiling, half the context, no vision, a third engine. Its 18,1 s median
-is three times the 122B's 6,2 while it generates faster per token: half the prefill
-rate is what a third engine costs here, because every task is a fresh prompt.
+The withdrawn rows went with it. *Qwen3.8-Flash-Next* and *GLM-5.3-Flash* were measured
+under that budget, the GLM run with most of its failures cut, so its number was a floor;
+the flash profile has been removed from the machine anyway. *Qwen3.8-27B dense* left on
+2026-11-07 because it won nothing: last on the general axis behind a 35B with half its
+memory, the only profile without a vision projector, and the only one that needed a third
+engine image. Its code number never settled — nearly all of its failures ended at the cap,
+writing a whole program — so that row recorded a format failure, and the profile left the
+machine before the budget was fixed. The decision rests on the axis above and on cost.
+Their PipelineScore rows above remain, because that benchmark was not affected.
 
 What this does and does not say:
 
@@ -1138,10 +1127,11 @@ What this does and does not say:
   cross-file context, no tools. It ranks the profiles on code synthesis, not on agentic work; for
   that axis the README reports PipelineScore (ornith 90,1 ·
   ornith122 84,0 · gemma 81,2).
-- **512 tokens is the benchmark's budget, not a saving measure.** Without a cap the same models
-  generate tens of thousands of tokens for one body and never stop; gemma reached 900 s on the first
-  task, so the run could not finish.
-- **The median hides the tail.** Ornith's median is 3,2 s, but a few tasks cost minutes.
+- **2,048 tokens is a ceiling nobody reaches.** Three answers in 632 ended at the cap, so the budget
+  is not doing the deciding any more, and that is what makes the column comparable. With no cap at
+  all the same models generate tens of thousands of tokens for one body and never stop; gemma
+  reached 900 s on the first task, so a run without a ceiling does not finish.
+- **The median hides the tail.** The 35B's median is 4.1 s, but a few tasks cost minutes.
 - **The harness is ours.** The assembly was proved with a hand-written body (build and run both 0)
   before any model ran; the per-task records live in `benchmarks/multipl-e/`.
 
@@ -1158,13 +1148,13 @@ What this does and does not say:
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
   turn fast; it cannot make the first one fast.
-- **Coding quality is not measured here yet.** The table above measures
-  speed, not whether the code a profile writes is correct. The plan is
-  EvalPlus — HumanEval+ (164 problems) and MBPP+ (378), `pass@1`, greedy, one
-  profile at a time. On this machine that is about 1.5 hours per profile on
-  HumanEval+ and several hours more on MBPP+ for the slower profiles, so it is
-  a job for one night per model, not for an afternoon. The results and the
-  command that produced them will be published here when they exist.
+- **Code is measured on functions, not repositories.** The MultiPL-E table ranks
+  profiles on 158 single functions with no cross-file context and no tools; the
+  agentic axis is PipelineScore. Neither measures what a profile does inside a real
+  repository, which is the axis the plan targets next: EvalPlus — HumanEval+ (164
+  problems) and MBPP+ (378), `pass@1`, one profile at a time. On this machine that is
+  about 1.5 hours per profile on HumanEval+ and several hours more on MBPP+ for the
+  slower profiles, so it is a job for one night per model, not for an afternoon.
   A second axis belongs in the same plan: the same batch of issues run on two
   profiles, scored by issues closed per hour and by repeated tool calls. That
   separates a weak model from a weak prompt, which a pass@1 table cannot do.
