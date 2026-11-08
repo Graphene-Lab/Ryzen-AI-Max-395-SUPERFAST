@@ -1076,6 +1076,16 @@ assumed:
 | ornith-1.5-122b | **94** | thinking on | 17.9 | 1h05m |
 | gemma-4-26b-a4b | 90 | thinking off | 4.0 | 0h15m |
 
+**The seven tasks between first and last are not a ranking.** Pairing the runs task by task, the
+leader beats the 35B on nine problems and loses eight (McNemar χ² 0.00), beats the 122B on eight
+and loses five (0.31), and beats gemma on thirteen and loses six (1.89) — none of the three clears
+the 3.84 threshold. On 158 tasks the four are indistinguishable at code synthesis, and a gap of
+about ten tasks would be needed to separate them; 21 of Nemotron's own answers also end at the
+2,048 cap, which can only understate it. So the column gives an order, not a verdict: read it
+together with the time, which spans 4.0 to 27.3 s per task, and with the general axis in the
+PipelineScore table above, where Nemotron is last of the four (80.9 against 90.1 for ornith) and
+the 35B first.
+
 **Reasoning helps three of the four, and the table looked different without it.** The same
 runs with the reasoning channel closed, on the same engine:
 
@@ -1097,8 +1107,7 @@ drop-in are now kept in sync by the repo rather than by hand.
 
 Gemma is the exception in the other direction — a 26B mixture that costs 15 minutes and
 is the only one that gets *worse* when it thinks, because its reasoning does not converge on a
-single function (the control above). Nemotron still leads, but at 4.4× the time of everything
-else, so "first" here is a correctness figure, not a recommendation for interactive work.
+single function (the control above).
 
 The point this table makes is that the reasoning switch is part of the optimal configuration,
 not a global policy: a comparison that pins it off for everyone measures the switch, and it
