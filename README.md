@@ -1064,41 +1064,59 @@ answer on this machine is under 100 tokens. An earlier table used a smaller budg
 inherited from the original HumanEval, and it cut answers off mid-function; it was withdrawn with
 the rows it produced. No judge here either: the tests decide.
 
-Every model runs once, with the sampling its own card recommends for coding and
-thinking off, on the same 158 tasks:
+Every model runs once with the sampling its own card recommends for coding, on the same 158
+tasks, and **each with the reasoning setting that serves it best** — which was measured, not
+assumed:
 
-| profile | passed | compiled | pass % | median s/task | total |
-|---|---|---|---|---|---|
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | **96** | **154** | 61 | 6.2 | 0h18m |
-| gemma-4-26b-a4b | 90 | 139 | 57 | 4.0 | 0h15m |
-| ornith-1.5-122b | 85 | 137 | 54 | 6.6 | 0h20m |
-| ornith-1.5-35b-a3b | 83 | 134 | 53 | 4.1 | 0h12m |
+| profile | best passed | how | median s/task | total |
+|---|---|---|---|---|
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | **97** | thinking on | 27.3 | 1h27m |
+| ornith-1.5-35b-a3b | **96** | thinking on | 6.8 | 0h23m |
+| ornith-1.5-122b | **94** | thinking on | 17.9 | 1h05m |
+| gemma-4-26b-a4b | 90 | thinking off | 4.0 | 0h15m |
 
-Nemotron leads at 96 of 158, ahead of gemma (90), the 122B (85) and the 35B (83),
-and it compiles more of what it writes than any model here (154 of 158). The 35B,
-which this machine runs for agentic work, lands last on code. Gemma — a 26B
-mixture that costs 15 minutes — is second, six tasks behind a 120B.
+**Reasoning helps three of the four, and the table looked different without it.** The same
+runs with the reasoning channel closed:
+
+| profile | thinking off | thinking on | gain | price |
+|---|---|---|---|---|
+| ornith-1.5-35b-a3b | 83 | **96** | **+13** | 1.7× the time |
+| ornith-1.5-122b | 85 | **94** | +9 | 2.7× |
+| *Nemotron 3.5, reference* | 95 | **97** | +2 | 4.4× |
+| gemma-4-26b-a4b | **90** | 7 of 20 (control) | **−** | — |
+
+The 35B is the model this machine runs for agentic work, and it was the last on code only
+because its unit ships `--reasoning off`: with the channel open it passes 96, second by one
+task. Gemma is the exception in the other direction — a 26B mixture that costs 15 minutes and
+is the only one that gets *worse* when it thinks, because its reasoning does not converge on a
+single function (the control above). Nemotron still leads, but at 4.4× the time of everything
+else, so "first" here is a correctness figure, not a recommendation for interactive work.
+
+The point this table makes is that the reasoning switch is part of the optimal configuration,
+not a global policy: a comparison that pins it off for everyone measures the switch, and it
+hides 13 tasks on the 35B and 9 on the 122B.
 
 That Nemotron row is served from the **65.8 GB quant** (`UD-Q3_K_XL`), not the 88.6 GB one it
 started on, because the smaller one was measured against the larger on this bench: 96 against
 95 passed, 154 against 150 compiled, with seven tasks gained and six lost — no degradation
 outside the noise — while decode rose from 25.5 to 29.7 t/s and 23 GB of weights left the
 machine. The per-task median does not move, and that is expected: each task is a fresh prompt,
-so MultiPL-E pays prefill, and the quant only speeds up generation. The PipelineScore rows
-below are still the larger quant's, because the smaller one has not been scored there.
+so MultiPL-E pays prefill, and the quant only speeds up generation. Both of the figures above
+are the smaller quant's: MultiPL-E and PipelineScore were re-run with it, and the PipelineScore
+row below is the 80.9 it produced.
 
 **The budget is a dial, and it was not free to choose.** A smaller one cut the 35B off
 mid-function — 56 of its 91 failures ended exactly at the old cap — while gemma writes past
 the body when it has room. So 2,048 was picked by counting answers that ended at the ceiling,
-not by assuming more is better, and this table is the first one where the ceiling is not doing
-the deciding: three answers in 632 reached it.
+not by assuming more is better. With reasoning on, the ceiling comes back into play: 12 to 21
+answers per model end there, which is the price of the longer traces rather than a fault of
+the budget.
 
 The 122B is 15 tasks better here than the October run that reported 70, and gemma
 71 better than the 19 it reported. **Nothing about gemma changed** — same weights, same
 `llama-rocmfpx:7.2.4` image, same launcher line, verified in the history of
-`deploy/profiles/gemma.service`. What changed is the request: the harness now sends
-`chat_template_kwargs.enable_thinking = false`, and gemma's chat template has a reasoning
-channel. A control on the same 20 tasks says what that costs:
+`deploy/profiles/gemma.service`. Its October row was measured with the reasoning channel open,
+and gemma is the one model here that pays for it. A control on the same 20 tasks:
 
 | gemma, same 20 tasks | passed | compiled | median tokens | at the cap |
 |---|---|---|---|---|
@@ -1109,9 +1127,7 @@ With reasoning on, gemma writes a whole program inside markdown fences and stops
 when something cuts it — the October record still carries the error that proves it,
 `CS1056: Unexpected character '`'`. Quadrupling the budget moves it from 4 to 7 tasks and
 leaves the gap to the thinking-off arm untouched, so this reasoning does not converge on
-a single function. That is why every row above is thinking off: the benchmark asks for a
-function body, and a model that keeps going past it is being measured on its stopping
-behaviour.
+a single function.
 
 **The temperature arm is not in this table.** It was measured on 2026-11-07 over 790
 tasks and moved *which* tasks pass, not how many — three passes net across five models,
