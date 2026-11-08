@@ -25,6 +25,14 @@
   "coding quality is not measured here yet" contradicted the section above it and
   is replaced by what is actually measured.
 
+- **Nemotron is measured and served from the 65.8 GB quant, not the 88.6 GB one.**
+  `UD-Q3_K_XL` against `UD-Q4_K_XL` on the same bench: **96 against 95 passed**,
+  154 against 150 compiled, seven tasks gained and six lost — no degradation outside
+  the noise — while decode went from 25.5 to 29.7 t/s and 23 GB of weights left the
+  disk. The per-task median stays at 6.2 s because MultiPL-E pays a fresh prefill
+  every task. The PipelineScore rows stay the larger quant's: the smaller one has not
+  been scored there.
+
 ### Removed
 
 - **The `dense` profile and the halogen engine it ran on are gone, and every

@@ -1070,15 +1070,23 @@ thinking off, on the same 158 tasks:
 
 | profile | passed | compiled | pass % | median s/task | total |
 |---|---|---|---|---|---|
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | **95** | **150** | 60 | 6.2 | 0h18m |
+| *Nemotron 3.5 Super VL 120B-A12B, reference* | **96** | **154** | 61 | 6.2 | 0h18m |
 | gemma-4-26b-a4b | 90 | 139 | 57 | 4.0 | 0h15m |
 | ornith-1.5-122b | 85 | 137 | 54 | 6.6 | 0h20m |
 | ornith-1.5-35b-a3b | 83 | 134 | 53 | 4.1 | 0h12m |
 
-Nemotron leads at 95 of 158, ahead of gemma (90), the 122B (85) and the 35B (83),
-and it compiles more of what it writes than any model here (150 of 158). The 35B,
+Nemotron leads at 96 of 158, ahead of gemma (90), the 122B (85) and the 35B (83),
+and it compiles more of what it writes than any model here (154 of 158). The 35B,
 which this machine runs for agentic work, lands last on code. Gemma — a 26B
-mixture that costs 15 minutes — is second, three tasks behind a 120B.
+mixture that costs 15 minutes — is second, six tasks behind a 120B.
+
+That Nemotron row is served from the **65.8 GB quant** (`UD-Q3_K_XL`), not the 88.6 GB one it
+started on, because the smaller one was measured against the larger on this bench: 96 against
+95 passed, 154 against 150 compiled, with seven tasks gained and six lost — no degradation
+outside the noise — while decode rose from 25.5 to 29.7 t/s and 23 GB of weights left the
+machine. The per-task median does not move, and that is expected: each task is a fresh prompt,
+so MultiPL-E pays prefill, and the quant only speeds up generation. The PipelineScore rows
+below are still the larger quant's, because the smaller one has not been scored there.
 
 **The budget is a dial, and it was not free to choose.** A smaller one cut the 35B off
 mid-function — 56 of its 91 failures ended exactly at the old cap — while gemma writes past
