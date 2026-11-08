@@ -996,7 +996,8 @@ off; the row to read them against is therefore the 122B's thinking-off **73.5**,
 | *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
 | *Nemotron 3.5, reference — plain serving* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
-| *Nemotron 3.5, reference — MTP + ub 256* | `nemotron-3.5-super-vl-120b` | **80.9** | MAINLINE |
+| *Nemotron 3.5, reference — MTP + ub 256, 88.6 GB* | `nemotron-3.5-super-vl-120b` | 80.7 | MAINLINE |
+| *Nemotron 3.5, reference — MTP + ub 256, 65.8 GB* | `nemotron-3.5-super-vl-120b` | **80.9** | MAINLINE |
 
 **Every run above is published.** The twelve of them, with their tiers, are listed on the
 [andrea-bruno profile](https://pipelinescore.ai/users/andrea-bruno) alongside everyone else's
@@ -1103,14 +1104,29 @@ The point this table makes is that the reasoning switch is part of the optimal c
 not a global policy: a comparison that pins it off for everyone measures the switch, and it
 hides 30 tasks on the 35B and 9 on the 122B.
 
-That Nemotron row is served from the **65.8 GB quant** (`UD-Q3_K_XL`), not the 88.6 GB one it
-started on, because the smaller one was measured against the larger on this bench: 96 against
-95 passed, 154 against 150 compiled, with seven tasks gained and six lost — no degradation
-outside the noise — while decode rose from 25.5 to 29.7 t/s and 23 GB of weights left the
-machine. The per-task median does not move, and that is expected: each task is a fresh prompt,
-so MultiPL-E pays prefill, and the quant only speeds up generation. Both of the figures above
-are the smaller quant's: MultiPL-E and PipelineScore were re-run with it, and the PipelineScore
-row below is the 80.9 it produced.
+**That row is the 65.8 GB quant, and the other size was measured too.** Nemotron exists in two
+quantisations, so both were run on the same 158 tasks and scored on both axes before the larger
+one was deleted:
+
+| Nemotron, same 158 tasks | `UD-Q4_K_XL` — 88.6 GB | `UD-Q3_K_XL` — 65.8 GB |
+|---|---|---|
+| MultiPL-E, thinking off | 95 | **96** |
+| compiled | 150 | **154** |
+| PipelineScore | 80.7 | **80.9** |
+| Speed (the PS axis) | 15.5 | **17.2** |
+| decode | 25.5 t/s | **29.7 t/s** |
+| prefill, 74.5K tokens | 251.7 t/s | 261.3 t/s |
+| MTP drafts accepted | 76% | 74% |
+| weights on disk | 88.6 GB | **65.8 GB** |
+
+Seven tasks gained and six lost on MultiPL-E, and the four PipelineScore quality families
+identical to the digit in both runs: the smaller weights cost nothing measurable. The decode gain
+is 16% while prefill moves within the noise, which is what the bandwidth arithmetic predicts —
+prefill is compute, generation is bytes read — and the per-task median on MultiPL-E does not move
+at all (6.2 s in both), because every task there is a fresh prompt and pays prefill. So the 23 GB
+came free, and with them the headroom that lets this model sit beside the image generator instead
+of alone. Both PipelineScore rows below are the smaller quant's: that run was repeated, and it is
+the 80.9.
 
 **The budget is a dial, and it was not free to choose.** A smaller one cut the 35B off
 mid-function — 56 of its 91 failures ended exactly at the old cap — while gemma writes past
