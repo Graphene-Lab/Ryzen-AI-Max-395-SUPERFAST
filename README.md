@@ -1200,6 +1200,12 @@ What this does and does not say:
   later, which restarts the profile with or without the encoder. The optional
   `deepseek` profile is text-only — no encoder exists in its repository —
   and ornith122 has one, but its projector is not installed by default.
+  **Both clients now declare it too**: `generationConfig.modalities.image` in Qwen Code and
+  `input: ["text", "image"]` in PI, for gemma and ornith, because that key is what makes
+  `read_file` pass pixels instead of a placeholder. Verified end to end on 2026-11-08 — gemma read a
+  real screenshot and quoted the text in it. [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md) carries the
+  per-model table: image, video (no client has a channel for it), reasoning switch, context and
+  speculation.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill. The prompt cache makes the *second*
   turn fast; it cannot make the first one fast.

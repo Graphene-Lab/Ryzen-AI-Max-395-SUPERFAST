@@ -4,6 +4,36 @@ Notes taken on 2026-10-23 from the Hugging Face cards of the two main profiles, 
 settings and a known bug that our units do not use yet. Read as documentation of the model, then
 checked against our build: two of the flags below do **not** exist in the engine we run today.
 
+## What each model can do, as installed
+
+Checked against the running units on 2026-11-08, not against the cards. "Image" means the engine
+loads a projector and a client can therefore send a picture; the last row of the table is what the
+client has to declare for that to happen.
+
+| model | image | video | reasoning switch | context | speculation | weights |
+|---|---|---|---|---|---|---|
+| gemma-4-26b-a4b | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | no client channel | per request, but it hurts code (measured) | 262,144 | MTP head `mtp-gemma-…-Q8_0.gguf` | 14.9 GB |
+| ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights | 19 GB |
+| ornith-1.5-122b | **no**: the encoder exists in the base model, no projector is installed | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, q8_0 KV | 69.7 GB |
+| deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
+| Nemotron 3.5 120B (reference, not a profile) | **yes**, `--mmproj mmproj-BF16.gguf` | trained for it, still no client channel | per request, `chat_template_kwargs.enable_thinking` | 1,048,576 | MTP head `mtp-Q8_0.gguf` | 65.8 GB |
+
+**Video is not a model limitation, it is a missing channel.** None of our clients has a tool that
+reads a video file, so no model can be sent one: a video would have to be turned into frames by
+something outside the client, and then each frame is just another image.
+
+**What the client must declare for the image column to mean anything:** in Qwen Code,
+`generationConfig.modalities.image: true` — `capabilities.vision` alone is cosmetic, and without
+the modalities key `read_file` hands the model a placeholder instead of pixels. In PI it is
+`input: ["text", "image"]`. Both are now set for gemma and ornith; ornith122 and deepseek are
+declared text-only because their engines load no projector. Verified end to end on 2026-11-08:
+gemma read a real screenshot through the API and quoted the text in it, and the engine logged
+`image processed in 565 ms`.
+
+**One trap on that path:** gemma answers an image only with `enable_thinking: false` or with a large
+budget. Asked with 120 tokens and the reasoning channel open it returns an empty `content`, because
+the trace eats the budget — the same failure measured on the code benchmark.
+
 ## ornith — julianmb/Ornith-1.5-35B-A3B-ROCmFP4-GGUF
 
 The card documents a runtime bug and a way to switch the reasoning off.
