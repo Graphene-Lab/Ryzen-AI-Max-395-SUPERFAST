@@ -1076,25 +1076,32 @@ assumed:
 | gemma-4-26b-a4b | 90 | thinking off | 4.0 | 0h15m |
 
 **Reasoning helps three of the four, and the table looked different without it.** The same
-runs with the reasoning channel closed:
+runs with the reasoning channel closed, on the same engine:
 
 | profile | thinking off | thinking on | gain | price |
 |---|---|---|---|---|
-| ornith-1.5-35b-a3b | 83 | **96** | **+13** | 1.7× the time |
+| ornith-1.5-35b-a3b | 66 | **96** | **+30** | 1.9× the time |
 | ornith-1.5-122b | 85 | **94** | +9 | 2.7× |
 | *Nemotron 3.5, reference* | 95 | **97** | +2 | 4.4× |
 | gemma-4-26b-a4b | **90** | 7 of 20 (control) | **−** | — |
 
 The 35B is the model this machine runs for agentic work, and it was the last on code only
 because its unit ships `--reasoning off`: with the channel open it passes 96, second by one
-task. Gemma is the exception in the other direction — a 26B mixture that costs 15 minutes and
+task. **Its two arms also exposed something the table cannot show**: the 83 this profile
+reported before was measured through the stale vision drop-in, which runs the ROCmFPX image
+without MTP, while the numbers above come from the Vulkan engine the profile actually ships.
+Same weights, same sampling, same budget — 83 against 66. The engine alone is worth 17 tasks
+on this model, more than any sampling choice we have measured, which is why the unit and its
+drop-in are now kept in sync by the repo rather than by hand.
+
+Gemma is the exception in the other direction — a 26B mixture that costs 15 minutes and
 is the only one that gets *worse* when it thinks, because its reasoning does not converge on a
 single function (the control above). Nemotron still leads, but at 4.4× the time of everything
 else, so "first" here is a correctness figure, not a recommendation for interactive work.
 
 The point this table makes is that the reasoning switch is part of the optimal configuration,
 not a global policy: a comparison that pins it off for everyone measures the switch, and it
-hides 13 tasks on the 35B and 9 on the 122B.
+hides 30 tasks on the 35B and 9 on the 122B.
 
 That Nemotron row is served from the **65.8 GB quant** (`UD-Q3_K_XL`), not the 88.6 GB one it
 started on, because the smaller one was measured against the larger on this bench: 96 against

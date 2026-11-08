@@ -35,12 +35,17 @@
 
 - **MultiPL-E now reports each model at its best reasoning setting, and that is not
   the same setting for all of them.** With the reasoning channel open the 35B goes from
-  83 to **96** of 158 (1.7× the time), the 122B from 85 to **94** (2.7×), Nemotron from
+  66 to **96** of 158 (1.9× the time), the 122B from 85 to **94** (2.7×), Nemotron from
   95 to **97** (4.4×); gemma is the only one that loses, 12 of 20 down to 7. So the
   earlier table, pinned to thinking off for everyone, was measuring the switch: it hid
-  13 tasks on the 35B and 9 on the 122B, and put the model this machine runs for agentic
-  work last on code. The rows are now "best passed" with the setting named, and the
-  off/on pairs are printed beside them with their price in time.
+  30 tasks on the 35B and 9 on the 122B.
+
+  The 35B's "off" number moved from 83 to 66 in the process, and the reason is not the
+  sampling: 83 was measured through the stale vision drop-in, which ran the ROCmFPX image
+  without MTP, while 66 and 96 come from the Vulkan engine the profile ships. Same
+  weights, same sampling, same budget, two engines — 17 tasks apart. That is a larger
+  effect than any sampling choice measured here, and it is why the unit and its drop-in
+  are now generated from the same repository file.
 
 ### Removed
 
