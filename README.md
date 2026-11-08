@@ -499,8 +499,8 @@ authors; see the model repository for those terms.
 > measured on the reference machine, with every row in the same memory layout
 > (BIOS UMA 1 GB, one unified pool) and the instrument named next to the table.
 
-Measured on a Ryzen AI Max+ 395 (Radeon 8060S, 128 GB LPDDR5X), ROCm 7.14.0,
-262,144 tokens of context.
+Measured on a Ryzen AI Max+ 395 (Radeon 8060S, 128 GB LPDDR5X), ROCm 7.2.4,
+up to 262,144 tokens of context.
 
 ### Performance tuning on Fedora 44 — what we tested
 
@@ -852,34 +852,30 @@ it says so and restarts the profile anyway, so the machine is never left down.
 
 ### Watch a busy machine
 
-The engine's log says how long each request took, but not how many were
+The engine's log says how long each request took, but not whether anything was
 waiting, and on a machine with several agents that is the difference between an
 answer that is slow and an answer that is queued. `superfast-monitor.timer`
-closes that gap: every 30 seconds it reads the engine's `/health` and, where
-the engine has one, `/cache`, plus the GPU counters and the memory, and
-appends one line to `~/.local/share/superfast-monitor/samples.jsonl` (rotating
-at 20 MiB). The setup script installs and starts it; nothing has to be enabled
-by hand.
+closes that gap: every 30 seconds it reads the engine's `/health` and `/cache`,
+plus the GPU counters and the memory, and appends one line to
+`~/.local/share/superfast-monitor/samples.jsonl` (rotating at 20 MiB). The setup
+script installs and starts it; nothing has to be enabled by hand.
 
 ```bash
 superfast-monitor.py --report 24     # the last 24 hours, in one screen
 systemctl --user stop superfast-monitor.timer   # stop sampling
 ```
 
-Three fields are worth knowing by heart, all in `/health`:
+**llama.cpp does not count a queue, so those columns are empty.** `/health` answers
+`{"status":"ok"}` with no `in_flight`, no `queued` and no `busy_for_s`; those fields belonged
+to the dense engine that left on 2026-11-07. The sampler keeps the fields it used to record
+and writes them only when the engine publishes them, so on every profile this machine now
+runs the queue columns stay blank — and a blank column is the honest answer, not a zero.
 
-| field | what it tells you |
-|---|---|
-| `in_flight` | conversations being decoded right now |
-| `queued` | requests that arrived and are waiting for the profile's single slot to free. **A queue that never empties is the number the budgets have to answer for** |
-| `busy_for_s` | how long the request currently in flight has been running |
-
-A `queued` above zero for minutes at a time is the signal something needs
-changing: a request that arrives while the profile is busy waits for the one
-slot, and on a long session it can wait a while. The report's cache section
-separates the rest: a low hit rate means the
-prompt prefix is changing between turns, a high `evicted` count means
-conversations are being dropped to make room.
+What is still readable is the slot itself: `curl -s localhost:8731/slots` reports
+`is_processing`, and with `--parallel 1` there is exactly one. A second client that seems to
+hang is therefore not a queue you can watch grow: it waits behind that slot, in silence, and
+the only visible sign is that the first request never clears. That is why the client budgets
+exist instead of a queue alarm.
 
 The sampler is read-only, needs no API key — it reads loopback — and only
 writes in its own directory. It exits 0 without a sample when no profile is
@@ -978,9 +974,12 @@ first run (80.2) served it plain and **was the slowest thing measured here**: sp
 MTP speculative decoding and a 256-token ubatch — `-md mtp-Q8_0.gguf --spec-type draft-mtp
 --spec-draft-n-max 2 -ub 256` — and **speed went to 15.5** while every quality family stayed
 identical to the digit, because speculative decoding verifies what it drafts and cannot change
-the output. Cards:
-[de191deb](https://pipelinescore.ai/s/de191deb-97b8-4539-92c8-df69a98bf20a) and
-[6c3f0804](https://pipelinescore.ai/s/6c3f0804-1816-447a-a17d-2df493dc7cc4).
+the output. The third (**80.9**) is the same engine with the 65.8 GB quant instead of the 88.6 GB
+one: the four families are identical again and **speed rises to 17.2**, so the smaller weights
+cost nothing on either axis. Cards:
+[de191deb](https://pipelinescore.ai/s/de191deb-97b8-4539-92c8-df69a98bf20a),
+[6c3f0804](https://pipelinescore.ai/s/6c3f0804-1816-447a-a17d-2df493dc7cc4) and
+[bc667eac](https://pipelinescore.ai/s/bc667eac-2bc7-4ee3-9a67-22a05a1430e3).
 
 The CLI's 2048-token budget cannot hold a reasoning trace, so both runs were made with thinking
 off; the row to read them against is therefore the 122B's thinking-off **73.5**, not 81.9.
@@ -997,9 +996,9 @@ off; the row to read them against is therefore the 122B's thinking-off **73.5**,
 | *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
 | *Nemotron 3.5, reference — plain serving* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
-| *Nemotron 3.5, reference — MTP + ub 256* | `nemotron-3.5-super-vl-120b` | **80.7** | MAINLINE |
+| *Nemotron 3.5, reference — MTP + ub 256* | `nemotron-3.5-super-vl-120b` | **80.9** | MAINLINE |
 
-**Every run above is published.** The eleven of them, with their tiers, are listed on the
+**Every run above is published.** The twelve of them, with their tiers, are listed on the
 [andrea-bruno profile](https://pipelinescore.ai/users/andrea-bruno) alongside everyone else's
 runs, which is the comparison the numbers are for; the individual cards are linked in the
 paragraphs below.
