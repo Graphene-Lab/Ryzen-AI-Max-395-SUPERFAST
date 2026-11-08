@@ -18,6 +18,9 @@ client has to declare for that to happen.
 | deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
 | Nemotron 3.5 120B (reference, not a profile) | **yes**, `--mmproj mmproj-BF16.gguf` | trained for it, still no client channel | per request, `chat_template_kwargs.enable_thinking` | 1,048,576 | MTP head `mtp-Q8_0.gguf` | 65.8 GB |
 
+Nemotron's window was filled once, on 2026-11-08: 949,957 tokens (4.0 MB of text, one sentence
+planted at 95% depth) took 173.8 minutes of prefill at 91.1 t/s, and the sentence was retrieved.
+
 **Video is not a model limitation, it is a missing channel.** None of our clients has a tool that
 reads a video file, so no model can be sent one: a video would have to be turned into frames by
 something outside the client, and then each frame is just another image.

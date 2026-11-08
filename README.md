@@ -1137,6 +1137,15 @@ came free, and with them the headroom that lets this model sit beside the image 
 of alone. Both PipelineScore rows below are the smaller quant's: that run was repeated, and it is
 the 80.9.
 
+**The 1M window was filled once, to see what it costs.** The card advertises 1,048,576 tokens and
+the profile does allocate them, so the question was never whether the window exists but what a
+prompt that large costs here. A 4.0 MB document with one sentence planted at 95% depth tokenised
+to **949,957 tokens** and took **173.8 minutes of prefill at 91.1 t/s** — the rate slides with
+depth, from ~110 t/s at the 700K mark to 92 at the end — after which the model returned the
+planted code, `ZK-9931-QT`, correctly and on the first try. GTT rose only from 83.6 to 85.6 GB
+during the request, because `-c 1048576` allocates the cache at load. Retrieval at full depth
+works; the price is the wall clock, and the prompt cache cannot take it off a genuinely first turn.
+
 **The budget is a dial, and it was not free to choose.** A smaller one cut the 35B off
 mid-function — 56 of its 91 failures ended exactly at the old cap — while gemma writes past
 the body when it has room. So 2,048 was picked by counting answers that ended at the ceiling,
@@ -1207,7 +1216,8 @@ What this does and does not say:
   per-model table: image, video (no client has a channel for it), reasoning switch, context and
   speculation.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
-  262K prompt is a multi-minute prefill. The prompt cache makes the *second*
+  262K prompt is a multi-minute prefill, and the 950K one measured on Nemotron
+  spent 173.8 minutes there. The prompt cache makes the *second*
   turn fast; it cannot make the first one fast.
 - **Code is measured on functions, not repositories.** The MultiPL-E table ranks
   profiles on 158 single functions with no cross-file context and no tools; the
