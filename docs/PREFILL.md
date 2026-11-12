@@ -103,9 +103,12 @@ flags: 1,045 / 906 / 745 tok/s at 9,916 / 39,617 / 64,016 tokens against
 1,040 / 897 / 726. The 12% gap I had attributed to the window was the difference
 between the *test container* (96K, no vision, no MTP, direct port) and the
 *production unit* — 831 against 745 tok/s at 60k — and which of the unit's other
-flags owns it is not measured yet. The smaller window stays anyway: it frees
-about 3 GiB of resident memory and costs nothing, and 131,072 is still 1.7× the
-deepest prompt this machine has seen.
+flags owns it is not measured yet.
+
+So the window stays at **262,144**, the model's native size. Halving it gave no
+speed, and the window is the one thing this machine is used for: an agent that
+holds a conversation, the tool definitions and the files it is editing needs the
+room, and a smaller window costs more than any prefill percentage buys.
 
 The third fix of the group, `vulkan-mmid-scale-epilogue` (`5edacdd`), is not
 ported: it depends on the `vulkan-mmid-rowlists` prepass (`ffe5cb4`) that our

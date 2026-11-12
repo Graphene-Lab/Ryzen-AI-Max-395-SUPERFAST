@@ -58,7 +58,8 @@ same unit restarted with and without the variable:
 The OFF column of that second table also carries the difference between the test
 container and the production unit (831 against 745 tok/s at 60k), which is **not**
 the window: halving it to 131,072 on the same unit gives 1,045 / 906 / 745, the
-same within noise. The smaller window stays for the ~3 GiB it frees.
+same within noise. The window therefore stays at its native 262,144 — a smaller
+one buys no speed and costs the room an agent needs.
 
 Generated text is identical with the flag on and off (375 bytes, same 16 lines,
 temperature 0), which is the check that matters: the concat feeds the delta-net
