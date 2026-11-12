@@ -96,9 +96,9 @@
   twice, before and after the copy, both reporting 25.3.6-3.fc43). Rebuilt with
   both stages on `fedora:44` and Mesa **26.2.6**: 1,237 / 1,023 / 850 tok/s at
   9,910 / 39,611 / 64,010 tokens against 1,245 / 1,026 / 843 — **neutral on all
-  three**, so the image was left alone and the rebuild is kept only as evidence.
-  `runtime/Dockerfile.vulkan` now carries the explanation, so the next person
-  bumps both stages instead of one.
+  three**, so the image was left alone and the rebuild was deleted after the
+  measurement. `runtime/Dockerfile.vulkan` now carries the explanation, so the
+  next person bumps both stages instead of one.
 
 - **The prefix cache already covers the agent loop, and `--cache-reuse` adds
   nothing.** Measured on the production engine with a 72,016-token prompt: cold

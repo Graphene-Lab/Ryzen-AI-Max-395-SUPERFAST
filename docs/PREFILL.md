@@ -70,8 +70,8 @@ as with 25.3.6 — same flags, 262K window, concat patch on, no MTP:
 | 64,010 tok | 843 tok/s | 850 tok/s |
 
 Within noise on all three. So the image stays as it is: a driver bump is not
-where the time is on this machine, and the rebuilt image (`mesa44`) is kept only
-as the evidence.
+where the time is on this machine. The rebuilt image was deleted after the
+measurement; these numbers are the record.
 
 ## The prefix cache already covers the agent loop
 
