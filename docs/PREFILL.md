@@ -43,6 +43,19 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
+## Two models do not fit, and a second load needs a pause
+
+The 35B and the 122B cannot be resident together: 25 GB plus 70 GB against a
+124 GB pool, and the driver answers `vk::DeviceLostError` on the second
+allocation. Measuring the 122B means stopping the 35B first.
+
+A 70 GB load started immediately after removing the previous container fails the
+same way, with `DeviceLost` during load: the GPU memory of the removed container
+has not come back yet. The same line with a pause in between loads normally — the
+122B with MTP, the concat patch and vision came up in 60 s when given the machine
+to itself. So a `DeviceLost` right after a container is removed is residue, not a
+defect of the profile.
+
 ## The MTP flags cost more than they return
 
 The 35B carries a speculative-decoding head inside its weights, and the profile

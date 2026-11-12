@@ -86,6 +86,18 @@
 
 ### Changed
 
+- **The two large models do not fit together, and a second 70 GB load needs a
+  pause.** The 35B (25 GB) and the 122B (70 GB) against a 124 GB pool give
+  `vk::DeviceLostError` on the second allocation, so measuring one means stopping
+  the other; and a load started immediately after removing the previous
+  container fails the same way until the GPU memory comes back — the 122B with
+  MTP, the concat patch and vision came up in 60 s once it had the machine to
+  itself, which also says the 122B profile is healthy. Measured on the 122B
+  without MTP: 382 tok/s prefill at 9,916 tokens and 19.0 tok/s decode, against
+  the 20.4 tok/s the project recorded, so the flags stay there: their measured
+  decode gain (+23-40%) pays for the same prefill cost that made them a loss on
+  the 35B.
+
 - **The 35B drops the MTP flags: they cost 16% of prefill and return 3% of
   decode.** Measured on one image and one prompt, cold cache: without them
   1,241 tok/s prefill and 73.2 tok/s decode; with `--spec-type draft-mtp
