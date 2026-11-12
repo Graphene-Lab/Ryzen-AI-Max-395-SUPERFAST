@@ -43,6 +43,22 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
+## The prefix cache already covers the agent loop
+
+Three requests on the production engine, 72,016 tokens of prompt:
+
+| request | time |
+|---|---|
+| cold | 90.9 s |
+| the same prompt plus one line | **1.5 s** |
+| the same text with its first 2,000 sentences removed — a compacted conversation | **7.8 s** |
+
+A follow-up turn on an unchanged context costs 1.5 s instead of 91, and a context
+whose head was trimmed re-prefills only from the checkpoint: 54,023 tokens in
+7.8 s, an effective 6,891 tok/s. `--cache-reuse 256` changes neither number (7.8 s
+both ways), so it stays off — the context checkpoints already do that work. The
+expensive case is the cold one, and it happens once per issue.
+
 ## Two models do not fit, and a second load needs a pause
 
 The 35B and the 122B cannot be resident together: 25 GB plus 70 GB against a

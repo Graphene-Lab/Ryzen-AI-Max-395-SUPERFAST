@@ -86,6 +86,14 @@
 
 ### Changed
 
+- **The prefix cache already covers the agent loop, and `--cache-reuse` adds
+  nothing.** Measured on the production engine with a 72,016-token prompt: cold
+  90.9 s, the same prompt plus one line **1.5 s**, and the same text with its
+  first 2,000 sentences removed (a compacted conversation) **7.8 s** — 54,023
+  tokens re-prefilled from the checkpoint at an effective 6,891 tok/s.
+  `--cache-reuse 256` gives 7.8 s as well, so it stays off. The expensive case is
+  the cold one, once per issue.
+
 - **The two large models do not fit together, and a second 70 GB load needs a
   pause.** The 35B (25 GB) and the 122B (70 GB) against a 124 GB pool give
   `vk::DeviceLostError` on the second allocation, so measuring one means stopping
