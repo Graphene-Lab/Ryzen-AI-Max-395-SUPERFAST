@@ -97,11 +97,15 @@ a smaller gain, because the window itself costs more than the patch buys:
 | 64,016 tok | 728 tok/s | 726 tok/s | 0% |
 
 Those two arms are the same unit restarted, so the only difference is the
-variable. The larger finding is in the OFF column: **the 262K window costs about
-12% of prefill** at the same depth (728 against 823 tok/s with a 96K window, and
-1,016 against 1,199 at 10k). A window the size of the one this machine actually
-uses would give that back; 262,144 is the model's native size, not a measured
-need.
+variable. **The window is not the lever I first took it for.** Halving it, from
+262,144 to 131,072, changes nothing measurable on the same unit with the same
+flags: 1,045 / 906 / 745 tok/s at 9,916 / 39,617 / 64,016 tokens against
+1,040 / 897 / 726. The 12% gap I had attributed to the window was the difference
+between the *test container* (96K, no vision, no MTP, direct port) and the
+*production unit* — 831 against 745 tok/s at 60k — and which of the unit's other
+flags owns it is not measured yet. The smaller window stays anyway: it frees
+about 3 GiB of resident memory and costs nothing, and 131,072 is still 1.7× the
+deepest prompt this machine has seen.
 
 The third fix of the group, `vulkan-mmid-scale-epilogue` (`5edacdd`), is not
 ported: it depends on the `vulkan-mmid-rowlists` prepass (`ffe5cb4`) that our

@@ -64,11 +64,15 @@
   ported — it needs the `mmid-rowlists` prepass our tree lacks — and
   `fa-f16-kv-contig` is for head-dim 128 models.
 
-- **The 262K window costs about 12% of prefill.** At the same depth, 728 tok/s
-  with `-c 262144` against 823 with `-c 98304`, and 1,016 against 1,199 at 10k.
-  262,144 is the model's native size, not a measured need; a window sized to the
-  work would give that back. Measured while comparing the two arms above, so it
-  is the same model, the same image and the same prompt.
+- **The 35B serves a 131,072-token window instead of 262,144.** Same speed
+  within noise on the same unit (1,045 / 906 / 745 tok/s at 9,916 / 39,617 /
+  64,016 tokens against 1,040 / 897 / 726), about 3 GiB less resident memory, and
+  131,072 is still 1.7× the deepest prompt this machine has seen. This also
+  corrects a wrong conclusion from earlier the same day: the 12% prefill gap I
+  had attributed to the window is the difference between the test container and
+  the production unit, not between window sizes — halving the window does not
+  move the number, and which of the unit's other flags owns that gap is not
+  measured yet.
 
 - **`docs/UPSTREAM.md` is the register of everything the machine is pinned to**
   or was measured against: engine source commit and image digest, Mesa and

@@ -169,7 +169,9 @@ the measured comparison that moved it out of the fifth slot is in
 **Why one model at a time.** This is a deliberate architecture choice, not a
 limitation. A single model gets the whole machine: all of the unified memory
 for its weights and its KV cache, and therefore the largest context window the
-machine can hold for it — 262,144 tokens for the Ornith and Gemma profiles.
+machine can hold for it — 262,144 tokens for the 122B and Gemma, 131,072 for the
+35B (half the native size: measured to cost nothing in speed and about 3 GiB
+less memory, see [`docs/PREFILL.md`](docs/PREFILL.md)).
 Running two large models at once would mean splitting that memory, and the
 first thing to shrink would be the context window — which is exactly what an
 agent needs most: a long window that holds the conversation, the tool

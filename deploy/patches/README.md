@@ -55,8 +55,10 @@ same unit restarted with and without the variable:
 | 39,617 tok | 884 tok/s | 897 tok/s | +1.5% |
 | 64,016 tok | 728 tok/s | 726 tok/s | 0% |
 
-The OFF column of that second table is also the bigger lever: a 262K window costs
-about 12% of prefill at the same depth compared with 96K.
+The OFF column of that second table also carries the difference between the test
+container and the production unit (831 against 745 tok/s at 60k), which is **not**
+the window: halving it to 131,072 on the same unit gives 1,045 / 906 / 745, the
+same within noise. The smaller window stays for the ~3 GiB it frees.
 
 Generated text is identical with the flag on and off (375 bytes, same 16 lines,
 temperature 0), which is the check that matters: the concat feeds the delta-net
