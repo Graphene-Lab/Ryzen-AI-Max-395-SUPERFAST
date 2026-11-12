@@ -107,13 +107,14 @@ def strip_fences(text):
 def ensure_project():
     os.makedirs(WORK, exist_ok=True)
     csproj = os.path.join(WORK, "mpe.csproj")
+    tfm = os.environ.get("MPE_TFM", "net8.0")
     if not os.path.exists(csproj):
         with open(csproj, "w", encoding="utf-8") as fh:
             fh.write(
                 '<Project Sdk="Microsoft.NET.Sdk">\n'
                 "  <PropertyGroup>\n"
                 "    <OutputType>Exe</OutputType>\n"
-                "    <TargetFramework>net8.0</TargetFramework>\n"
+                f"    <TargetFramework>{tfm}</TargetFramework>\n"
                 "    <Nullable>disable</Nullable>\n"
                 "    <ImplicitUsings>disable</ImplicitUsings>\n"
                 "    <NoWarn>CS0168;CS0219;CS0414;CS0649;CS8632</NoWarn>\n"
@@ -121,7 +122,8 @@ def ensure_project():
                 "  </PropertyGroup>\n"
                 "</Project>\n"
             )
-    dotnet = os.path.expanduser("~/rcb/RepoClassBench/external/csharp/dotnet_dir/dotnet")
+    dotnet = os.environ.get("MPE_DOTNET") or os.path.expanduser(
+        "~/rcb/RepoClassBench/external/csharp/dotnet_dir/dotnet")
     return dotnet
 
 

@@ -639,6 +639,26 @@ You can re-measure any profile at any time with:
 python3 tools/quick-bench.py --api http://<host>:8731
 ```
 
+### Prefill at depth, and the KV cache
+
+The tables above report decode. The axis an agent feels first is **prefill**, the
+reading of the prompt, and it is the one that changes with depth: the 35B reads
+12,818 tokens at 1,016 tok/s, 60,016 at 831 and 85,016 at 614; the 122B reads
+60,016 at 268 and 78,000 at 155-162. A flag sweep at a fixed 60,016 tokens says
+where the time does *not* go — an explicit `--flash-attn` (820), `-ub 1024` (785)
+and `-ub 256` (728) are all at or below the shipped 831 — and where it does: the
+**quantized KV cache costs a quarter of the prefill**, 619 against 831 tok/s on
+the 35B and 220 against 268 on the 122B. That is why `ornith122` moved to the f16
+cache, paying about 3 GiB and 5% of decode for +22% prefill and two quality
+points. The measurements, the method, and the upstream fixes we measured and
+decided not to port are in [docs/PREFILL.md](docs/PREFILL.md).
+
+**What the machine is pinned to** — the engine source and image digest, the
+driver, kernel and client versions, the benchmark dataset, and the external
+projects we evaluated and did not adopt, each with the date it was checked — is
+in [docs/UPSTREAM.md](docs/UPSTREAM.md). That file is the place to look before
+asking whether a new release of something changes what this machine can do.
+
 ### The largest profile: Ornith-1.5-122B (MoE)
 
 A model without experts reads every parameter from memory for every token it
@@ -1197,6 +1217,25 @@ engine image. Its code number never settled — nearly all of its failures ended
 writing a whole program — so that row recorded a format failure, and the profile left the
 machine before the budget was fixed. The decision rests on the axis above and on cost.
 Their PipelineScore rows above remain, because that benchmark was not affected.
+
+**A run can be repeated now, and one file in the archive cannot be trusted.** The harness
+(`benchmarks/multipl-e/run.py`), the 158 dataset rows (`multipl_e_cs.jsonl`, rebuilt by
+`tools/fetch-multipl-e.py`) and the completion budget (`--max-tokens`, 512 for the October
+records and 2048 for the table above) are all in the repository, so the numbers are no
+longer reproducible only on the host that made them. The runner also refuses to start when
+`/v1/models` reports a different model from the one asked for, and writes the served id in
+every row: without that check a forgotten profile switch produced
+`halogen-qwen3.8-27b.jsonl`, which holds gemma's answers — same 19 tasks passed, same 54.5
+tok/s, no switch in `switch.log` between 13:13:55 and 14:10:44 on 2026-10-24. The gateway
+serves whichever profile is loaded and ignores the `model` field, so the label was the only
+thing wrong with the file; the `dense` row that file fed has already been withdrawn.
+
+**The archive reproduces at the total, not task by task.** A control run of the same 35B with
+the same 512-token budget, on 2026-11-12, passed **71 of 158 against the archive's 70**
+(McNemar χ² 0.00) — but only 53 tasks passed in both: 18 are new and 17 dropped. The engine is
+not the one that made the archive: `--reasoning on` arrived on 2026-11-08 and MTP speculation
+before it, and the control's median answer is 432 tokens against 94. The totals agree, which is
+what the table rests on; a claim about one task needs its own record.
 
 What this does and does not say:
 

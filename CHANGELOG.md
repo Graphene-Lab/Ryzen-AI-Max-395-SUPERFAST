@@ -22,6 +22,40 @@
   profile keeps its 262,144-token window and its MTP speculation. The client
   entries that declare `vision: true` now cover all three profiles.
 
+- **A MultiPL-E run can be repeated from the repository, and it refuses to
+  measure the wrong model.** The harness (`benchmarks/multipl-e/run.py`) and the
+  158 `humaneval-cs` rows (`benchmarks/multipl-e/multipl_e_cs.jsonl`, rebuilt
+  from the Hugging Face datasets server by `tools/fetch-multipl-e.py`, matching
+  the archive name for name) are now versioned; the runner takes
+  `--max-tokens` (512 for the October records, 2048 for the published table),
+  reads the API key from `MPE_KEY` instead of carrying it, and takes the dotnet
+  path and target framework from `MPE_DOTNET`/`MPE_TFM` — the host has the 10.0
+  SDK, so `net8.0` built but could not run. The guard is the point: it asks
+  `/v1/models` before the first task and every 25, aborts on a mismatch, and
+  writes `served` into every row. `tools/bench-guard.sh` is the same check for
+  harnesses we do not own (`ps-bench`). The check exists because the gateway
+  serves the loaded profile and ignores the `model` field: the archived
+  `halogen-qwen3.8-27b.jsonl` holds gemma's answers. The control run that
+  followed — 35B, 512 tokens, 2026-11-12 — passed **71 of 158 against the
+  archive's 70** (McNemar χ² 0.00) while only 53 tasks passed in both, because
+  the engine gained `--reasoning on` and MTP since October; its record is
+  `benchmarks/multipl-e/ornith-1.5-35b-a3b-512-20261112.jsonl`.
+
+- **`docs/PREFILL.md` records the prefill measurements**, the flag sweep behind
+  the KV decision, the head-width arithmetic that decides whether the upstream
+  Vulkan fixes pay, and the exact branches and commits of the three we decided
+  not to port — with the reason, so the decision can be revisited on numbers
+  instead of re-researched.
+
+- **`docs/UPSTREAM.md` is the register of everything the machine is pinned to**
+  or was measured against: engine source commit and image digest, Mesa and
+  kernel versions, the headless client, the benchmark dataset, and the seven
+  external projects we evaluated — the Vulkan patch set, the NPU burst pipeline,
+  FastFlowLM, Lemonade, the two setup guides and the NPU offload proof of
+  concept — each with the state it was in on 2026-11-12 and the one change that
+  would make it worth adopting. The last section is the loop to check it, so a
+  future review is a comparison and not a new investigation.
+
 ### Changed
 
 - **The 122B ships the f16 KV cache, because the quantized one costs a quarter
