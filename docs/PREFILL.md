@@ -43,6 +43,36 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
+## The driver is in the image, and a newer one changes nothing
+
+`llama-server` does not use the host's Mesa. The image carries its own Vulkan
+loader and driver, and until 2026-11-12 that was **Mesa 25.3.6 from fc43** while
+the host ran 26.1.8 — `dnf update` on the host would not have touched the
+engine at all.
+
+Getting a newer driver into the image is also less obvious than it looks. The
+Dockerfile copies the builder's whole `/usr` into the runtime stage, and that
+copy includes `/usr/lib/os-release` and the rpm database: the runtime stage
+then *is* the builder's release, so an update run after the copy looks in the
+builder's repositories, finds nothing, and the image silently keeps the
+builder's Mesa. Measured twice, with the update before the copy and after it,
+both reporting `mesa-vulkan-drivers 25.3.6-3.fc43`. The only form that works is
+both stages on the same Fedora release, with the driver updated in the builder,
+because whatever `/usr` the builder has is what ships.
+
+Built that way on `fedora:44` with Mesa **26.2.6**, the engine measures the same
+as with 25.3.6 — same flags, 262K window, concat patch on, no MTP:
+
+| prompt | Mesa 25.3.6 | Mesa 26.2.6 |
+|---|---|---|
+| 9,910 tok | 1,245 tok/s | 1,237 tok/s |
+| 39,611 tok | 1,026 tok/s | 1,023 tok/s |
+| 64,010 tok | 843 tok/s | 850 tok/s |
+
+Within noise on all three. So the image stays as it is: a driver bump is not
+where the time is on this machine, and the rebuilt image (`mesa44`) is kept only
+as the evidence.
+
 ## The prefix cache already covers the agent loop
 
 Three requests on the production engine, 72,016 tokens of prompt:

@@ -86,6 +86,20 @@
 
 ### Changed
 
+- **The driver the engine uses is in the image, and a newer Mesa changes
+  nothing.** `llama-server` runs with the image's own Vulkan loader and driver —
+  `mesa-vulkan-drivers 25.3.6-3.fc43` — not the host's 26.1.8, so `dnf update` on
+  the host never touched it. Getting a newer driver in is also a trap: the
+  Dockerfile copies the builder's whole `/usr` into the runtime stage, and that
+  copy carries `/usr/lib/os-release` and the rpm database, so the runtime stage
+  becomes the builder's release and an update there finds nothing (measured
+  twice, before and after the copy, both reporting 25.3.6-3.fc43). Rebuilt with
+  both stages on `fedora:44` and Mesa **26.2.6**: 1,237 / 1,023 / 850 tok/s at
+  9,910 / 39,611 / 64,010 tokens against 1,245 / 1,026 / 843 — **neutral on all
+  three**, so the image was left alone and the rebuild is kept only as evidence.
+  `runtime/Dockerfile.vulkan` now carries the explanation, so the next person
+  bumps both stages instead of one.
+
 - **The prefix cache already covers the agent loop, and `--cache-reuse` adds
   nothing.** Measured on the production engine with a 72,016-token prompt: cold
   90.9 s, the same prompt plus one line **1.5 s**, and the same text with its

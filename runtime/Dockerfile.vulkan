@@ -38,6 +38,17 @@ RUN cmake -S . -B build -G Ninja \
   && cmake --install build --config Release
 RUN find /opt/llama.cpp/build -type f -name 'lib*.so*' -exec cp {} /usr/lib64/ \; && ldconfig
 
+# The runtime stage and the builder must be the SAME Fedora release. The
+# `COPY --from=builder /usr/ /usr/` below also brings the builder's
+# /usr/lib/os-release and rpm database, so the runtime stage becomes the
+# builder's release: a driver update run here after the copy looks in the
+# builder's repositories, finds nothing, and the image silently keeps the
+# builder's Mesa. Measured twice on 2026-11-12 (update before and after the
+# copy), both reporting mesa-vulkan-drivers 25.3.6-3.fc43. To move the driver,
+# bump both stages together and update mesa in the builder — whatever /usr the
+# builder has is what ships. Measured on fedora:44 with Mesa 26.2.6 the numbers
+# are the same as 25.3.6 (1,237 / 1,023 / 850 against 1,245 / 1,026 / 843 tok/s),
+# which is why this image stays on 43; see docs/PREFILL.md.
 FROM registry.fedoraproject.org/fedora-minimal:43
 RUN microdnf -y --nodocs --setopt=install_weak_deps=0 install \
   bash ca-certificates libatomic libstdc++ libgcc libibverbs \
