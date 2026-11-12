@@ -86,6 +86,24 @@
 
 ### Changed
 
+- **Decode was measured on every lever the engine offers, and it stays at about
+  72 tok/s.** On one image and a 256-token code generation: no speculation
+  68.8-73.2 tok/s; `--spec-type draft-mtp` 75.1 with `n-max 2` (+3%) and 77.0
+  with `n-max 1` (+5%), both costing 15-16% of prefill; `ngram-simple` 64.0
+  (**−7%**) and `ngram-mod` 69.0 (0%), the one lever with no memory cost and no
+  gain on a fresh generation, because ngram copies repeated text and there is
+  none. A separate draft model would need Ornith's vocabulary and the small
+  models here do not share it. So the day's gains are all on prefill, and decode
+  is the model's ceiling on this hardware.
+
+- **Two client traps confirmed by the functional check.** A corrupt image
+  returns HTTP 400 (`failed to decode image bytes` in the engine log) rather
+  than a slow answer, so a vision failure points at the payload first; and
+  `--reasoning on` with a small `max_tokens` returns an empty `content` because
+  the budget goes to the reasoning channel — a one-word probe with 16 tokens
+  came back empty and looked like a broken model. Clients either disable
+  thinking through `chat_template_kwargs` or budget for both.
+
 - **The driver the engine uses is in the image, and a newer Mesa changes
   nothing.** `llama-server` runs with the image's own Vulkan loader and driver —
   `mesa-vulkan-drivers 25.3.6-3.fc43` — not the host's 26.1.8, so `dnf update` on

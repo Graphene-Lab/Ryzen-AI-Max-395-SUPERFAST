@@ -43,6 +43,40 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
+## Decode: measured on every lever, and it stays at about 72 tok/s
+
+The 35B decodes at 69-73 tok/s in a fresh generation. Every speculation the
+engine offers was measured on 2026-11-13, on the same image and a code prompt of
+256 tokens:
+
+| lever | decode | what it costs |
+|---|---|---|
+| none (today) | 68.8-73.2 tok/s | — |
+| `--spec-type draft-mtp --spec-draft-n-max 2` | 75.1 (+3%) | −16% prefill |
+| `--spec-type draft-mtp --spec-draft-n-max 1` | 77.0 (+5%) | −15% prefill |
+| `--spec-type ngram-simple` | 64.0 (**−7%**) | −1% prefill |
+| `--spec-type ngram-mod` | 69.0 (0%) | −1% prefill |
+| q8_0 KV cache (the project's 122B rows) | +5% | −25% prefill |
+
+Nothing improves decode without paying more in prefill, and ngram — which copies
+repeated text out of the context, and is the one lever with no memory cost —
+gives nothing on a fresh generation, because there is nothing to copy. A separate
+draft model would need the same vocabulary as Ornith, and the small models on
+this machine (LFM2.5) do not share it. So decode is the model's ceiling on this
+hardware: the gains of the day are all on prefill.
+
+## Two traps a client will hit, both confirmed in the functional check
+
+- **A corrupt image is a 400, not a slow answer.** A request whose `image_url`
+  bytes do not decode returns HTTP 400 and the model never sees it; the engine
+  log says `mtmd_helper_bitmap_init_from_buf: failed to decode image bytes`. So
+  when a vision request fails, the first suspect is the payload, not the model.
+- **`--reasoning on` plus a small `max_tokens` gives an empty `content`.** The
+  budget goes to the reasoning channel and the answer is empty; a probe that
+  asked for one word with 16 tokens came back with nothing and looked like a
+  broken model. Clients either send `chat_template_kwargs:
+  {"enable_thinking": false}` or a budget large enough for both.
+
 ## The driver is in the image, and a newer one changes nothing
 
 `llama-server` does not use the host's Mesa. The image carries its own Vulkan
