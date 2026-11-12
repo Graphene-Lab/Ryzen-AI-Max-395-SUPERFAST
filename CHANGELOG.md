@@ -81,6 +81,22 @@
 
 ### Changed
 
+- **The build applies `deploy/patches/` itself, and its self-check no longer
+  lies.** Two defects in `build-vulkan-image.sh`: the patch series lived outside
+  the script, so a rebuild from a fresh clone produced an engine without them
+  (and the local changes were wiped by `git reset --hard`), and `has_patch0012`
+  piped `podman run` into `grep -q` under `set -o pipefail` — `grep` exits on the
+  first match, the producer takes SIGPIPE, and the pipeline reports failure, so
+  two good images were declared broken. The script now applies every
+  `patches/*.patch` after the clone (recognising an already-patched tree) and
+  tests the help text with a `case` instead of a pipe.
+
+- **The tiled concat path is confirmed to run.** A temporary instrumented build
+  printed five selections per request, on `src0 3x8192` / `src1 2x8192`
+  (strides 32768/4/4) — the delta-net conv-state concat. So the +2.4% is the
+  patch, not a branch that never executes. The instrumentation was not kept;
+  `deploy/patches/README.md` records the result and the shapes.
+
 - **The engine source commit is not on the remote any more.** Production runs
   `502e810`, which `git fetch` from `pugant/strix-nebulosa` no longer returns:
   the branch tip is `ad1ccf5` and its `rocmfpx/` is empty, so

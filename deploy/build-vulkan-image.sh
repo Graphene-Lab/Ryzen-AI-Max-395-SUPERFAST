@@ -26,17 +26,15 @@ DOCKERFILE="${SUPERFAST_VK_DOCKERFILE:-$HERE/../runtime/Dockerfile.vulkan}"
 [ -f "$DOCKERFILE" ] || { echo "missing $DOCKERFILE" >&2; exit 1; }
 
 has_patch0012() {
-    # Retried: right after a build the first `podman run` on the fresh tag can
-    # fail transiently, and a false negative here fails a good image (seen on
-    # 2026-11-12 with the prefill image, which answered correctly a minute later).
-    for _ in 1 2 3; do
-        if podman run --rm --entrypoint /usr/bin/llama-server "$1" --help 2>&1 \
-            | grep -q -- '--reasoning'; then
-            return 0
-        fi
-        sleep 2
-    done
-    return 1
+    # No pipe here: with `set -o pipefail`, `grep -q` exits on the first match,
+    # the producer takes SIGPIPE, and the pipeline reports failure even though
+    # the flag was found. That is what made two good images look broken.
+    local out
+    out="$(podman run --rm --entrypoint /usr/bin/llama-server "$1" --help 2>&1 || true)"
+    case "$out" in
+        *--reasoning*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # The image is published in the project's package: pull it and skip the clone
@@ -62,6 +60,24 @@ else
     git -C "$SRC" fetch --depth 1 origin "$REF"
     git -C "$SRC" reset --hard FETCH_HEAD
 fi
+
+# Local changes on top of the fork live in deploy/patches and are applied here,
+# so the tag means the same thing on a fresh machine and on this one. The patch
+# paths already carry rocmfpx/, hence plain -p1. Reversed check first: a source
+# tree that already has them (SUPERFAST_VK_SRC pointing at a patched copy) is
+# fine, a tree that conflicts is not.
+for p in "$HERE"/patches/*.patch; do
+    [ -e "$p" ] || continue
+    if git -C "$SRC" apply --check -p1 "$p" 2>/dev/null; then
+        git -C "$SRC" apply -p1 "$p"
+        echo "applied $(basename "$p")"
+    elif git -C "$SRC" apply -R --check -p1 "$p" 2>/dev/null; then
+        echo "$(basename "$p") already applied"
+    else
+        echo "cannot apply $(basename "$p"): the source tree has moved" >&2
+        exit 1
+    fi
+done
 
 CTX="$(mktemp -d)"
 trap 'rm -rf "$CTX"' EXIT

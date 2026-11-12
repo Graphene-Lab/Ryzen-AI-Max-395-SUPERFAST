@@ -15,22 +15,21 @@ tree: a tiled-transpose kernel for the dim-0 concat whose source is transposed
 `vulkan-mmid-scale-epilogue`, is **not** included: it depends on the
 `vulkan-mmid-rowlists` prepass our tree does not have.
 
-Apply it to a copy of the source, then build with that copy:
+The build script applies everything in this directory by itself, after the
+clone and before the image is built, so the tag means the same thing on a fresh
+machine and on the one that made it. To build without touching the cached source:
 
 ```sh
-cp -a ~/.cache/strix-nebulosa ~/.cache/strix-prefill
-git -C ~/.cache/strix-prefill apply -p1 --directory=rocmfpx deploy/patches/vulkan-prefill-20261112.patch
-SUPERFAST_VK_SRC=$HOME/.cache/strix-prefill \
-SUPERFAST_VK_IMAGE=localhost/superfast-vk:prefill \
+SUPERFAST_VK_IMAGE=localhost/superfast-vk:patch0012 \
 SUPERFAST_VK_PULL=localhost/nonexistent:none \
     bash deploy/build-vulkan-image.sh
 ```
 
 `SUPERFAST_VK_PULL` has to point at something that cannot be pulled: otherwise
-the script tags the published image over the one it is supposed to build. And
-the script's `git fetch --depth 1` + `reset --hard` wipes local changes when
-`$SRC/rocmfpx` exists, so the patched copy is built through a copy of the script
-with those two lines removed (see the note in `docs/PREFILL.md`).
+the script tags the published image over the one it is supposed to build. To
+build from a copy that already carries the patches (as
+`~/.cache/strix-prefill` does), set `SUPERFAST_VK_SRC` to it — the script
+recognises them as already applied and leaves the tree alone.
 
 The tiled concat is **opt-in at runtime**, behind `GGML_VK_CONCAT_TRANSPOSE=1`,
 so the same image can be measured with and without it. The units now pass
@@ -63,7 +62,18 @@ Generated text is identical with the flag on and off (375 bytes, same 16 lines,
 temperature 0), which is the check that matters: the concat feeds the delta-net
 state, so a wrong transpose would corrupt the answer instead of slowing it.
 
+**The path is confirmed taken, not assumed.** A one-off build with a counter in
+the selection function printed five hits per request, on tensors of
+`src0 3x8192` and `src1 2x8192` (strides 32768/4/4) — the conv-state concat of
+the delta-net layers, which is the shape the patch is for. That build was not
+kept: the shipped image is the plain patch, so the gain is not an artefact of a
+branch that never runs.
+
 **Changing a unit's flags needs `systemctl --user restart <unit>`.**
 `superfast-switch use <profile>` does nothing when that profile is already
 loaded, and the container keeps the old arguments; the proof that a flag took is
-`podman inspect <container> --format '{{.Config.Env}}'`.
+`podman inspect <container> --format '{{.Config.Env}}'`. And when a build prints
+its image ID, tag *that* ID: guessing one from `podman images` once tagged a
+half-built intermediate, and the profile died with
+`crun: executable file '-m' not found` because that image's entrypoint was the
+base image's shell.
