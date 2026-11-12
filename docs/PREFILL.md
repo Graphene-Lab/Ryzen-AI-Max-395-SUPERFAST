@@ -43,6 +43,31 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
+## The MTP flags cost more than they return
+
+The 35B carries a speculative-decoding head inside its weights, and the profile
+ran with the pair `--spec-type draft-mtp --spec-draft-n-max 2
+--spec-draft-p-min 0.6` until 2026-11-12. Measured on one image, one prompt,
+cold cache:
+
+| flags | prefill at 9,916 tok | decode |
+|---|---|---|
+| none | **1,241 tok/s** | 73.2 tok/s |
+| `--spec-draft-n-max 2` | 1,036 tok/s | 75.1 tok/s |
+| `--spec-draft-n-max 1` | 1,049 tok/s | 77.0 tok/s |
+
+The pair costs **16% of prefill and returns about 3% of decode**, which is noise,
+and the draft depth does not change it. The flags are gone from the 35B unit, and
+the production measurement follows: **1,245 / 1,026 / 843 tok/s** at 9,916 /
+39,617 / 64,016 tokens, against 1,040 / 897 / 726 with them. The 122B keeps the
+pair: there the measured decode gain is +25-40% (25.0 against 20.4 tok/s), which
+pays for the same prefill cost.
+
+This is also where the "12% gap" went. The production unit was 10-15% slower
+than the test container at the same depth, and the cause was the MTP flags, not
+the window — the two differ by 16% at 10k, which is the number the window never
+showed.
+
 ## The upstream Vulkan fixes
 
 The upstream Vulkan fixes for this chip are real and they are documented with

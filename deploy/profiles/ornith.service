@@ -16,14 +16,16 @@ ExecStart=/usr/bin/podman run --name ornith-server --rm -p 127.0.0.1:8731:8731 \
   -m /models/Ornith-1.5-35B-A3B-ROCmFP4.gguf \
   --host 0.0.0.0 --port 8731 \
   -c 262144 --alias ornith-1.5-35b-a3b --jinja \
-  --parallel 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --reasoning on --spec-mtp-strict-qwen --timeout 0
+  --parallel 1 --reasoning on --timeout 0
 # The MTP head is inside the weights file (a nextn block), and the model card
-# measures ~101 tok/s with it. It is NOT enabled here on purpose: the flag pair
+# measures ~101 tok/s with it, but on this runtime it is a net loss and the
+# flags are deliberately absent: measured 2026-11-12 on the same image and the
+# same prompt, the pair
 #   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6
-# has not been tried against this model on this runtime yet, and a draft
-# context that fails to initialise stops the server at startup (the Gemma MTP
-# head does exactly that, see deploy/profiles/README.md). Add the pair here
-# after the first measured run, and record the number in the README.
+# costs 16% of prefill (1,036 against 1,241 tok/s at 9,916 tokens) and returns
+# about 3% of decode (75.1 against 73.2 tok/s), which is noise. --spec-draft-n-max 1
+# does not change it (1,049 / 77.0). Re-add the pair only with a decode number
+# that pays for the prefill, and record it in the README.
 #
 # --timeout is llama.cpp's socket read/write timeout, 600 s by default; 0 turns
 # it off. A cold 262K prefill plus a long decode can outlast any fixed value,

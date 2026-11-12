@@ -86,6 +86,18 @@
 
 ### Changed
 
+- **The 35B drops the MTP flags: they cost 16% of prefill and return 3% of
+  decode.** Measured on one image and one prompt, cold cache: without them
+  1,241 tok/s prefill and 73.2 tok/s decode; with `--spec-type draft-mtp
+  --spec-draft-n-max 2 --spec-draft-p-min 0.6`, 1,036 and 75.1; with `n-max 1`,
+  1,049 and 77.0. The pair is a net loss on this runtime and the draft depth
+  does not change it. On the production unit that is **1,245 / 1,026 / 843 tok/s**
+  at 9,916 / 39,617 / 64,016 tokens, against 1,040 / 897 / 726 with the flags —
+  +20% / +14% / +16%. The 122B keeps them, because there the measured decode
+  gain is +25-40% and pays for the prefill. This is also the cause of the
+  10-15% gap between the test container and the production unit that I had
+  wrongly attributed to the context window.
+
 - **The build applies `deploy/patches/` itself, and its self-check no longer
   lies.** Two defects in `build-vulkan-image.sh`: the patch series lived outside
   the script, so a rebuild from a fresh clone produced an engine without them
