@@ -15,6 +15,24 @@ the reasons behind them are in
 [`deploy/profiles/README.md`](../deploy/profiles/README.md); the measured
 numbers are in the main README.
 
+### Measured: what the flags do at 60k
+
+Five runs of the 35B on a separate port, one flag changed at a time, the same
+60,016-token prompt and a cold cache each time (2026-11-12):
+
+| run | prefill |
+|---|---|
+| shipped flags (f16 KV, `-ub 512`, Flash Attention `auto`) | **831 t/s** |
+| `--flash-attn on` | 820 t/s (−1%, noise: `auto` already resolves to on) |
+| `-ub 1024` | 785 t/s (−5%) |
+| `-ub 256` | 728 t/s (−12%) |
+| `-ctk q8_0 -ctv q8_0 --flash-attn on` | 619 t/s (−25%) |
+
+Only the last line changed a decision. The same comparison on the 122B gives
+220 t/s with q8_0 against 268 with f16, so that profile moved to the f16 cache
+and pays about 3 GiB for it. The batch size and an explicit Flash Attention buy
+nothing: the defaults are already the best of the three, and FA is on.
+
 The `HALOGEN_*` family — the environment variables of the dense engine — went
 away on 2026-11-07 with that profile and its image. A `HALOGEN_*` name now
 reaches nothing, and `docker-compose.yml` no longer exists.

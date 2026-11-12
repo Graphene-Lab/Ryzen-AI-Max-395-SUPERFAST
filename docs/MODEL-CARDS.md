@@ -14,7 +14,7 @@ client has to declare for that to happen.
 |---|---|---|---|---|---|---|
 | gemma-4-26b-a4b | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | no client channel | per request, but it hurts code (measured) | 262,144 | MTP head `mtp-gemma-…-Q8_0.gguf` | 14.9 GB |
 | ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights | 19 GB |
-| ornith-1.5-122b | **yes**, `--mmproj mmproj-Ornith-1.5-122B-BF16.gguf` in its active drop-in | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, q8_0 KV | 69.7 GB |
+| ornith-1.5-122b | **yes**, `--mmproj mmproj-Ornith-1.5-122B-BF16.gguf` in its active drop-in | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, f16 KV | 69.7 GB |
 | deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
 | Nemotron 3.5 120B (reference, not a profile) | **yes**, `--mmproj mmproj-BF16.gguf` | trained for it, still no client channel | per request, `chat_template_kwargs.enable_thinking` | 1,048,576 | MTP head `mtp-Q8_0.gguf` | 65.8 GB |
 

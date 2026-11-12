@@ -15,12 +15,17 @@ ExecStart=/usr/bin/podman run --name ornith122-server --rm -p 127.0.0.1:8731:873
   -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
   --host 0.0.0.0 --port 8731 \
   -c 262144 --alias ornith-1.5-122b --jinja \
-  -ctk q8_0 -ctv q8_0 -fa on \
+  --flash-attn on \
   --parallel 1 --timeout 0 \
   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 --spec-mtp-strict-qwen
-# -ctk/-ctv q8_0 is the vendor's KV setting for this model: half the f16 cache
-# (~3 GiB instead of ~6 GiB for the whole 262K window) and the configuration
-# the 2026-10-25 re-measurement was taken with. -fa on is required by it.
+# The KV cache is f16, the default, and that reverses an earlier choice. The
+# vendor recommends q8_0 for this model and it buys back about 3 GiB of the
+# 262K window, but on this engine the quantized cache costs prefill: measured
+# 2026-11-12 on a 60,016-token prompt, 272.6 s with q8_0 against 224.1 s with
+# f16 (220 against 268 t/s, +22%), and the same comparison on the 35B gives
+# 619 against 831 t/s. The project's own PipelineScore rows also put f16
+# ahead on quality, 84.0 against 81.9. What it costs is decode, 22.2 against
+# 23.5 t/s, and ~3 GiB of the 45 GiB this profile leaves free.
 # --reasoning is deliberately absent: this model answers with the thinking on.
 # Measured on 2026-10-25 with PipelineScore, turning it off cost 10.5 points
 # (73.5 against 84.0) because the code tasks dropped from 100 to 75. The 35B

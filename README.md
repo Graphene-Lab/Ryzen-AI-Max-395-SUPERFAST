@@ -105,7 +105,7 @@ machine except where a row says otherwise:
 | profile | model | id for the client | speed here (prose / code) | best for |
 |---|---|---|---|---|
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
-| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, q8_0 KV, MTP inside the weights, reads images by default |
+| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, f16 KV, MTP inside the weights, reads images by default |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision on a quarter of the 122B's memory |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -463,7 +463,7 @@ podman run --rm -p 127.0.0.1:8731:8731 \
   --mmproj /models/mmproj-Ornith-1.5-122B-BF16.gguf \
   --host 0.0.0.0 --port 8731 -c 262144 \
   --alias ornith-1.5-122b --jinja \
-  -ctk q8_0 -ctv q8_0 -fa on --parallel 1 --timeout 0 \
+  --flash-attn on --parallel 1 --timeout 0 \
   --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.6 \
   --spec-mtp-strict-qwen
 ```
@@ -522,7 +522,7 @@ note):
 | profile | runtime | prose | code | context probe (~2.2K) |
 |---|---|---|---|---|
 | Gemma-4-26B-A4B it, Q4_0 ROCmFP4 | llama-rocmfpx | **57.3 t/s** | **57.6 t/s** | ~1527 t/s |
-| Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw), q8_0 KV | llama.cpp (Vulkan) | **25.0 t/s** | **28.2 t/s** | ~512 t/s |
+| Ornith-1.5-122B MoE, MXFP4 (~4.45 bpw), f16 KV | llama.cpp (Vulkan) | **25.0 t/s** | **28.2 t/s** | ~512 t/s |
 | DeepSeek-V4-Flash ROCmFPX (~2.6 bpw), optional | llama-rocmfpx | **11.2 t/s** | **11.3 t/s** | ~163 t/s |
 
 Ornith-1.5-122B is the largest profile and it is a mixture-of-experts: 122B in
@@ -661,9 +661,9 @@ and the unit passes `--spec-type draft-mtp --spec-draft-n-max 2
 step and kept only where the full model agrees.
 
 The 122B is a hybrid: 48 layers, of which 12 use full attention and the rest
-carry O(1) recurrent state, so the KV cache stays small — about 3 GB for the
-whole 262,144-token window with the q8_0 cache the vendor recommends. The
-checkpoint is 69.7 GB and the profile is 75 GB resident, which leaves about
+carry O(1) recurrent state, so the KV cache stays small — about 6 GB for the
+whole 262,144-token window with the f16 cache it ships. The
+checkpoint is 69.7 GB and the profile is 78 GB resident, which leaves about
 45 GB of the 124 GB pool for the rest of the system.
 
 This is the layout AMD describes for large models on these APUs: the BIOS UMA
@@ -1021,11 +1021,13 @@ are kept as a note: they measured the same models under the same conditions and 
 ranking, but they were not published.
 
 The two `ornith122` rows were measured on 2026-10-25, the q8_0 one after the
-f16 one and both with the thinking on, which is how the profile ships. The
-q8_0 KV cache is the configuration it ships with, on the vendor's
-recommendation and at half the cache size; it scores **81.9** against **84.0**
-for f16, with code at 100 in both, reasoning 80 against 90, and speed 23.5
-against 22.2. Turning the thinking off is a separate, larger cost: the same
+f16 one and both with the thinking on. The profile now ships the **f16** cache,
+which scores **84.0** against **81.9** for q8_0, with code at 100 in both,
+reasoning 80 against 90, and speed 22.2 against 23.5. The quantized cache was
+the earlier choice, on the vendor's recommendation and to buy back about 3 GiB;
+it was dropped on 2026-11-12 because on this engine it also costs prefill, 220
+against 268 t/s on a 60,016-token prompt. Turning the thinking off is a
+separate, larger cost: the same
 model with `--reasoning off` scored **73.5**. The cards are
 [a8c8b2f8](https://pipelinescore.ai/s/a8c8b2f8-9e38-4bb8-94ee-2c31d2073353)
 (q8_0) and

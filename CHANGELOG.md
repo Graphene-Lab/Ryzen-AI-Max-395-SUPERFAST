@@ -24,6 +24,20 @@
 
 ### Changed
 
+- **The 122B ships the f16 KV cache, because the quantized one costs a quarter
+  of the prefill.** The vendor recommends q8_0 for this model and it buys back
+  about 3 GiB of the 262K window, which is why the profile shipped it. Measured
+  on 2026-11-12, on a 60,016-token prompt with a cold cache: 272.6 s with q8_0
+  against 224.1 s with f16, 220 against 268 t/s (+22%); the same comparison on
+  the 35B gives 619 against 831 t/s. The project's own PipelineScore rows also
+  put f16 ahead on quality, 84.0 against 81.9, with reasoning 80 against 90. It
+  costs decode, 22.2 against 23.5 t/s, and ~3 GiB of the 45 GiB this profile
+  leaves free. Nothing else about the profile changed: same window, same MTP
+  speculation, same vision drop-in. The flag sweep behind the decision — batch
+  size, explicit Flash Attention, the KV type — is in `docs/FLAGS.md`, and the
+  two flags that look free are worth nothing: FA `auto` is already on and
+  `-ub 512` is the best of the three sizes tried.
+
 - **The project is MIT-licensed.** `LICENSE.md` was a Peonist End User License
   Agreement covering an engine binary that no longer ships; it is now the plain
   MIT text, copyright Andrea Bruno, and it covers everything in this repository
