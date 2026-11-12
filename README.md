@@ -530,13 +530,14 @@ note):
 Ornith-1.5-122B is the largest profile and it is a mixture-of-experts: 122B in
 total, about 6B active per token, 48 layers of which 12 use full attention.
 The checkpoint is 69.7 GB, so it leaves about 45 GB of the 124 GB pool for the
-KV cache and the rest of the system; 75 GB was resident with a 262,144-token
-window and a q8_0 KV cache (~3 GB for the whole window). The MTP head is
-inside the weights and the engine accepted 85% of its drafts, which is where
-the 25.0 and 28.2 come from: without speculation the same run measured 20.4 in
-prose and 20.6 in code. With the f16 KV cache the same profile measured 24.6
-and 27.6 at 77 GB resident; the q8_0 cache is what the profile ships, because
-the vendor recommends it for this model and it buys back about 3 GB.
+KV cache and the rest of the system; with the f16 KV cache it is 77 GB resident
+for a 262,144-token window. The MTP head is inside the weights and the engine
+accepted 85% of its drafts, which is where the 25.0 and 28.2 come from: without
+speculation the same run measured 20.4 in prose and 20.6 in code, which is why
+this profile keeps the flags while the 35B drops them. The cache is **f16**, not
+the q8_0 the vendor recommends: on this engine the quantized cache costs 22-25%
+of prefill (220 against 268 tok/s at 60,016 tokens) and the ~3 GB it saves are
+not worth it — see [`docs/PREFILL.md`](docs/PREFILL.md).
 
 DeepSeek-V4-Flash deserves its own note, because it needed a change to the
 machine itself. The weights are 91.5 GB, of which the runtime wanted about

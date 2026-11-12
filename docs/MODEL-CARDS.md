@@ -13,7 +13,7 @@ client has to declare for that to happen.
 | model | image | video | reasoning switch | context | speculation | weights |
 |---|---|---|---|---|---|---|
 | gemma-4-26b-a4b | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | no client channel | per request, but it hurts code (measured) | 262,144 | MTP head `mtp-gemma-…-Q8_0.gguf` | 14.9 GB |
-| ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights | 19 GB |
+| ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights, **not used** (−16% prefill for +3% decode) | 19 GB |
 | ornith-1.5-122b | **yes**, `--mmproj mmproj-Ornith-1.5-122B-BF16.gguf` in its active drop-in | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, f16 KV | 69.7 GB |
 | deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
 | Nemotron 3.5 120B (reference, not a profile) | **yes**, `--mmproj mmproj-BF16.gguf` | trained for it, still no client channel | per request, `chat_template_kwargs.enable_thinking` | 1,048,576 | MTP head `mtp-Q8_0.gguf` | 65.8 GB |
@@ -59,13 +59,14 @@ the server between unrelated sessions, and set `cache_prompt: false` for the req
 
 ```
 llama-server -m Ornith-1.5-35B-A3B-ROCmFP4.gguf -mm mmproj-Ornith-1.5-35B-BF16.gguf \
-  -ngl 999 -c 131072 -fa on -np 1 \
-  --spec-type draft-mtp --spec-mtp-strict-qwen \
-  --spec-draft-n-max 2 --spec-draft-p-min 0.6
+  -ngl 999 -c 262144 -fa on -np 1
 ```
 
-`--spec-mtp-strict-qwen` is not in our build either. `-np 1` and `-c 131072` are one step below
-the 262144 we serve.
+The card quotes the MTP pair (`--spec-type draft-mtp --spec-draft-n-max 2
+--spec-draft-p-min 0.6`) as well. On this engine that pair costs 16% of prefill
+and returns about 3% of decode, so the profile runs without it — the numbers are
+in [`PREFILL.md`](PREFILL.md). `--spec-mtp-strict-qwen` **does** exist in our
+build: patch 0012 adds it, and the 122B profile uses it.
 
 **KV cache.** `q8_0` is described as the safe step down; `q4_0` and `q4_1` are a known cause of
 degraded long-horizon coherence.

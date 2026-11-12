@@ -40,15 +40,25 @@ has_patch0012() {
 # The image is published in the project's package: pull it and skip the clone
 # and the build. The build is the fallback when the pull fails or when the
 # published image predates patch 0012.
+#
+# A published image cannot carry a patch that lives in this repository, so as
+# soon as deploy/patches/ has something in it the pull is skipped: otherwise a
+# fresh machine would get the upstream image and silently run without the local
+# fixes, while the docs say the script applies them.
+PATCHES=("$HERE"/patches/*.patch)
 PUBLISHED="${SUPERFAST_VK_PULL:-ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1}"
-if podman pull "$PUBLISHED" >/dev/null 2>&1; then
+if [ -e "${PATCHES[0]}" ] && [ -z "${SUPERFAST_VK_PULL:-}" ]; then
+    echo "local patches present: building instead of pulling $PUBLISHED"
+    PUBLISHED=""
+fi
+if [ -n "$PUBLISHED" ] && podman pull "$PUBLISHED" >/dev/null 2>&1; then
     if has_patch0012 "$PUBLISHED"; then
         podman tag "$PUBLISHED" "$IMG"
         echo "pulled $PUBLISHED as $IMG"
         exit 0
     fi
     echo "$PUBLISHED predates patch 0012; building $REF instead"
-else
+elif [ -n "$PUBLISHED" ]; then
     echo "could not pull $PUBLISHED; building instead"
 fi
 
