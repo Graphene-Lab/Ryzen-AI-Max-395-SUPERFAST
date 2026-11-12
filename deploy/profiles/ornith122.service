@@ -11,6 +11,7 @@ ExecStart=/usr/bin/podman run --name ornith122-server --rm -p 127.0.0.1:8731:873
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
   --security-opt seccomp=unconfined --ipc=host \
   -v __ORNITH122_DIR__:/models:ro \
+  -e GGML_VK_CONCAT_TRANSPOSE=1 \
   localhost/superfast-vk:patch0012 \
   -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
   --host 0.0.0.0 --port 8731 \

@@ -47,21 +47,28 @@
   port — with the reason, so the decision can be revisited on numbers instead
   of re-researched.
 
-- **Two of the upstream Vulkan prefill fixes are ported, measured, and left
-  off.** The delta-net concat transpose (`1440613`) and the fused silu/mul
+- **Two of the upstream Vulkan prefill fixes are ported, measured, and enabled in
+  the units.** The delta-net concat transpose (`1440613`) and the fused silu/mul
   (`ed809a4`) from `Nathanw1014/llama.cpp` were adapted to our tree — the concat
   dispatch there extends helpers (`ggml_vk_concat_*`) ours does not have — and
-  built as `localhost/superfast-vk:prefill`. The change is
+  built as `localhost/superfast-vk:prefill`, now tagged `patch0012` with the old
+  image kept as `patch0012-base`. The change is
   `deploy/patches/vulkan-prefill-20261112.patch`, with the build recipe beside
-  it; the concat path sits behind `GGML_VK_CONCAT_TRANSPOSE=1`, so one binary
-  gives both arms. On the 35B, cold cache: 1,199 → 1,243 tok/s at 9,916 tokens
-  (+3.7%), 995 → 1,025 at 39,617 (+3.0%), 823 → 831 at 64,016 (+1.0%), and the
-  generated text is byte-identical (375 bytes, same 16 lines at temperature 0).
-  The baseline arm reproduces production (833 against 831 tok/s at 60k). It
-  stays off in the units: one percent at the depths this machine works at does
-  not justify a hand-ported patch in production. `mmid-scale-epilogue` is not
+  it, and the concat path sits behind `GGML_VK_CONCAT_TRANSPOSE=1`, which the
+  four profile files now pass. On the 35B, cold cache, one binary, 96K window:
+  1,199 → 1,243 tok/s at 9,916 tokens (+3.7%), 995 → 1,025 at 39,617 (+3.0%),
+  823 → 831 at 64,016 (+1.0%). On the production configuration — 262K window,
+  MTP, vision, gateway, the same unit restarted with and without the variable —
+  the gain is +2.4% at 9,916, +1.5% at 39,617 and **0% at 64,016**. Generated
+  text is byte-identical (375 bytes, same 16 lines at temperature 0). `mmid-scale-epilogue` is not
   ported — it needs the `mmid-rowlists` prepass our tree lacks — and
   `fa-f16-kv-contig` is for head-dim 128 models.
+
+- **The 262K window costs about 12% of prefill.** At the same depth, 728 tok/s
+  with `-c 262144` against 823 with `-c 98304`, and 1,016 against 1,199 at 10k.
+  262,144 is the model's native size, not a measured need; a window sized to the
+  work would give that back. Measured while comparing the two arms above, so it
+  is the same model, the same image and the same prompt.
 
 - **`docs/UPSTREAM.md` is the register of everything the machine is pinned to**
   or was measured against: engine source commit and image digest, Mesa and

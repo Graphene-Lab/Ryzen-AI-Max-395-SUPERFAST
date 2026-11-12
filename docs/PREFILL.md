@@ -85,14 +85,35 @@ delta-net state, so a wrong transpose would corrupt the answer rather than slow
 it. The baseline arm also reproduces the production number (833 against 831
 tok/s at 60k), so the comparison is between two arms of the same engine.
 
-It stays **off in the units**. At the depths this machine works at — 60k to 78k
-— the gain is one percent, and shipping a hand-ported patch in the production
-engine for a percent is a bad trade. The third fix of the group,
-`vulkan-mmid-scale-epilogue` (`5edacdd`), is not ported: it depends on the
-`vulkan-mmid-rowlists` prepass (`ffe5cb4`) that our tree does not have, and it is
-worth +4% at 2048 tokens, which is not a depth this machine sees.
-`vulkan-fa-f16-kv-contig` (`ab5910a`) is the one for head-dim 128 models and
-does not pay here.
+It is **on in the units**: `-e GGML_VK_CONCAT_TRANSPOSE=1` in `ornith.service` and
+`ornith122.service` and in their vision drop-ins. The same measurement on the
+production configuration — 262K window, MTP, vision, through the gateway — gives
+a smaller gain, because the window itself costs more than the patch buys:
+
+| prompt | patch off | patch on | delta |
+|---|---|---|---|
+| 9,916 tok | 1,016 tok/s | 1,040 tok/s | +2.4% |
+| 39,617 tok | 884 tok/s | 897 tok/s | +1.5% |
+| 64,016 tok | 728 tok/s | 726 tok/s | 0% |
+
+Those two arms are the same unit restarted, so the only difference is the
+variable. The larger finding is in the OFF column: **the 262K window costs about
+12% of prefill** at the same depth (728 against 823 tok/s with a 96K window, and
+1,016 against 1,199 at 10k). A window the size of the one this machine actually
+uses would give that back; 262,144 is the model's native size, not a measured
+need.
+
+The third fix of the group, `vulkan-mmid-scale-epilogue` (`5edacdd`), is not
+ported: it depends on the `vulkan-mmid-rowlists` prepass (`ffe5cb4`) that our
+tree does not have, and it is worth +4% at 2048 tokens, which is not a depth this
+machine sees. `vulkan-fa-f16-kv-contig` (`ab5910a`) is the one for head-dim 128
+models and does not pay here.
+
+One trap when changing a unit's flags: `superfast-switch use <profile>` does
+**nothing** when that profile is already loaded — it reports the profile serving
+and leaves the old container running. A flag change needs
+`systemctl --user restart <unit>`, and the check that it took is
+`podman inspect <container> --format '{{.Config.Env}}'`.
 
 ## Why not the NPU
 
