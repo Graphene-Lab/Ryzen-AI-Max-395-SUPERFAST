@@ -67,7 +67,7 @@ def extract_body(text):
     return code + "\n"
 
 
-def chat(model, prompt, timeout=900):
+def chat(model, prompt, max_tokens, timeout=900):
     body = json.dumps(
         {
             "model": model,
@@ -76,6 +76,7 @@ def chat(model, prompt, timeout=900):
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0,
+            "max_tokens": max_tokens,
             "stream": False,
         }
     ).encode("utf-8")
@@ -154,6 +155,9 @@ def main():
     ap.add_argument("--tasks", default="all")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--max-tokens", type=int, default=512,
+                    help="completion budget; the archived 2026-10 records used 512, "
+                         "the table in the README was re-measured at 2048")
     args = ap.parse_args()
 
     served = require_model(args.model)
@@ -191,7 +195,8 @@ def main():
         rec = {"index": i, "name": row["name"], "model": args.model, "served": served,
                "started": started}
         try:
-            completion, usage = chat(args.model, PROMPT.format(prompt=row["prompt"]))
+            completion, usage = chat(args.model, PROMPT.format(prompt=row["prompt"]),
+                                     args.max_tokens)
             rec["completion_tokens"] = usage.get("completion_tokens")
             code = extract_body(completion)
             rec["gen_seconds"] = round(time.time() - t0, 1)
