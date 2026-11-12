@@ -1,0 +1,209 @@
+diff --git a/rocmfpx/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/rocmfpx/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index 780f2f6..f69c6cb 100644
+--- a/rocmfpx/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/rocmfpx/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -814,6 +814,7 @@ struct vk_device_struct {
+     vk_pipeline pipeline_add_id_f32;
+ 
+     vk_pipeline pipeline_concat_i8, pipeline_concat_i16, pipeline_concat_i32, pipeline_concat_i64;
++    vk_pipeline pipeline_concat_transpose_i32;
+     vk_pipeline pipeline_upscale_nearest_f32, pipeline_upscale_bilinear_f32, pipeline_upscale_bicubic_f32, pipeline_upscale_bilinear_antialias_f32;
+     vk_pipeline pipeline_scale_f32;
+     vk_pipeline pipeline_log[2];
+@@ -5491,6 +5492,8 @@ static void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
+     ggml_vk_create_pipeline(device, device->pipeline_concat_i8, "concat_i8", concat_i8_len, concat_i8_data, "main", 3, sizeof(vk_op_binary_push_constants), {512, 1, 1}, {}, 1);
+     ggml_vk_create_pipeline(device, device->pipeline_concat_i16, "concat_i16", concat_i16_len, concat_i16_data, "main", 3, sizeof(vk_op_binary_push_constants), {512, 1, 1}, {}, 1);
+     ggml_vk_create_pipeline(device, device->pipeline_concat_i32, "concat_i32", concat_i32_len, concat_i32_data, "main", 3, sizeof(vk_op_binary_push_constants), {512, 1, 1}, {}, 1);
++    // One workgroup per 32x32 tile: elements are passed as (rows, cols, 1).
++    ggml_vk_create_pipeline(device, device->pipeline_concat_transpose_i32, "concat_transpose_i32", concat_transpose_i32_len, concat_transpose_i32_data, "main", 3, sizeof(vk_op_binary_push_constants), {32, 32, 1}, {}, 1);
+     ggml_vk_create_pipeline(device, device->pipeline_concat_i64, "concat_i64", concat_i64_len, concat_i64_data, "main", 3, sizeof(vk_op_binary_push_constants), {512, 1, 1}, {}, 1);
+ 
+     ggml_vk_create_pipeline(device, device->pipeline_upscale_nearest_f32, "upscale_f32", upscale_f32_len, upscale_f32_data, "main", 2, sizeof(vk_op_upscale_push_constants), {512, 1, 1}, {GGML_SCALE_MODE_NEAREST}, 1);
+@@ -11033,6 +11036,32 @@ static vk_conv_shapes ggml_vk_conv_select_shape(ggml_backend_vk_context * ctx, u
+     }
+ }
+ 
++// The delta-net conv-state path does ggml_transpose() straight into a dim-0
++// ggml_concat(), so the generic concat kernel reads src1 fully de-coalesced: one
++// element per thread, neighbouring lanes on different cache lines. Route that
++// exact shape to a tiled-transpose kernel. Off unless GGML_VK_CONCAT_TRANSPOSE=1,
++// so the old path stays available for an A/B on the same binary.
++static bool ggml_vk_concat_is_transposed(const ggml_tensor * src0, const ggml_tensor * src1, const ggml_tensor * dst) {
++    static const char * env = getenv("GGML_VK_CONCAT_TRANSPOSE");
++    if (!(env && atoi(env) != 0)) {
++        return false;
++    }
++    if (ggml_get_op_params_i32(dst, 0) != 0) {           // dim 0 only
++        return false;
++    }
++    if (src0->ne[2] != 1 || src0->ne[3] != 1 || src1->ne[2] != 1 || src1->ne[3] != 1) {
++        return false;
++    }
++    const size_t ts = ggml_type_size(src0->type);
++    if (src0->nb[0] != ts || dst->nb[0] != ts) {          // src0 and dst rows must be contiguous
++        return false;
++    }
++    if (src1->nb[0] <= src1->nb[1]) {                     // src1 must actually be transposed
++        return false;
++    }
++    return src0->ne[1] == src1->ne[1] && dst->ne[1] == src1->ne[1];
++}
++
+ static vk_pipeline ggml_vk_op_get_pipeline(ggml_backend_vk_context * ctx, const ggml_tensor * src0, const ggml_tensor * src1, const ggml_tensor * src2, const ggml_tensor * dst, ggml_op op) {
+     switch (op) {
+     case GGML_OP_GET_ROWS:
+@@ -11119,6 +11148,9 @@ static vk_pipeline ggml_vk_op_get_pipeline(ggml_backend_vk_context * ctx, const
+             return nullptr;
+         }
+         const size_t type_size = ggml_type_size(src0->type);
++        if (type_size == 4 && ggml_vk_concat_is_transposed(src0, src1, dst)) {
++            return ctx->device->pipeline_concat_transpose_i32;
++        }
+         switch (type_size) {
+         case 1:
+             return ctx->device->pipeline_concat_i8;
+@@ -12052,6 +12084,12 @@ static void ggml_vk_op_f32(ggml_backend_vk_context * ctx, vk_context& subctx, co
+                 elements[1] = std::min(elements[1], ctx->device->properties.limits.maxComputeWorkGroupCount[1]);
+                 elements[2] = std::min(elements[2], ctx->device->properties.limits.maxComputeWorkGroupCount[2]);
+             }
++
++            if (pipeline == ctx->device->pipeline_concat_transpose_i32) {
++                // One workgroup per 32x32 tile: the pipeline's workgroup size is
++                // {32, 32, 1}, so the grid is derived from (rows, cols).
++                elements = { (uint32_t)src1->ne[1], (uint32_t)src1->ne[0], 1 };
++            }
+         } break;
+     case GGML_OP_ADD_ID:
+         {
+@@ -15145,6 +15183,22 @@ static bool ggml_vk_build_graph(ggml_backend_vk_context * ctx, ggml_cgraph * cgr
+             break;
+         }
+ 
++        // Fused silu(x)*y: run it as a swiglu split, writing straight to the MUL's destination.
++        if (ctx->num_additional_fused_ops == 1) {
++            ggml_tensor * mul   = cgraph->nodes[node_idx + 1];
++            ggml_tensor * other = (mul->src[0] == node) ? mul->src[1] : mul->src[0];
++
++            ggml_tensor fused = *mul;
++            fused.op = GGML_OP_GLU;
++            memset(fused.op_params, 0, sizeof(fused.op_params));
++            ggml_set_op_params_i32(&fused, 0, (int32_t) GGML_GLU_OP_SWIGLU);
++            fused.src[0] = node->src[0];
++            fused.src[1] = other;
++
++            ggml_vk_glu(ctx, compute_ctx, fused.src[0], fused.src[1], &fused);
++            break;
++        }
++
+         switch (ggml_get_unary_op(node)) {
+         case GGML_UNARY_OP_ELU:
+         case GGML_UNARY_OP_EXP:
+@@ -16238,6 +16292,37 @@ static bool ggml_vk_can_fuse(const ggml_backend_vk_context * ctx, const struct g
+         }
+     }
+ 
++    // EXPERIMENT (GGML_VK_FUSE_UNARY_MUL=1): silu(x)*y is emitted as two nodes by the delta-net
++    // path, so the silu result makes a full round trip through memory. That is the same shape
++    // swiglu-split already computes in one pass, so route the pair to the existing GLU pipeline.
++    if (ops.size() == 2 && ops.begin()[0] == GGML_OP_UNARY && ops.begin()[1] == GGML_OP_MUL) {
++        static const char * env = getenv("GGML_VK_FUSE_UNARY_MUL");
++        if (!(env && atoi(env) != 0)) {
++            return false;
++        }
++        const ggml_tensor * unary = cgraph->nodes[node_idx];
++        const ggml_tensor * mul   = cgraph->nodes[node_idx + 1];
++
++        if (ggml_get_unary_op(unary) != GGML_UNARY_OP_SILU) {
++            return false;
++        }
++        if (mul->src[0] != unary && mul->src[1] != unary) {
++            return false;
++        }
++        const ggml_tensor * other = (mul->src[0] == unary) ? mul->src[1] : mul->src[0];
++        // The GLU split shader walks both inputs and the output with the same element count.
++        if (unary->type != GGML_TYPE_F32 || other->type != GGML_TYPE_F32 || mul->type != GGML_TYPE_F32) {
++            return false;
++        }
++        if (!ggml_are_same_shape(unary, other) || !ggml_are_same_shape(unary, mul)) {
++            return false;
++        }
++        if (!ggml_is_contiguous(unary->src[0]) || !ggml_is_contiguous(other) || !ggml_is_contiguous(mul)) {
++            return false;
++        }
++        return true;
++    }
++
+     auto const &mmid_mul_ok = [&](const ggml_tensor *mmid, const ggml_tensor *mul) {
+         const ggml_tensor *scale = mul->src[1];
+ 
+@@ -16713,6 +16798,9 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
+                 fusion_string = "MUL_MAT_ID_MUL";
+                 op_srcs_fused_elementwise[0] = false;
+                 op_srcs_fused_elementwise[1] = true;
++            } else if (ggml_vk_can_fuse(ctx, cgraph, i, { GGML_OP_UNARY, GGML_OP_MUL })) {
++                ctx->num_additional_fused_ops = 1;
++                fusion_string = "SILU_MUL";
+             } else if (ggml_can_fuse_subgraph(cgraph, i, { GGML_OP_RMS_NORM, GGML_OP_MUL, GGML_OP_ROPE, GGML_OP_VIEW, GGML_OP_SET_ROWS }, { i + 4 }) &&
+                        ggml_check_edges(cgraph, i, rms_norm_mul_rope_view_set_rows_edges) &&
+                        ggml_vk_can_fuse_rms_norm_mul_rope(ctx, cgraph, i) &&
+diff --git a/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/concat_transpose.comp b/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/concat_transpose.comp
+new file mode 100644
+index 0000000..53ef96d
+--- /dev/null
++++ b/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/concat_transpose.comp
+@@ -0,0 +1,43 @@
++#version 450
++
++#include "types.glsl"
++#include "generic_binary_head.glsl"
++
++layout(local_size_x = 32, local_size_y = 8, local_size_z = 1) in;
++
++// dim-0 concat whose src1 is transposed. The generic kernel reads src1 with the
++// transposed stride, so neighbouring lanes touch different cache lines. Stage a
++// 32x32 tile in shared memory instead, which keeps both the load and the store
++// coalesced. 33 columns pads away the shared-memory bank conflicts.
++shared A_TYPE tmp[32][33];
++
++void main() {
++    const uint tx = gl_LocalInvocationID.x;
++    const uint ty = gl_LocalInvocationID.y;
++
++    const uint row = gl_WorkGroupID.x * 32 + tx;
++
++    // src0 is already contiguous, copy it straight through.
++    if (gl_WorkGroupID.y == 0 && row < p.ne01) {
++        for (uint i0 = ty; i0 < p.ne00; i0 += 8) {
++            data_d[get_doffset() + row*p.nb21 + i0*p.nb20] = D_TYPE(data_a[get_aoffset() + row*p.nb01 + i0*p.nb00]);
++        }
++    }
++
++    [[unroll]] for (uint j = 0; j < 32; j += 8) {
++        const uint c = gl_WorkGroupID.y * 32 + ty + j;
++        if (c < p.ne10 && row < p.ne11) {
++            tmp[ty + j][tx] = A_TYPE(data_b[get_boffset() + c*p.nb10 + row*p.nb11]);
++        }
++    }
++
++    barrier();
++
++    const uint col = gl_WorkGroupID.y * 32 + tx;
++    [[unroll]] for (uint j = 0; j < 32; j += 8) {
++        const uint r = gl_WorkGroupID.x * 32 + ty + j;
++        if (col < p.ne10 && r < p.ne11) {
++            data_d[get_doffset() + r*p.nb21 + (p.ne00 + col)*p.nb20] = D_TYPE(tmp[tx][ty + j]);
++        }
++    }
++}
+diff --git a/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp b/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
+index a6bf816..c8bfd5f 100644
+--- a/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
++++ b/rocmfpx/ggml/src/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
+@@ -898,6 +898,7 @@ void process_shaders() {
+     string_to_spv("concat_i8", "concat.comp", {{"A_TYPE", "uint8_t"}, {"B_TYPE", "uint8_t"}, {"D_TYPE", "uint8_t"}});
+     string_to_spv("concat_i16", "concat.comp", {{"A_TYPE", "uint16_t"}, {"B_TYPE", "uint16_t"}, {"D_TYPE", "uint16_t"}});
+     string_to_spv("concat_i32", "concat.comp", {{"A_TYPE", "uint"}, {"B_TYPE", "uint"}, {"D_TYPE", "uint"}});
++    string_to_spv("concat_transpose_i32", "concat_transpose.comp", {{"A_TYPE", "uint"}, {"B_TYPE", "uint"}, {"D_TYPE", "uint"}});
+     string_to_spv("concat_i64", "concat.comp", {{"A_TYPE", "uvec2"}, {"B_TYPE", "uvec2"}, {"D_TYPE", "uvec2"}});
+ 
+     string_to_spv("upscale_f32", "upscale.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}});

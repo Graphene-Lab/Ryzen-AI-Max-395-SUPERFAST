@@ -43,7 +43,7 @@ recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
 about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
 points (84.0 against 81.9 on PipelineScore).
 
-## The one lever we did not pull
+## The upstream Vulkan fixes
 
 The upstream Vulkan fixes for this chip are real and they are documented with
 numbers: [`Nathanw1014/strix-halo-llamacpp`](https://github.com/Nathanw1014/strix-halo-llamacpp)
@@ -63,23 +63,36 @@ our engine — Qwen3-VL-8B, dense, 36 layers — gave 355 tok/s at 25k, which is
 their *stock* value (358 at 32k), so the collapse is real and our engine has not
 got the contiguity fix.
 
-Not ported, for three reasons, all of them measured:
+**Ported, measured, and left opt-in.** On 2026-11-12 the concat transpose
+(`1440613`) and the fused silu/mul (`ed809a4`) were adapted by hand to our tree
+— the concat dispatch it extends (`ggml_vk_concat_supported`,
+`ggml_vk_concat_unit_size`) does not exist here — and built as
+`localhost/superfast-vk:prefill`. The change lives in
+[`deploy/patches/vulkan-prefill-20261112.patch`](../deploy/patches/vulkan-prefill-20261112.patch),
+with the build recipe next to it. The concat path is gated at runtime by
+`GGML_VK_CONCAT_TRANSPOSE=1`, so one image gives both arms. Measured on the 35B,
+cold cache, same prompt:
 
-1. the expected gain at our depths is about +10% on the 122B (268 → ~295 tok/s);
-2. the patches are written against a newer llama.cpp: the concat dispatch they
-   extend (`ggml_vk_concat_supported`, `ggml_vk_concat_unit_size`) does not exist
-   in our tree, so each of the three needs manual adaptation, a rebuild and a
-   full re-measurement of the published numbers;
-3. one of the four (`vulkan-fuse-silu-mul`) applies cleanly and is worth +0.76%,
-   which does not justify an image on its own.
+| prompt | patch off | patch on | delta |
+|---|---|---|---|
+| 9,916 tok | 1,199 tok/s | 1,243 tok/s | +3.7% |
+| 39,617 tok | 995 tok/s | 1,025 tok/s | +3.0% |
+| 64,016 tok | 823 tok/s | 831 tok/s | +1.0% |
 
-The recipe, if it ever is worth it: branch `vulkan-concat-transpose` (`1440613`,
-82 lines), `vulkan-mmid-scale-epilogue` (`5edacdd`, 69 lines, stacked on
-`vulkan-mmid-rowlists` `ffe5cb4`) and `vulkan-fuse-silu-mul` (`ed809a4`,
-50 lines) on `Nathanw1014/llama.cpp`; port them into `pugant/strix-nebulosa`
-under `rocmfpx/`, build a separate image tag, and measure with the prompt above
-before touching a unit. `vulkan-fa-f16-kv-contig` (`ab5910a`) is the one for
-head-dim 128 models and does not pay here.
+Generated text is byte-identical with the flag on and off (375 bytes, same 16
+lines at temperature 0), which is the check that matters: the concat feeds the
+delta-net state, so a wrong transpose would corrupt the answer rather than slow
+it. The baseline arm also reproduces the production number (833 against 831
+tok/s at 60k), so the comparison is between two arms of the same engine.
+
+It stays **off in the units**. At the depths this machine works at — 60k to 78k
+— the gain is one percent, and shipping a hand-ported patch in the production
+engine for a percent is a bad trade. The third fix of the group,
+`vulkan-mmid-scale-epilogue` (`5edacdd`), is not ported: it depends on the
+`vulkan-mmid-rowlists` prepass (`ffe5cb4`) that our tree does not have, and it is
+worth +4% at 2048 tokens, which is not a depth this machine sees.
+`vulkan-fa-f16-kv-contig` (`ab5910a`) is the one for head-dim 128 models and
+does not pay here.
 
 ## Why not the NPU
 

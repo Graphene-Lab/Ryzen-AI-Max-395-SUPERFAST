@@ -43,9 +43,25 @@
 
 - **`docs/PREFILL.md` records the prefill measurements**, the flag sweep behind
   the KV decision, the head-width arithmetic that decides whether the upstream
-  Vulkan fixes pay, and the exact branches and commits of the three we decided
-  not to port — with the reason, so the decision can be revisited on numbers
-  instead of re-researched.
+  Vulkan fixes pay, and the exact branches and commits of the two we did not
+  port — with the reason, so the decision can be revisited on numbers instead
+  of re-researched.
+
+- **Two of the upstream Vulkan prefill fixes are ported, measured, and left
+  off.** The delta-net concat transpose (`1440613`) and the fused silu/mul
+  (`ed809a4`) from `Nathanw1014/llama.cpp` were adapted to our tree — the concat
+  dispatch there extends helpers (`ggml_vk_concat_*`) ours does not have — and
+  built as `localhost/superfast-vk:prefill`. The change is
+  `deploy/patches/vulkan-prefill-20261112.patch`, with the build recipe beside
+  it; the concat path sits behind `GGML_VK_CONCAT_TRANSPOSE=1`, so one binary
+  gives both arms. On the 35B, cold cache: 1,199 → 1,243 tok/s at 9,916 tokens
+  (+3.7%), 995 → 1,025 at 39,617 (+3.0%), 823 → 831 at 64,016 (+1.0%), and the
+  generated text is byte-identical (375 bytes, same 16 lines at temperature 0).
+  The baseline arm reproduces production (833 against 831 tok/s at 60k). It
+  stays off in the units: one percent at the depths this machine works at does
+  not justify a hand-ported patch in production. `mmid-scale-epilogue` is not
+  ported — it needs the `mmid-rowlists` prepass our tree lacks — and
+  `fa-f16-kv-contig` is for head-dim 128 models.
 
 - **`docs/UPSTREAM.md` is the register of everything the machine is pinned to**
   or was measured against: engine source commit and image digest, Mesa and
@@ -57,6 +73,14 @@
   future review is a comparison and not a new investigation.
 
 ### Changed
+
+- **The engine source commit is not on the remote any more.** Production runs
+  `502e810`, which `git fetch` from `pugant/strix-nebulosa` no longer returns:
+  the branch tip is `ad1ccf5` and its `rocmfpx/` is empty, so
+  `build-vulkan-image.sh` on a fresh machine would "build from 8.0K" of source.
+  A rebuild now needs a copy of `~/.cache/strix-nebulosa` or the published
+  image. Recorded in `docs/UPSTREAM.md`; the local changes on top of it live in
+  `deploy/patches/`.
 
 - **The 122B ships the f16 KV cache, because the quantized one costs a quarter
   of the prefill.** The vendor recommends q8_0 for this model and it buys back

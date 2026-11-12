@@ -26,8 +26,17 @@ DOCKERFILE="${SUPERFAST_VK_DOCKERFILE:-$HERE/../runtime/Dockerfile.vulkan}"
 [ -f "$DOCKERFILE" ] || { echo "missing $DOCKERFILE" >&2; exit 1; }
 
 has_patch0012() {
-    podman run --rm --entrypoint /usr/bin/llama-server "$1" --help 2>&1 \
-        | grep -q -- '--reasoning'
+    # Retried: right after a build the first `podman run` on the fresh tag can
+    # fail transiently, and a false negative here fails a good image (seen on
+    # 2026-11-12 with the prefill image, which answered correctly a minute later).
+    for _ in 1 2 3; do
+        if podman run --rm --entrypoint /usr/bin/llama-server "$1" --help 2>&1 \
+            | grep -q -- '--reasoning'; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
 }
 
 # The image is published in the project's package: pull it and skip the clone
