@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Added
+
+- **The 122B reads images, from a projector its quant repository does not
+  ship.** `ornith122` was the only profile without vision, and not for memory
+  reasons — it is 75 GB resident and leaves about 45 GB of the 124 GB pool, and
+  the encoder is 870 MiB. The cause was the quant itself:
+  `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` carries no `mmproj`, so there was
+  nothing to load and no drop-in to load it with. The base model's own GGUF
+  repository has one, `ornith-ai/Ornith-1.5-122B-GGUF` →
+  `mmproj-Ornith-1.5-122B-BF16.gguf` (912,263,200 B, SHA-256
+  `dba9e757…734a7`), and it is now fetched by `download-weights.sh` with the
+  profile, staged as `ornith122.service.vision.conf`, installed active by the
+  setup like the other two, and listed in `VISION_CAPABLE` so
+  `superfast-switch vision status` reports `supported=yes` and the panel switch
+  works on it. Measured on the reference machine on 2026-11-12: the engine
+  logged `loaded multimodal model` and transcribed a rendered page containing a
+  random code exactly (`R7QM-4821-ZX`) in 5 s with a 280-token prompt; the
+  profile keeps its 262,144-token window and its MTP speculation. The client
+  entries that declare `vision: true` now cover all three profiles.
+
 ### Changed
 
 - **The project is MIT-licensed.** `LICENSE.md` was a Peonist End User License

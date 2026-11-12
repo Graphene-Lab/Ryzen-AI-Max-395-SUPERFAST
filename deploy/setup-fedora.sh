@@ -56,9 +56,9 @@
 #   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
 #   VISION_DEFAULT=0  keep the text-only default: stage the vision drop-in but
 #                     leave it inactive. Unset or 1 (the default) installs the
-#                     vision drop-in active for gemma and ornith, so the
-#                     machine comes up with vision on for the models that can
-#                     carry it. Change it later with `superfast-switch vision`.
+#                     vision drop-in active for gemma, ornith and ornith122, so
+#                     the machine comes up with vision on for the models that
+#                     can carry it. Change it later with `superfast-switch vision`.
 #   SMOKE=1           also run the small container device test
 #   UNATTENDED=1      never wait for a human: passwordless sudo required, the
 #                     script must be on disk, and it reboots by itself once the
@@ -579,7 +579,7 @@ phase_profiles() {
         fi
     done
 
-    # 4b. Vision drop-ins. The projector (gemma, ornith) is
+    # 4b. Vision drop-ins. The projector (gemma, ornith, ornith122) is
     #     downloaded with the profile, but the engine loads it only when a
     #     systemd drop-in is present in the unit's .d/ directory. The drop-in
     #     is always staged under ~/.config/superfast/vision/ so
@@ -588,7 +588,7 @@ phase_profiles() {
     #     active into the unit's .d/override.conf, so a fresh machine comes up
     #     with vision on for the profiles that can carry it. Set
     #     VISION_DEFAULT=0 to keep the text-only default and leave the drop-in
-    #     staged but inactive. Only the two profiles whose engine can carry a
+    #     staged but inactive. Only the profiles whose engine can carry a
     #     vision component are handled, and only when they were requested (so
     #     their tower/projector is actually on disk).
     mkdir -p "$HOME/.config/superfast/vision"
@@ -597,7 +597,7 @@ phase_profiles() {
     # "superfast-switch vision on" and lands in a directory no unit reads.
 
 
-    for pair in "gemma gemma" "ornith ornith"; do
+    for pair in "gemma gemma" "ornith ornith" "ornith122 ornith122"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
@@ -618,6 +618,7 @@ phase_profiles() {
         case "$vp" in
             gemma) vfile="$MODELS_DIR_GEMMA/mmproj-BF16.gguf" ;;
             ornith) vfile="$MODELS_DIR_ORNITH/mmproj-Ornith-1.5-35B-BF16.gguf" ;;
+            ornith122) vfile="$MODELS_DIR_ORNITH122/mmproj-Ornith-1.5-122B-BF16.gguf" ;;
         esac
         if [ ! -f "$vfile" ] && [ "${SKIP_WEIGHTS:-0}" != "1" ]; then
             log "$vp: vision file missing; fetching it via superfast-download@$vp.service"

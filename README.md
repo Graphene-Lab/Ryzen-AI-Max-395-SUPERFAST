@@ -105,7 +105,7 @@ machine except where a row says otherwise:
 | profile | model | id for the client | speed here (prose / code) | best for |
 |---|---|---|---|---|
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
-| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, q8_0 KV, MTP inside the weights, vision when the projector is added |
+| `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, q8_0 KV, MTP inside the weights, reads images by default |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision on a quarter of the 122B's memory |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
@@ -414,7 +414,7 @@ its own directory, and the setup script and the switch know those paths.
 | profile | weights directory | files (size in bytes) | source |
 |---|---|---|---|
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
-| ornith122 | `~/ornith122-models` | `Ornith-1.5-122B.MXFP4_MOE.gguf` (69,666,316,288) | HF `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` |
+| ornith122 | `~/ornith122-models` | `Ornith-1.5-122B.MXFP4_MOE.gguf` (69,666,316,288), `mmproj-Ornith-1.5-122B-BF16.gguf` (912,263,200) | HF `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` and, for the projector, `ornith-ai/Ornith-1.5-122B-GGUF` |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
 
 Two things the table does not show. The `gemma` profile (and the optional
@@ -439,12 +439,19 @@ carries:
 pip install -U "huggingface_hub[cli]"
 hf download prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP \
   --local-dir ~/ornith122-models
+hf download ornith-ai/Ornith-1.5-122B-GGUF \
+  mmproj-Ornith-1.5-122B-BF16.gguf --local-dir ~/ornith122-models
 ```
 
 ```
 ~/ornith122-models/
-  Ornith-1.5-122B.MXFP4_MOE.gguf   69.7 GB   weights, the MTP head inside
+  Ornith-1.5-122B.MXFP4_MOE.gguf       69.7 GB   weights, the MTP head inside
+  mmproj-Ornith-1.5-122B-BF16.gguf     870 MiB   the image encoder
 ```
+
+The quant repository ships no projector, so the encoder comes from the base
+model's GGUF repository; without it the profile is text-only and an image
+request is refused with `image input is not supported`.
 
 ```bash
 podman run --rm -p 127.0.0.1:8731:8731 \
@@ -453,6 +460,7 @@ podman run --rm -p 127.0.0.1:8731:8731 \
   -v ~/ornith122-models:/models:ro \
   localhost/superfast-vk:patch0012 \
   -m /models/Ornith-1.5-122B.MXFP4_MOE.gguf \
+  --mmproj /models/mmproj-Ornith-1.5-122B-BF16.gguf \
   --host 0.0.0.0 --port 8731 -c 262144 \
   --alias ornith-1.5-122b --jinja \
   -ctk q8_0 -ctv q8_0 -fa on --parallel 1 --timeout 0 \
@@ -667,9 +675,12 @@ table above: **25.0 tokens per second** of decode on prose and **28.2** on
 code, with MTP accepting 85% of its drafts. Without speculation the same run
 measured 20.4 and 20.6, so the drafter is worth about 20%.
 
-**Vision is available but not installed.** The base model has a projector and
-the quant repository ships none, so the profile starts text-only: its `mmproj`
-has to be added before it can read an image. See
+**Vision comes with the projector, not with the checkpoint.** The base model
+has an encoder and the MXFP4 quant repository ships none, so the profile takes
+it from the base model's GGUF repository: `mmproj-Ornith-1.5-122B-BF16.gguf`,
+870 MiB, downloaded by the setup and loaded by the vision drop-in like the
+other two profiles. Without that file the profile starts text-only and refuses
+an image with `image input is not supported`. See
 [Vision](#vision-image-input).
 
 ---
@@ -704,7 +715,7 @@ slot count splits the window and trades the cached prefix for throughput — see
 
 **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/completions`,
 streaming, tool calling, sampling with seeds, reasoning-effort control, and
-image input (vision) on the gemma and ornith profiles.
+image input (vision) on the gemma, ornith and ornith122 profiles.
 
 **Speculative decoding in the unit** — the ornith122 profile runs MTP with two
 drafts per step, configured in the unit rather than per request. The output is
@@ -1202,19 +1213,18 @@ What this does and does not say:
 ## Honest limits
 
 - **One GPU target.** gfx1151 only, by construction.
-- **Vision is on by default where the weights allow it.** The gemma and ornith
-  models read images: their projector is downloaded at setup and **loaded by
-  default**, so the machine comes up able to see. `VISION_DEFAULT=0` keeps it
-  text-only. `superfast-switch vision on|off` (or the panel toggle) changes it
-  later, which restarts the profile with or without the encoder. The optional
-  `deepseek` profile is text-only — no encoder exists in its repository —
-  and ornith122 has one, but its projector is not installed by default.
+- **Vision is on by default where the weights allow it.** The gemma, ornith
+  and ornith122 models read images: their projector is downloaded at setup and
+  **loaded by default**, so the machine comes up able to see. `VISION_DEFAULT=0`
+  keeps it text-only. `superfast-switch vision on|off` (or the panel toggle)
+  changes it later, which restarts the profile with or without the encoder. The
+  optional `deepseek` profile is text-only — no encoder exists in its repository.
   **Both clients now declare it too**: `generationConfig.modalities.image` in Qwen Code and
-  `input: ["text", "image"]` in PI, for gemma and ornith, because that key is what makes
-  `read_file` pass pixels instead of a placeholder. Verified end to end on 2026-11-08 — gemma read a
-  real screenshot and quoted the text in it. [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md) carries the
-  per-model table: image, video (no client has a channel for it), reasoning switch, context and
-  speculation.
+  `input: ["text", "image"]` in PI, for the three profiles that carry an encoder, because that key
+  is what makes `read_file` pass pixels instead of a placeholder. Verified end to end on 2026-11-08 —
+  gemma read a real screenshot and quoted the text in it. [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md)
+  carries the per-model table: image, video (no client has a channel for it), reasoning switch,
+  context and speculation.
 - **Cold time-to-first-token at very long context is slow.** A genuinely cold
   262K prompt is a multi-minute prefill, and the 950K one measured on Nemotron
   spent 173.8 minutes there. The prompt cache makes the *second*
@@ -1596,9 +1606,8 @@ it.
 `"vision": true` tells Qwen Code the model accepts images, so it sends image
 content straight to it instead of refusing it or routing it elsewhere.
 `"agent": true` lets the same model run as the full-turn agent with vision on.
-Add `"vision": true` to the `gemma` and `ornith` entries; leave it off for
-`ornith122` and the optional `deepseek`, which have no projector
-loaded (ornith122 has one, but it is not installed by default).
+Add `"vision": true` to the `gemma`, `ornith` and `ornith122` entries; leave it
+off for the optional `deepseek`, which has no projector loaded.
 
 Add the other profiles as further objects in the same array, using the values in
 the table below, and keep only the ones you use. Two entries that share both an
@@ -1749,15 +1758,15 @@ scripts, plus `vision` (see below).
 
 ### Vision (image input)
 
-Two profiles can read pictures: **gemma** and **ornith**. You send an image
-with your question the standard OpenAI way — a base64 `image_url` content
-part — and the model looks at it and answers. Vision is **on by default** for
-these two: the setup installs the projector active, so the machine can already
-read images. Set `VISION_DEFAULT=0` at setup for a text-only machine. Turning
-vision on or off later restarts the profile and costs extra memory. The
-optional **deepseek** profile has no image encoder and
-stays text-only; **ornith122** has one, but its projector is not installed by
-default, so it is text-only until that `mmproj` is added.
+Three profiles can read pictures: **gemma**, **ornith** and **ornith122**. You
+send an image with your question the standard OpenAI way — a base64 `image_url`
+content part — and the model looks at it and answers. Vision is **on by
+default** for these three: the setup installs the projector active, so the
+machine can already read images. Set `VISION_DEFAULT=0` at setup for a text-only
+machine. Turning vision on or off later restarts the profile and costs extra
+memory. The optional **deepseek** profile has no image encoder and stays
+text-only. The 122B's projector comes from the base model's GGUF repository,
+because its MXFP4 quant ships none.
 
 ```bash
 superfast-switch vision on     # load the encoder; restarts the profile
@@ -1766,8 +1775,8 @@ superfast-switch vision off    # back to text-only
 ```
 
 On the desktop the same control is the **Vision** switch in the GNOME panel:
-greyed out on the text-only models, on/off on gemma and ornith, and locked
-while the profile restarts.
+greyed out on the text-only models, on/off on gemma, ornith and ornith122, and
+locked while the profile restarts.
 
 **→ The full story — how the encoder loads, why the memory cost is *not*
 cumulative, the automatic rollback if the engine cannot come back, the API

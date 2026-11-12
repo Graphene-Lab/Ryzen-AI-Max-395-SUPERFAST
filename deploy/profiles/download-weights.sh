@@ -80,10 +80,13 @@ files() {
             ;;
         ornith122)
             # 69.7 GB, MIT, ~4.45 bits per weight, 262144 native context, MTP
-            # head inside the same file (mtp_num_hidden_layers = 1). No mmproj
-            # here: the quant repo ships none, so the profile is text-only
-            # until the projector is added from the base model's repo.
+            # head inside the same file (mtp_num_hidden_layers = 1). The MXFP4
+            # quant repo ships no projector, so the vision file comes from the
+            # base model's GGUF repository; it is downloaded always so the
+            # toggle can use it without a second wait, but it is not loaded
+            # unless the vision drop-in is active.
             echo "Ornith-1.5-122B.MXFP4_MOE.gguf|69666316288|38c3a1dfc6c21fd8ff5f060312474aef2c3f9cd549282ddd5225ceca712461da|https://huggingface.co/prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP/resolve/main/Ornith-1.5-122B.MXFP4_MOE.gguf"
+            echo "mmproj-Ornith-1.5-122B-BF16.gguf|912263200|dba9e757964f42ed362e94bede671d9dd4639e832913dd83588527ba281734a7|https://huggingface.co/ornith-ai/Ornith-1.5-122B-GGUF/resolve/main/mmproj-Ornith-1.5-122B-BF16.gguf"
             ;;
         small)
             echo "LFM2.5-350M-Q4_K_M.gguf|229312224|7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4|https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q4_K_M.gguf"

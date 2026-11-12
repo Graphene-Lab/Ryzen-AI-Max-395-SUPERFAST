@@ -106,8 +106,8 @@ class SuperfastMenu extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // Vision toggle for the active profile. It is sensitive only when the
-        // running model can carry a vision component (gemma, ornith) and no
-        // restart is in flight; on the text-only profile (deepseek)
+        // running model can carry a vision component (gemma, ornith, ornith122)
+        // and no restart is in flight; on the text-only profile (deepseek)
         // it stays off and greyed out. Toggling restarts the profile and drops
         // its prompt cache, so it is meant to be used between conversations.
         this._visionSwitch = new PopupMenu.PopupSwitchMenuItem('Vision', false);

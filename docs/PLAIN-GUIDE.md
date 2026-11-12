@@ -75,13 +75,13 @@ when you switch.
   When it is on, a stranger on your network cannot use your machine without the
   key; when it is off, nobody on the network can use it, only you on the
   machine itself.
-- Two of the models (Gemma and Ornith) can **look at pictures**. There is
-  a "Vision" switch in the desktop panel: it is greyed out for the models that
-  cannot see, and you can turn it on or off for the two that can. Turning it
-  on gives the model its "eyes", but it restarts that model — so do it
-  between conversations, not in the middle of one. Once it is on, an app can
-  send a picture along with the text, the same way it would to a cloud
-  service.
+- Three of the models (Gemma, Ornith and the big 122B) can **look at
+  pictures**. There is a "Vision" switch in the desktop panel: it is greyed out
+  for the models that cannot see, and you can turn it on or off for the three
+  that can. Turning it on gives the model its "eyes", but it restarts that
+  model — so do it between conversations, not in the middle of one. Once it is
+  on, an app can send a picture along with the text, the same way it would to a
+  cloud service.
 - You can do all of it over SSH as well; the terminal tool has a simple
   `help`.
 

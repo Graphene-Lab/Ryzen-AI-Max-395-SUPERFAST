@@ -83,7 +83,7 @@ ORCH_DIR="${SUPERFAST_ORCH_DIR:-$HOME/small-models}"
 ORCH_PORT="${SUPERFAST_ORCH_PORT:-8732}"
 ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 
-# Vision is a per-profile toggle. The projector (gemma, ornith) is
+# Vision is a per-profile toggle. The projector (gemma, ornith, ornith122) is
 # loaded only when a systemd drop-in is active in the unit's .d/ directory.
 # The drop-in templates are staged here by setup and moved into .d/ by
 # `vision on`, removed by `vision off`. Because the engine reads the flag once
@@ -91,9 +91,9 @@ ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
 # Profiles whose engine can carry a vision component. deepseek is text-only:
 # no encoder exists in its repository, so the toggle is not available for it.
-# gemma and ornith load an --mmproj projector through their drop-in, which is
-# why the projector is still an opt-in.
-VISION_CAPABLE="gemma ornith"
+# gemma, ornith and ornith122 load an --mmproj projector through their
+# drop-in, which is why the projector is still an opt-in.
+VISION_CAPABLE="gemma ornith ornith122"
 
 # Is a word in a space-separated list?
 is_in() { # "list" word
