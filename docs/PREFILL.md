@@ -36,10 +36,12 @@ the KV one.
 
 **The quantized cache costs prefill.** On the 122B the same prompt takes 272.6 s
 with q8_0 and 224.1 s with f16 — 220 against 268 tok/s, +22% for f16 — and on
-the 35B the gap is 25%. That is why `ornith122` ships f16 despite the vendor's
-q8_0 recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free,
-and about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two
-quality points (84.0 against 81.9 on PipelineScore).
+the 35B the gap is 25%. Re-measured in production on the same day, switching the
+real profile: **233.3 s and 257 tok/s** at 60,016 tokens with the f16 cache the
+unit now ships. That is why `ornith122` moved to f16 despite the vendor's q8_0
+recommendation: it pays about 3 GiB of the 45 GiB the profile leaves free, and
+about 5% of decode (23.5 against 22.2 t/s), and gains prefill and two quality
+points (84.0 against 81.9 on PipelineScore).
 
 ## The one lever we did not pull
 
