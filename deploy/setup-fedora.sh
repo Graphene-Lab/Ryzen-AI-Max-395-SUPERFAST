@@ -109,6 +109,14 @@ MODELS_DIR_SMALL="${MODELS_DIR_SMALL:-$HOME/small-models}"
 TARGET_USER="${SUDO_USER:-$USER}"
 UID_NUM="$(id -u)"
 
+# Absolute path to this script's directory. Defined once as a global because
+# phase_engine() (the 6th phase, run before phase_profiles and phase_ui_auth)
+# uses it, and those two were the only places it was set — so before either ran
+# on a fresh install, $SCRIPT_DIR was unbound and `set -u` aborted the setup at
+# the build-vulkan-image call.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROF_DIR="$SCRIPT_DIR/profiles"
+
 log() { echo "[$(date '+%F %T')] $*"; }
 
 # A stopped install is worth a report: this script cannot know what a different
