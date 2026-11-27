@@ -61,10 +61,12 @@ numfmt_blocks() {
 
 command -v systemctl >/dev/null 2>&1 || { say "systemctl not found; this tool is for the Fedora host"; exit 1; }
 
-# Which profile is serving? The directory of units is the source of truth.
+# Which profile is serving? The directory of units is the source of truth, and
+# the units are named after the profile (gemma.service, ornith.service, ...):
+# the switch's UNIT table defaults to exactly those names.
 active=""
-for p in gemma ornith ornith122; do
-    u="superfast-$p"
+for p in gemma ornith ornith122 inkling nemotron; do
+    u="$p"
     if [ "$(systemctl --user is-active "$u.service" 2>/dev/null)" = "active" ]; then
         active="$p"; unit="$u.service"; break
     fi

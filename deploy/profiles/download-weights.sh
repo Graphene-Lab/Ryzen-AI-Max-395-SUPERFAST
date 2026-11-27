@@ -1,5 +1,5 @@
 #!/bin/bash
-# download-weights.sh <gemma|ornith|ornith122|deepseek|small>
+# download-weights.sh <gemma|ornith|ornith122|inkling|nemotron|deepseek|small>
 #
 # Downloads one profile's weights into its own directory. Installed by
 # deploy/setup-fedora.sh as ~/.local/bin/superfast-downloads/download-weights.sh
@@ -28,8 +28,10 @@ case "$PROFILE" in
     deepseek) DIR="__DEEPSEEK_DIR__" ;;
     ornith)   DIR="__ORNITH_DIR__" ;;
     ornith122) DIR="__ORNITH122_DIR__" ;;
+    inkling)  DIR="__INKLING_DIR__" ;;
+    nemotron) DIR="__NEMOTRON_DIR__" ;;
     small)    DIR="__SMALL_DIR__" ;;
-    *) echo "usage: $0 gemma|ornith|ornith122|deepseek|small" >&2; exit 2 ;;
+    *) echo "usage: $0 gemma|ornith|ornith122|inkling|nemotron|deepseek|small" >&2; exit 2 ;;
 esac
 
 LOG="$DIR/.download.log"
@@ -87,6 +89,32 @@ files() {
             # unless the vision drop-in is active.
             echo "Ornith-1.5-122B.MXFP4_MOE.gguf|69666316288|38c3a1dfc6c21fd8ff5f060312474aef2c3f9cd549282ddd5225ceca712461da|https://huggingface.co/prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP/resolve/main/Ornith-1.5-122B.MXFP4_MOE.gguf"
             echo "mmproj-Ornith-1.5-122B-BF16.gguf|912263200|dba9e757964f42ed362e94bede671d9dd4639e832913dd83588527ba281734a7|https://huggingface.co/ornith-ai/Ornith-1.5-122B-GGUF/resolve/main/mmproj-Ornith-1.5-122B-BF16.gguf"
+            ;;
+        inkling)
+            # 17.6 GB, Apache-2.0, 262144 is what the vLLM recipe caps a
+            # 32 GB-class machine at (the model itself holds 1M). IQ4_NL is the
+            # quant ggml-org's own command uses, and at 4.3 bits per weight it
+            # is the closest match to the vendor checkpoint's NVFP4/MXFP8 mix.
+            # The projector is downloaded always so the vision toggle can use
+            # it without a second wait, but it is not loaded unless the vision
+            # drop-in is active.
+            echo "Inkling-2-Mini-IQ4_NL.gguf|17627940768|cbdf3fa9dc50a4124977980f37da4f1fa764b0cfe800d275cd43d26ce2a81af4|https://huggingface.co/ggml-org/Inkling-2-Mini-GGUF/resolve/main/Inkling-2-Mini-IQ4_NL.gguf"
+            echo "mmproj-Inkling-2-Mini-Q8_0.gguf|345910944|233287272ec5ac39b4168677aba54a4c024f202410f5629fac1830e1059f8abb|https://huggingface.co/ggml-org/Inkling-2-Mini-GGUF/resolve/main/mmproj-Inkling-2-Mini-Q8_0.gguf"
+            ;;
+        nemotron)
+            # 65.8 GB in three shards (UD-Q3_K_XL), the quant the reference
+            # runs used; the vendor's card declares up to 1M tokens and the
+            # profile serves 131072 (see the unit for why). The MTP head is a
+            # separate file and the unsloth repository ships none, so it comes
+            # from ggml-org's GGUF repository under its long name and is saved
+            # as mtp-Q8_0.gguf, which is what the unit loads. The projector is
+            # downloaded always so the vision toggle can use it without a
+            # second wait, but it is not loaded unless the drop-in is active.
+            echo "NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00001-of-00003.gguf|7874568|b2a570b4fc2e2e0ef3657937d6d4689c5d9647125e5fe22e31426789cf4e02fa|https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF/resolve/main/UD-Q3_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00001-of-00003.gguf"
+            echo "NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00002-of-00003.gguf|49225290592|94827cf22f98854a68127fd4a18cca136951d1181bba8c21a7d9dcd6d3c68674|https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF/resolve/main/UD-Q3_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00002-of-00003.gguf"
+            echo "NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00003-of-00003.gguf|16528375872|c2245a2faa51dc1aabcb6b58b7c311bc06ebada10345057e106ac94fcfcef8ce|https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF/resolve/main/UD-Q3_K_XL/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00003-of-00003.gguf"
+            echo "mtp-Q8_0.gguf|4276991744|df17d5baec71192d8fedb0c97b0d08b8bbaee236985c8418f81b792515a2adf0|https://huggingface.co/ggml-org/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF/resolve/main/mtp-NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-Q8_0.gguf"
+            echo "mmproj-BF16.gguf|1733695840|9c09381a5744d0ea9a30048c94922f6f25ee0d63842de9c45779eca4fb5924d9|https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF/resolve/main/mmproj-BF16.gguf"
             ;;
         small)
             echo "LFM2.5-350M-Q4_K_M.gguf|229312224|7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4|https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q4_K_M.gguf"

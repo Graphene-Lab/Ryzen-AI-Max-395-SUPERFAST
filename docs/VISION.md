@@ -15,13 +15,15 @@ is in progress.
 
 ## Which models can see
 
-Three of the four profiles carry an image encoder:
+Five of the six profiles carry an image encoder:
 
 | profile | model | encoder file | size |
 |---|---|---|---|
 | `gemma` | Gemma-4-26B-A4B | `mmproj-BF16.gguf` | 1,194,828,256 B (~1.1 GiB) |
 | `ornith` | Ornith-1.5-35B-A3B | `mmproj-Ornith-1.5-35B-BF16.gguf` | 902,822,016 B (~861 MiB) |
 | `ornith122` | Ornith-1.5-122B | `mmproj-Ornith-1.5-122B-BF16.gguf` | 912,263,200 B (~870 MiB) |
+| `inkling` | Inkling-2-Mini | `mmproj-Inkling-2-Mini-Q8_0.gguf` | 345,910,944 B (~330 MiB) |
+| `nemotron` | Nemotron-3.5-Super-VL-120B-A12B | `mmproj-BF16.gguf` | 1,733,695,840 B (~1.6 GiB) |
 
 The optional **deepseek** (DeepSeek-V4-Flash) has no image encoder in its
 repository: it is text-only, and the vision control is unavailable for it

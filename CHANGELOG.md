@@ -4,6 +4,60 @@
 
 ### Added
 
+- **A fourth profile: Inkling-2-Mini, on an engine the fork does not have.**
+  `thinkingmachines/Inkling-2-Mini` is a 26.4B looped mixture-of-experts (3.4B
+  active, ~5.4B per token because the middle 12 of its 24 layers run three
+  times), and its `inkling2_loop` architecture reached llama.cpp only on
+  2026-11-20 — after the `strix-nebulosa` snapshot the other GGUF profiles are
+  built from. The `inkling` unit therefore runs the upstream Vulkan image
+  `ghcr.io/ggml-org/llama.cpp:server-vulkan` (build 12648), which carries the
+  architecture and `--spec-type draft-dspark`; nothing in the unit needs patch
+  0012. Weights are `ggml-org/Inkling-2-Mini-GGUF` IQ4_NL (17,627,940,768 B,
+  SHA-256 `cbdf3fa9…81af4` — the quant ggml-org's own command uses, and at 4.3
+  bits per weight the closest to the vendor checkpoint's NVFP4/MXFP8 mix) plus
+  the Q8_0 projector (345,910,944 B). Served context is 262,144 of the
+  1,048,576 the model holds: that is the cap the vendor's own vLLM recipe sets
+  for a 32 GB-class machine, and the looped layers keep three KV copies.
+  Sampling is Unsloth's llama.cpp recipe for this model — `--temp 1.0 --top-p
+  1.0 --top-k 0 --min-p 0.0` — which agrees with the repository's
+  `generation_config.json` (temperature 1.0, no other sampler); the card
+  publishes none. `--reasoning on --reasoning-effort high` is the template's
+  own default (0.9); `off` maps to 0.0, which the card warns does not fully
+  stop the trace. The profile is in the switch, the TUI, the GNOME panel and
+  the installer's default set, and carries a vision drop-in. Its 30 GB entry in
+  the image-generator gate is the one estimate in that table, to be replaced by
+  the measured footprint at the first load. The DSpark drafter is not fetched
+  yet: as with the ornith MTP head, it waits for a decode number that pays for
+  its prefill. Benchmarks: PipelineScore **82.7** (MAINLINE) — code 100, reason
+  80, tool use 87.5, RAG 100, speed 29.1 — and MultiPL-E **94/158** at
+  `--reasoning-effort low`, which is the setting the unit now ships. The same
+  run at the template default (effort high) passed only **71/158**, with 50
+  answers cut at the 2,048-token cap against 7 at low, and a median of 1,258
+  generated tokens against 497: the high arm was measuring the budget, not the
+  model. Effort low also halves the time, 17.2 s per task against 43.2.
+
+- **A fifth profile: Nemotron-3.5-Super-VL-120B-A12B, on its own engine image.**
+  The model had been measured on this machine since 2026-11-07 as a *reference*
+  and had no profile: it ran from a hand-written script on port 8755. It is now
+  first class — unit, vision drop-in, downloader entry, switch, TUI, GNOME
+  panel — and still optional in the installer, because its checkpoint is 66 GB
+  (`PROFILES="... nemotron"`). Weights are unsloth's `UD-Q3_K_XL` (three
+  shards, 65.8 GB) plus the Q8_0 MTP head from ggml-org's GGUF repository and
+  the BF16 projector; every file carries its SHA-256 in `download-weights.sh`,
+  and the three shards, the head and the projector were all re-hashed here
+  before being pinned. Sampling is the vendor's text recipe from the card's
+  "Recommended Sampling" row — temperature 1.0, top_p 0.95 — and the card's
+  vision recipe (temperature 0.6) is written in the unit, because a server
+  default cannot be both. Reasoning is a template variable here, not an effort
+  level: `--chat-template-kwargs '{"enable_thinking": true}'` is the "on" level
+  and `medium_effort` the cheaper one the card documents. Served context is
+  131,072 of the 1M the card declares: a 950k-token prompt was measured at
+  91 t/s prefill, i.e. 2.9 hours before the first generated token. Measured
+  after the first load: 69 GB of GTT, 30.1 t/s decode on prose and 35.2 on
+  code with the MTP head (draft acceptance 0.75), prefill ~86 t/s. The engine
+  image `localhost/superfast-vk:nemotron` is the mainline build that carries
+  `nemotron_h_moe`; the fork's patch0012 snapshot predates the architecture.
+
 - **The 122B reads images, from a projector its quant repository does not
   ship.** `ornith122` was the only profile without vision, and not for memory
   reasons — it is 75 GB resident and leaves about 45 GB of the 124 GB pool, and

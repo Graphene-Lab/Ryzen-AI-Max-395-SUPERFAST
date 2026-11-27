@@ -1,0 +1,61 @@
+[Unit]
+Description=SUPERFAST nemotron profile (Nemotron-3.5-Super-VL-120B-A12B UD-Q3_K_XL, port 8731)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStartPre=-/usr/bin/podman rm -f nemotron-server
+ExecStart=/usr/bin/podman run --name nemotron-server --rm -p 127.0.0.1:8731:8731 \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v /home/user/nemotron-models:/models:ro \
+  localhost/superfast-vk:nemotron \
+  -m /models/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-UD-Q3_K_XL-00001-of-00003.gguf \
+  --host 0.0.0.0 --port 8731 \
+  -c 131072 --alias nemotron-3.5-super-vl-120b --jinja \
+  --parallel 1 --timeout 0 \
+  --chat-template-kwargs '{"enable_thinking": true}' \
+  -ngl 99 -ub 256 \
+  -md /models/mtp-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-ngl 99 \
+  --temp 1.0 --top-p 0.95
+# This profile runs its own engine image, localhost/superfast-vk:nemotron,
+# built from llama.cpp mainline for the nemotron_h_moe architecture: the
+# project's fork (patch0012) predates it. Nothing here needs patch 0012.
+#
+# The sampling is the vendor's text recipe, from the model card's
+# "Recommended Sampling" row: temperature 1.0, top_p 0.95. The same row gives
+# vision temperature 0.6, top_p 0.95 — a server default cannot be both, so the
+# profile serves the text recipe and a vision request that needs the card's
+# value must send temperature 0.6 itself. top_k, min_p and a repetition
+# penalty are not specified by the vendor, so none is applied.
+#
+# Reasoning is a chat-template variable, not an effort level:
+# --chat-template-kwargs '{"enable_thinking": true}' is the "on" level, and
+# {"enable_thinking": true, "medium_effort": true} is the "on (medium)" level
+# the card documents. Off is enable_thinking false.
+#
+# 131072 is a deliberate cap, not the model's: the card declares up to 1M
+# tokens, and a 950k-token prompt was measured here at 91 t/s prefill, i.e.
+# 2.9 hours before the first generated token. The window is raised on purpose,
+# never by default.
+#
+# The MTP head (mtp-Q8_0.gguf) and -ub 256 are the pair the reference runs
+# used: they took the speed axis from 12.1 to 17.2 without moving a single
+# quality family, because speculative decoding verifies what it drafts.
+#
+# The projector is NOT here: it lives in the vision drop-in
+# (nemotron.service.vision.conf), which `superfast-switch vision on` installs.
+# A projector is read only at startup, which is why toggling restarts the
+# profile and drops its prompt cache.
+ExecStop=/usr/bin/podman stop -t 30 nemotron-server
+# podman run exits 143/137 when the container is stopped, and llama-server
+# exits 15 when the stop's second interrupt reaches it: accept all three, so
+# a profile switch does not leave the unit in the "failed" state.
+SuccessExitStatus=137 143 15
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target

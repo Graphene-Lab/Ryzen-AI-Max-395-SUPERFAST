@@ -32,9 +32,10 @@ ExecStart=/usr/bin/podman run --name ornith-server --rm -p 127.0.0.1:8731:8731 \
 # and the client and the gateway both bound the request themselves, so the
 # reference machine runs without one.
 ExecStop=/usr/bin/podman stop -t 30 ornith-server
-# podman run exits 143/137 when the container is stopped: accept those, so a
-# profile switch does not leave the unit in the "failed" state.
-SuccessExitStatus=137 143
+# podman run exits 143/137 when the container is stopped, and llama-server
+# exits 15 when the stop's second interrupt reaches it: accept all three, so
+# a profile switch does not leave the unit in the "failed" state.
+SuccessExitStatus=137 143 15
 Restart=on-failure
 RestartSec=15
 

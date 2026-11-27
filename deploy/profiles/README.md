@@ -7,20 +7,23 @@ installs them, replacing the placeholders
 - `__HOME__` — the home directory of the user running the script,
 - `__XDG__` — `/run/user/<uid>`, which rootless Podman needs,
 - `__GEMMA_DIR__`, `__DEEPSEEK_DIR__`, `__SMALL_DIR__`, `__ORNITH_DIR__`,
-  `__ORNITH122_DIR__` — where each profile's weights live, so a
-  `MODELS_DIR_*` override reaches the installed units.
+  `__ORNITH122_DIR__`, `__INKLING_DIR__`, `__NEMOTRON_DIR__` — where each
+  profile's weights live, so a `MODELS_DIR_*` override reaches the installed
+  units.
 
 | file | what it is |
 |---|---|
 | `gemma.service` | Gemma-4-26B-A4B ROCmFP4, on the local `llama-rocmfpx` image |
 | `ornith.service` | Ornith-1.5-35B-A3B ROCmFP4, on the Vulkan engine image |
 | `ornith122.service` | Ornith-1.5-122B MXFP4, on the Vulkan engine image |
+| `inkling.service` | Inkling-2-Mini IQ4_NL, on the **upstream** llama.cpp Vulkan image (its architecture is newer than the fork) |
+| `nemotron.service` | Nemotron-3.5-Super-VL-120B-A12B UD-Q3_K_XL, on its own mainline Vulkan image `localhost/superfast-vk:nemotron` (optional: 66 GB) |
 | `deepseek.service` | DeepSeek-V4-Flash ROCmFPX, on the local `llama-rocmfpx` image |
 | `orchestrator.service` | the small LFM2.5 router, on port 8732 (runs beside a profile) |
-| `superfast-download@.service` | one downloader per profile: `superfast-download@gemma`, `@deepseek`, `@small` |
+| `superfast-download@.service` | one downloader per profile: `superfast-download@gemma`, `@deepseek`, `@small`, `@nemotron` |
 | `download-weights.sh` | the downloader itself: resume at the exact byte offset, one writer per file, SHA-256 verified before the final rename |
 | `superfast-monitor.service`, `superfast-monitor.timer` | the engine sampler: one read of `/health`, `/cache`, the GPU and memory every 30 s, for telling a slow machine apart from a queueing one |
-| `gemma.service.vision.conf`, `ornith.service.vision.conf`, `ornith122.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with gemma, ornith and ornith122 able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (`--mmproj` for all three). Each mirrors its base unit's `ExecStart` — keep them in sync. deepseek has no such file: no encoder exists for it. The ornith122 projector is fetched from the base model's GGUF repository, because its MXFP4 quant ships none |
+| `gemma.service.vision.conf`, `ornith.service.vision.conf`, `ornith122.service.vision.conf`, `inkling.service.vision.conf`, `nemotron.service.vision.conf` | the **vision drop-ins**, staged by setup into `~/.config/superfast/vision/` and installed ACTIVE into the unit's `.d/override.conf` by default (`VISION_DEFAULT=1`), so a fresh machine comes up with gemma, ornith, ornith122, inkling and nemotron able to read images. `VISION_DEFAULT=0` stages them inactive and keeps the profiles text-only. `superfast-switch vision on\|off` toggles the loaded profile's drop-in and restarts it (`--mmproj` for all five). Each mirrors its base unit's `ExecStart` — keep them in sync. deepseek has no such file: no encoder exists for it. The ornith122 projector is fetched from the base model's GGUF repository, because its MXFP4 quant ships none |
 
 Only one profile serves port 8731 at a time; `superfast-switch use <profile>`
 stops the others first. All these units stay disabled until the switch starts

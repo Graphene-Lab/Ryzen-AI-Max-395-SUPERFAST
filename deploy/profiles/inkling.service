@@ -1,0 +1,54 @@
+[Unit]
+Description=SUPERFAST inkling profile (Inkling-2-Mini IQ4_NL, port 8731)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=__XDG__
+ExecStartPre=-/usr/bin/podman rm -f inkling-server
+ExecStart=/usr/bin/podman run --name inkling-server --rm -p 127.0.0.1:8731:8731 \
+  --device /dev/kfd --device /dev/dri --group-add keep-groups \
+  --security-opt seccomp=unconfined --ipc=host \
+  -v __INKLING_DIR__:/models:ro \
+  ghcr.io/ggml-org/llama.cpp:server-vulkan \
+  -m /models/Inkling-2-Mini-IQ4_NL.gguf \
+  --host 0.0.0.0 --port 8731 \
+  -c 262144 --alias inkling-2-mini --jinja \
+  --parallel 1 --reasoning on --reasoning-effort low --timeout 0 \
+  --temp 1.0 --top-p 1.0 --top-k 0 --min-p 0.0
+# This profile runs the UPSTREAM llama.cpp Vulkan image, not the project's
+# patched fork: Inkling-2-Mini is an inkling2_loop architecture, merged upstream
+# on 2026-11-20, and the fork's snapshot predates it. Nothing in this unit needs
+# patch 0012 (--reasoning exists upstream as well).
+#
+# The sampling is the one Unsloth publishes for this model's llama.cpp recipe
+# (temp 1.0 / top-p 1.0 / top-k 0 / min-p 0), and it agrees with the base
+# repository's generation_config.json, which sets temperature 1.0 and no other
+# sampler. The model card publishes no sampler at all.
+#
+# 262144 is the context the vendor's own vLLM recipe caps a 32 GB-class machine
+# at; the model holds 1M natively and loads it, but the looped middle layers
+# keep three copies of the KV for layers 11 and 17, so a full window costs tens
+# of gigabytes and hours of prefill. Raise -c deliberately, not by default.
+#
+# --reasoning-effort low is a measured choice, not the template default: at
+# effort high (0.9, the default) the trace does not fit a 2,048-token answer
+# budget — MultiPL-E passed 71/158 with 50 answers cut at the cap — while at
+# low the same run passed 94/158 with 7 at the cap and a median of 497 tokens
+# against 1,258. 'off' maps to effort 0.0, which the card warns does not fully
+# disable the trace.
+#
+# The DSpark drafter (0.4 GB, --spec-type draft-dspark) is part of Unsloth's
+# recipe and is not shipped here until a decode number pays for its prefill, as
+# with the MTP head on ornith.
+ExecStop=/usr/bin/podman stop -t 30 inkling-server
+# podman run exits 143/137 when the container is stopped, and llama-server
+# exits 15 when the stop's second interrupt reaches it: accept all three, so
+# a profile switch does not leave the unit in the "failed" state.
+SuccessExitStatus=137 143 15
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target

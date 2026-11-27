@@ -15,8 +15,9 @@ client has to declare for that to happen.
 | gemma-4-26b-a4b | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | no client channel | per request, but it hurts code (measured) | 262,144 | MTP head `mtp-gemma-…-Q8_0.gguf` | 14.9 GB |
 | ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights, **not used** (−16% prefill for +3% decode) | 19 GB |
 | ornith-1.5-122b | **yes**, `--mmproj mmproj-Ornith-1.5-122B-BF16.gguf` in its active drop-in | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, f16 KV | 69.7 GB |
+| inkling-2-mini | **yes**, `--mmproj mmproj-Inkling-2-Mini-Q8_0.gguf` in its active drop-in | no client channel | `--reasoning on`, effort `low` — measured: 94/158 on MultiPL-E at low against 71/158 at the template default `high` | 262,144 served of 1,048,576 native | DSpark drafter exists, **not used** | 17.6 GB |
 | deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
-| Nemotron 3.5 120B (reference, not a profile) | **yes**, `--mmproj mmproj-BF16.gguf` | trained for it, still no client channel | per request, `chat_template_kwargs.enable_thinking` | 1,048,576 | MTP head `mtp-Q8_0.gguf` | 65.8 GB |
+| nemotron-3.5-super-vl-120b (optional profile) | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | trained for it, still no client channel | `chat_template_kwargs.enable_thinking` (on / on-medium / off), on by default | 131,072 served of 1,048,576 native | MTP head `mtp-Q8_0.gguf`, **used** | 65.8 GB |
 
 Nemotron's window was filled once, on 2026-11-08: 949,957 tokens (4.0 MB of text, one sentence
 planted at 95% depth) took 173.8 minutes of prefill at 91.1 t/s, and the sentence was retrieved.
@@ -28,7 +29,7 @@ something outside the client, and then each frame is just another image.
 **What the client must declare for the image column to mean anything:** in Qwen Code,
 `generationConfig.modalities.image: true` — `capabilities.vision` alone is cosmetic, and without
 the modalities key `read_file` hands the model a placeholder instead of pixels. In PI it is
-`input: ["text", "image"]`. Both are now set for gemma, ornith and ornith122; deepseek is
+`input: ["text", "image"]`. Both are now set for gemma, ornith, ornith122, inkling and nemotron; deepseek is
 declared text-only because its engine loads no projector. Verified end to end on 2026-11-08:
 gemma read a real screenshot through the API and quoted the text in it, and the engine logged
 `image processed in 565 ms`. The 122B's projector comes from the base model's GGUF repository,

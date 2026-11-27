@@ -23,7 +23,7 @@
 #
 # Fully unattended, including the reboot the kernel parameters need:
 #   curl -fsSL https://raw.githubusercontent.com/Graphene-Lab/Ryzen-AI-Max-395-SUPERFAST/main/deploy/setup-fedora.sh -o setup-fedora.sh
-#   PROFILES="gemma ornith ornith122 small" UNATTENDED=1 bash setup-fedora.sh
+#   PROFILES="gemma ornith ornith122 inkling small" UNATTENDED=1 bash setup-fedora.sh
 # With UNATTENDED=1 the script refuses to wait for anything: sudo must be
 # passwordless (it says how), the script must be a file on disk (it re-runs
 # itself after the reboot), and when the kernel parameters are set it installs
@@ -34,11 +34,13 @@
 #
 # Env overrides:
 #   MODELS_DIR_ORNITH, MODELS_DIR_ORNITH122, MODELS_DIR_GEMMA,
-#   MODELS_DIR_DEEPSEEK, MODELS_DIR_SMALL
+#   MODELS_DIR_INKLING, MODELS_DIR_DEEPSEEK, MODELS_DIR_SMALL
 #                     where each checkpoint lives (defaults: ~/<profile>-models,
 #                     and ~/small-models for the orchestrator).
 #   PROFILES          which profiles to prepare, space separated. Default
-#                     "gemma ornith ornith122 small". Also accepted: deepseek.
+#                     "gemma ornith ornith122 inkling small". Also accepted:
+#                     deepseek, nemotron (both are not in the default list: their
+#                     checkpoints are 91 GB and 66 GB).
 #                     Example:
 #                       PROFILES="gemma ornith small" bash deploy/setup-fedora.sh
 #                     Weights for the extra profiles are fetched by a systemd
@@ -49,14 +51,15 @@
 #                     the profile units and downloaders again.
 #   SKIP_UPDATE=1     skip `dnf upgrade`
 #   SKIP_WEIGHTS=1    install the downloaders but fetch no checkpoint. For a
-#                     dry-ish run on a machine that has no room for 275 GB of
+#                     dry-ish run on a machine that has no room for 293 GB of
 #                     weights, or to set the machine up before the link is
 #                     quiet: `systemctl --user start superfast-download@<p>`
 #                     fetches them later.
 #   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
 #   VISION_DEFAULT=0  keep the text-only default: stage the vision drop-in but
 #                     leave it inactive. Unset or 1 (the default) installs the
-#                     vision drop-in active for gemma, ornith and ornith122, so
+#                     vision drop-in active for gemma, ornith, ornith122 and
+#                     inkling, so
 #                     the machine comes up with vision on for the models that
 #                     can carry it. Change it later with `superfast-switch vision`.
 #   SMOKE=1           also run the small container device test
@@ -94,14 +97,16 @@ RUNTIME_IMAGE="${SUPERFAST_RUNTIME_IMAGE:-llama-rocmfpx:7.2.4}"
 RUNTIME_PUBLISHED="${SUPERFAST_RUNTIME_PUBLISHED:-ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1}"
 RUNTIME_PUBLISHED_EXTRA="${SUPERFAST_RUNTIME_PUBLISHED_EXTRA:-}"
 REBOOT_NEEDED=0
-# The reference machine runs three profiles plus the small orchestrator;
+# The reference machine runs four profiles plus the small orchestrator;
 # a fresh install creates the same machine unless PROFILES says otherwise.
-PROFILES="${PROFILES:-gemma ornith ornith122 small}"
+PROFILES="${PROFILES:-gemma ornith ornith122 inkling small}"
 # The Vulkan engine image serves ornith and ornith122. VULKAN_FLASH was the
 # name before the flash profile was removed, so it is still honoured.
 VULKAN_ENGINE="${VULKAN_ENGINE:-${VULKAN_FLASH:-1}}"
 MODELS_DIR_ORNITH="${MODELS_DIR_ORNITH:-$HOME/ornith-models}"
 MODELS_DIR_ORNITH122="${MODELS_DIR_ORNITH122:-$HOME/ornith122-models}"
+MODELS_DIR_INKLING="${MODELS_DIR_INKLING:-$HOME/inkling-models}"
+MODELS_DIR_NEMOTRON="${MODELS_DIR_NEMOTRON:-$HOME/nemotron-models}"
 MODELS_DIR_GEMMA="${MODELS_DIR_GEMMA:-$HOME/gemma-models}"
 MODELS_DIR_DEEPSEEK="${MODELS_DIR_DEEPSEEK:-$HOME/deepseek-models}"
 MODELS_DIR_SMALL="${MODELS_DIR_SMALL:-$HOME/small-models}"
@@ -191,6 +196,8 @@ profile_dir() {
         small)    echo "$MODELS_DIR_SMALL" ;;
         ornith)   echo "$MODELS_DIR_ORNITH" ;;
         ornith122) echo "$MODELS_DIR_ORNITH122" ;;
+        inkling)  echo "$MODELS_DIR_INKLING" ;;
+        nemotron) echo "$MODELS_DIR_NEMOTRON" ;;
     esac
 }
 
@@ -217,6 +224,8 @@ install_template() { # src dst
         -e "s#__DEEPSEEK_DIR__#$MODELS_DIR_DEEPSEEK#g" \
         -e "s#__ORNITH_DIR__#$MODELS_DIR_ORNITH#g" \
         -e "s#__ORNITH122_DIR__#$MODELS_DIR_ORNITH122#g" \
+        -e "s#__INKLING_DIR__#$MODELS_DIR_INKLING#g" \
+        -e "s#__NEMOTRON_DIR__#$MODELS_DIR_NEMOTRON#g" \
         -e "s#__SMALL_DIR__#$MODELS_DIR_SMALL#g" \
         -e "s#__IMAGE_DIR__#$HOME/ideogram-models#g" "$1" > "$2"
 }
@@ -367,6 +376,21 @@ phase_engine() {
         bash "$SCRIPT_DIR/build-vulkan-image.sh" \
             || log "warning: Vulkan image build failed; the ornith units will not start until it exists"
     fi
+    # The inkling profile runs the UPSTREAM llama.cpp Vulkan image, not the
+    # project's fork: its architecture (inkling2_loop) was merged upstream on
+    # 2026-11-20, after the fork snapshot the other GGUF profiles are built
+    # from. The unit names the published image, so there is nothing to tag.
+    if in_profiles inkling; then
+        if podman image exists ghcr.io/ggml-org/llama.cpp:server-vulkan; then
+            log "llama.cpp Vulkan image already present (ghcr.io/ggml-org/llama.cpp:server-vulkan)"
+        elif [ "${SKIP_IMAGE:-0}" = "1" ]; then
+            log "SKIP_IMAGE set — not pulling the llama.cpp Vulkan image."
+            log "  inkling needs it before it can start."
+        else
+            podman pull ghcr.io/ggml-org/llama.cpp:server-vulkan \
+                || log "warning: could not pull the llama.cpp Vulkan image; inkling will not start until it exists"
+        fi
+    fi
     # The optional image generator runs sd-server (stable-diffusion.cpp) on
     # Vulkan. Its Dockerfile clones the source itself, so there is no upstream
     # snapshot to fetch here. Set IMAGE_GENERATOR=0 to skip the build.
@@ -438,7 +462,7 @@ phase_engine() {
     # Only one profile can own port 8731. Stop anything already serving, exactly
     # like the switch does, so that re-running this script on a machine that is
     # already up does not leave two units fighting for the port.
-    for q in gemma ornith ornith122 deepseek; do
+    for q in gemma ornith ornith122 inkling nemotron deepseek; do
         XDG_RUNTIME_DIR="/run/user/$UID_NUM" systemctl --user stop "$q.service" 2>/dev/null || true
     done
 
@@ -560,7 +584,7 @@ phase_profiles() {
         [ -f "$MODELS_DIR_SMALL/LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf" ] && requested="$requested small"
     ;; esac
 
-    for p in gemma ornith ornith122 small; do
+    for p in gemma ornith ornith122 inkling nemotron small; do
         case " $requested " in *" $p "*) ;; *) continue ;; esac
         u="$(unit_for "$p")"
         tpl="$PROF_DIR/$u.service"
@@ -605,7 +629,7 @@ phase_profiles() {
     # "superfast-switch vision on" and lands in a directory no unit reads.
 
 
-    for pair in "gemma gemma" "ornith ornith" "ornith122 ornith122"; do
+    for pair in "gemma gemma" "ornith ornith" "ornith122 ornith122" "inkling inkling" "nemotron nemotron"; do
         set -- $pair
         vp="$1"; vu="$2"
         case " $requested " in *" $vp "*) ;; *) continue ;; esac
@@ -627,6 +651,8 @@ phase_profiles() {
             gemma) vfile="$MODELS_DIR_GEMMA/mmproj-BF16.gguf" ;;
             ornith) vfile="$MODELS_DIR_ORNITH/mmproj-Ornith-1.5-35B-BF16.gguf" ;;
             ornith122) vfile="$MODELS_DIR_ORNITH122/mmproj-Ornith-1.5-122B-BF16.gguf" ;;
+            inkling) vfile="$MODELS_DIR_INKLING/mmproj-Inkling-2-Mini-Q8_0.gguf" ;;
+            nemotron) vfile="$MODELS_DIR_NEMOTRON/mmproj-BF16.gguf" ;;
         esac
         if [ ! -f "$vfile" ] && [ "${SKIP_WEIGHTS:-0}" != "1" ]; then
             log "$vp: vision file missing; fetching it via superfast-download@$vp.service"
@@ -678,7 +704,7 @@ phase_profiles() {
         systemctl --user enable "$(unit_for "$first").service" 2>/dev/null || true
         log "$(unit_for "$first").service enabled for the next boot; start it now with: superfast-switch use $first"
     fi
-    log "switch between them with: superfast-switch use gemma|ornith|ornith122"
+    log "switch between them with: superfast-switch use gemma|ornith|ornith122|inkling|nemotron"
     log "the small router runs beside the active profile: superfast-switch orchestrator on|off"
 }
 
@@ -950,7 +976,7 @@ main() {
     run_phase ui_auth
     run_phase verify
     log "setup complete — profiles prepared: $PROFILES"
-    log "start one with: superfast-switch use gemma|ornith|ornith122"
+    log "start one with: superfast-switch use gemma|ornith|ornith122|inkling|nemotron"
     log "control: superfast-tui (terminal) or the GNOME extension"
     # The one thing a re-run cannot tell by looking at the machine: whether the
     # parameters are in the running kernel yet.

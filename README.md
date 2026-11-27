@@ -99,14 +99,18 @@ The full walkthrough, phase by phase, with what each step verifies, is
 [Set up a new machine](#set-up-a-new-machine). The installer prints its own
 progress and, at the end, what is running and what to check.
 
-What it runs — three open-weight models, everything below measured on this
-machine except where a row says otherwise:
+What it runs — five open-weight models, everything below measured on this
+machine except where a row says otherwise. Two of them are optional and the
+installer does not download their checkpoints unless `PROFILES` names them:
+`nemotron` (66 GB) and `deepseek` (91 GB).
 
 | profile | model | id for the client | speed here (prose / code) | best for |
 |---|---|---|---|---|
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
 | `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, f16 KV, MTP inside the weights, reads images by default |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision on a quarter of the 122B's memory |
+| `inkling` | **Inkling-2-Mini**, 26.4B in total, ~5.4B active per token (a looped mixture-of-experts) | `inkling-2-mini` | — | 262K served context out of the 1M the model holds, vision, on 18 GB of weights |
+| `nemotron` | **Nemotron-3.5-Super-VL-120B-A12B**, mixture-of-experts, 120B in total, ~12B active per token | `nemotron-3.5-super-vl-120b` | 30.1 / 35.2 t/s | 128K served context out of the 1M the model holds, vision, reasoning on, on 66 GB of weights; optional in the installer (`PROFILES=... nemotron`) |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
 
@@ -154,9 +158,9 @@ serves: `gemma`, `ornith` (the 35B) and `ornith122`.
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
-machine runs three profiles, in order of size: Ornith-1.5-122B (122B in total,
-~6B active), Ornith-1.5-35B-A3B (35B in total, 3B active) and Gemma-4
-(25.2B) — that is, up to a
+machine runs four profiles, in order of size: Ornith-1.5-122B (122B in total,
+~6B active), Ornith-1.5-35B-A3B (35B in total, 3B active), Inkling-2-Mini
+(26.4B in total, ~5.4B active) and Gemma-4 (25.2B) — that is, up to a
 122-billion-parameter model running entirely on the machine.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
@@ -417,6 +421,8 @@ its own directory, and the setup script and the switch know those paths.
 |---|---|---|---|
 | gemma | `~/gemma-models` | `gemma-4-26B-A4B-it-Q4_0_ROCMFP4_COHERENT.gguf` (14,439,364,064), `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (461,766,816), `mmproj-BF16.gguf` (1,194,828,256) | HF `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` |
 | ornith122 | `~/ornith122-models` | `Ornith-1.5-122B.MXFP4_MOE.gguf` (69,666,316,288), `mmproj-Ornith-1.5-122B-BF16.gguf` (912,263,200) | HF `prithivMLmods/Ornith-1.5-122B-MXFP4_MOE-MTP` and, for the projector, `ornith-ai/Ornith-1.5-122B-GGUF` |
+| inkling | `~/inkling-models` | `Inkling-2-Mini-IQ4_NL.gguf` (17,627,940,768), `mmproj-Inkling-2-Mini-Q8_0.gguf` (345,910,944) | HF `ggml-org/Inkling-2-Mini-GGUF` |
+| nemotron | `~/nemotron-models` | three `UD-Q3_K_XL` shards (7,874,568 + 49,225,290,592 + 16,528,375,872), `mtp-Q8_0.gguf` (4,276,991,744), `mmproj-BF16.gguf` (1,733,695,840) | HF `unsloth/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-GGUF` for the shards and the projector, `ggml-org/…-GGUF` for the MTP head |
 | orchestrator | `~/small-models` | `LFM2.5-350M-Q4_K_M.gguf` (229,312,224), `LFM2.5-1.2B-Thinking-ToMoE-Q4_K_M.gguf` (730,898,432) | HF `LiquidAI/LFM2.5-350M-GGUF` and `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` |
 
 Two things the table does not show. The `gemma` profile (and the optional
@@ -1264,7 +1270,7 @@ What this does and does not say:
   changes it later, which restarts the profile with or without the encoder. The
   optional `deepseek` profile is text-only — no encoder exists in its repository.
   **Both clients now declare it too**: `generationConfig.modalities.image` in Qwen Code and
-  `input: ["text", "image"]` in PI, for the three profiles that carry an encoder, because that key
+  `input: ["text", "image"]` in PI, for the four profiles that carry an encoder, because that key
   is what makes `read_file` pass pixels instead of a placeholder. Verified end to end on 2026-11-08 —
   gemma read a real screenshot and quoted the text in it. [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md)
   carries the per-model table: image, video (no client has a channel for it), reasoning switch,
@@ -1563,7 +1569,7 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 | setting | what to do |
 |---|---|
 | model name | the `id for the client` column of the profile table at the top; it changes with the active profile, and it is what `/health` reports as `"model"` |
-| context window | set it to what the profile serves — 262,144 for the three, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
+| context window | set it to what the profile serves — 262,144 for the four, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
 | answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
 | sampling | the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client chooses. Greedy (`temperature: 0`) is what a coding agent wants, and it is what the numbers in this README were measured with |
 | reasoning effort | the field is ignored: thinking is switched in the unit, with `--chat-template-kwargs`, not per request |

@@ -47,11 +47,11 @@ reaches nothing, and `docker-compose.yml` no longer exists.
 | `SUPERFAST_API_LOG` | *(unset)* | Path to a teed front-end log, so the serving benchmark can read throughput counters from inside a container. |
 | `SUPERFAST_ROOT`, `SUPERFAST_PROMPTS`, `SUPERFAST_API_CTR` | *(derived)* | Benchmark inputs: the image's tool directory, the prompt fixture, the container whose log the counters are read from. |
 | `SUPERFAST_PORT`, `SUPERFAST_ORCH_PORT` | `8731`, `8732` | Ports the switch and the TUI probe. |
-| `SUPERFAST_GEMMA_DIR`, `SUPERFAST_DEEPSEEK_DIR`, `SUPERFAST_ORNITH_DIR`, `SUPERFAST_ORNITH122_DIR`, `SUPERFAST_ORCH_DIR` | `~/gemma-models`, `~/deepseek-models`, `~/ornith-models`, `~/ornith122-models`, `~/small-models` | Where each profile's weights live. |
+| `SUPERFAST_GEMMA_DIR`, `SUPERFAST_DEEPSEEK_DIR`, `SUPERFAST_ORNITH_DIR`, `SUPERFAST_ORNITH122_DIR`, `SUPERFAST_INKLING_DIR`, `SUPERFAST_NEMOTRON_DIR`, `SUPERFAST_ORCH_DIR` | `~/gemma-models`, `~/deepseek-models`, `~/ornith-models`, `~/ornith122-models`, `~/inkling-models`, `~/nemotron-models`, `~/small-models` | Where each profile's weights live. |
 | `SUPERFAST_*_UNIT` | `gemma.service`, `ornith122.service`, … | Override the systemd unit a profile maps to. |
 | `SUPERFAST_GATEWAY_PORT`, `SUPERFAST_KEY_FILE` | `8741`, `~/.config/superfast/api.key` | The API-key gateway. |
 | `SUPERFAST_API_KEY` | *(client side)* | The key the client sends as `Authorization: Bearer …`. `envKey` in the client entry names this variable. |
 | `SUPERFAST_NO_KEY` | `0` | `1` makes the installer skip creating an API key. |
 | `SUPERFAST_RUNTIME_IMAGE`, `SUPERFAST_RUNTIME_PUBLISHED`, `SUPERFAST_RUNTIME_PUBLISHED_EXTRA` | the published tags | Installer overrides: which runtime image to pull, and where to look for it before building from `runtime/`. |
 | `SUPERFAST_PEAK_GB`, `SUPERFAST_2K_GB`, `SUPERFAST_SYSTEM_RESERVE_GB` | `24`, `32`, `10` | The image generator's memory gate. |
-| `PROFILES`, `ONLY`, `MODELS_DIR_*` | `gemma ornith ornith122 small` | Installer phase selection and weight locations. |
+| `PROFILES`, `ONLY`, `MODELS_DIR_*` | `gemma ornith ornith122 inkling small` | Installer phase selection and weight locations. |

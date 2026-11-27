@@ -14,7 +14,7 @@
 # Usage:
 #   superfast-switch status
 #   superfast-switch list
-#   superfast-switch use gemma|ornith|ornith122
+#   superfast-switch use gemma|ornith|ornith122|inkling|nemotron
 #   superfast-switch mode pinned|auto
 #   superfast-switch state
 #   superfast-switch profile-for <model-id>
@@ -35,8 +35,8 @@
 # `api-key off` means "no remote access at all" (loopback on the host still
 # works, no key needed there).
 #
-# `vision on|off` toggles the vision component of the ACTIVE profile (gemma
-# and ornith only; deepseek is text-only). It restarts that profile
+# `vision on|off` toggles the vision component of the ACTIVE profile (gemma,
+# ornith, ornith122, inkling and nemotron; deepseek is text-only). It restarts that profile
 # and drops its prompt cache, so use it between conversations. The vision
 # files are downloaded at setup whether or not the toggle is used.
 set -euo pipefail
@@ -48,6 +48,8 @@ HEALTH="http://127.0.0.1:${PORT}/health"
 GEMMA_DIR="${SUPERFAST_GEMMA_DIR:-$HOME/gemma-models}"
 ORNITH_DIR="${SUPERFAST_ORNITH_DIR:-$HOME/ornith-models}"
 ORNITH122_DIR="${SUPERFAST_ORNITH122_DIR:-$HOME/ornith122-models}"
+INKLING_DIR="${SUPERFAST_INKLING_DIR:-$HOME/inkling-models}"
+NEMOTRON_DIR="${SUPERFAST_NEMOTRON_DIR:-$HOME/nemotron-models}"
 API_KEY_FILE="${SUPERFAST_KEY_FILE:-$HOME/.config/superfast/api.key}"
 GATEWAY_UNIT="${SUPERFAST_GATEWAY_UNIT:-superfast-gateway.service}"
 GATEWAY_PORT="${SUPERFAST_GATEWAY_PORT:-8741}"
@@ -57,13 +59,17 @@ declare -A UNIT=(
     [gemma]="${SUPERFAST_GEMMA_UNIT:-gemma.service}"
     [ornith]="${SUPERFAST_ORNITH_UNIT:-ornith.service}"
     [ornith122]="${SUPERFAST_ORNITH122_UNIT:-ornith122.service}"
+    [inkling]="${SUPERFAST_INKLING_UNIT:-inkling.service}"
+    [nemotron]="${SUPERFAST_NEMOTRON_UNIT:-nemotron.service}"
 )
 declare -A LABEL=(
     [gemma]="Gemma-4-26B-A4B ROCmFP4 (llama-rocmfpx)"
     [ornith]="Ornith-1.5-35B-A3B ROCmFP4 (llama-rocmfpx)"
     [ornith122]="Ornith-1.5-122B MXFP4 (llama.cpp Vulkan)"
+    [inkling]="Inkling-2-Mini IQ4_NL (llama.cpp Vulkan)"
+    [nemotron]="Nemotron-3.5-Super-VL-120B-A12B UD-Q3_K_XL (llama.cpp Vulkan)"
 )
-PROFILES=(gemma ornith ornith122)
+PROFILES=(gemma ornith ornith122 inkling nemotron)
 
 # Served model id -> profile, for `mode auto`. These are the ids the units
 # answer with (`--alias`), never the display labels: a client sends what its
@@ -73,6 +79,8 @@ declare -A ALIAS=(
     [gemma-4-26b-a4b]=gemma
     [ornith-1.5-35b-a3b]=ornith
     [ornith-1.5-122b]=ornith122
+    [inkling-2-mini]=inkling
+    [nemotron-3.5-super-vl-120b]=nemotron
 )
 
 # The orchestrator is a small, fast model that runs ALONGSIDE a profile (it is
@@ -91,9 +99,9 @@ ORCH_HEALTH="http://127.0.0.1:${ORCH_PORT}/health"
 VISION_DIR="${SUPERFAST_VISION_DIR:-$HOME/.config/superfast/vision}"
 # Profiles whose engine can carry a vision component. deepseek is text-only:
 # no encoder exists in its repository, so the toggle is not available for it.
-# gemma, ornith and ornith122 load an --mmproj projector through their
-# drop-in, which is why the projector is still an opt-in.
-VISION_CAPABLE="gemma ornith ornith122"
+# gemma, ornith, ornith122, inkling and nemotron load an --mmproj projector
+# through their drop-in, which is why the projector is still an opt-in.
+VISION_CAPABLE="gemma ornith ornith122 inkling nemotron"
 
 # Is a word in a space-separated list?
 is_in() { # "list" word
@@ -148,6 +156,10 @@ weights_ready() {
             [ -f "$ORNITH_DIR/.download-complete" ] ;;
         ornith122)
             [ -f "$ORNITH122_DIR/.download-complete" ] ;;
+        inkling)
+            [ -f "$INKLING_DIR/.download-complete" ] ;;
+        nemotron)
+            [ -f "$NEMOTRON_DIR/.download-complete" ] ;;
     esac
 }
 
@@ -606,8 +618,12 @@ IMAGE_2K_GB="${SUPERFAST_IMAGE_2K_GB:-32}"          # 2K comfort
 SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
+# Resident footprint per profile, measured on the reference host, because
+# the image generator's gate is what reads it. inkling's 30 GB is the one
+# entry that is still an estimate (weights plus the KV of a 262,144 window);
+# replace it with the measured figure the first time the profile is loaded.
 declare -A PROFILE_GB=(
-    [gemma]=23 [ornith]=25 [ornith122]=75 [small]=2
+    [gemma]=23 [ornith]=25 [ornith122]=75 [inkling]=30 [nemotron]=69 [small]=2
 )
 
 image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }
