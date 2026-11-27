@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=XDG_RUNTIME_DIR=__XDG__
 ExecStartPre=-/usr/bin/podman rm -f nemotron-server
 ExecStart=/usr/bin/podman run --name nemotron-server --rm -p 127.0.0.1:8731:8731 \
   --device /dev/kfd --device /dev/dri --group-add keep-groups \
