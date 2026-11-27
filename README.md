@@ -158,10 +158,11 @@ serves: `gemma`, `ornith` (the 35B) and `ornith122`.
 A running model is called a **profile**. Only one profile runs at a time, and
 every profile serves the same OpenAI-compatible endpoint on port 8731. The
 tools you connect to the machine never change their configuration. Today the
-machine runs four profiles, in order of size: Ornith-1.5-122B (122B in total,
-~6B active), Ornith-1.5-35B-A3B (35B in total, 3B active), Inkling-2-Mini
-(26.4B in total, ~5.4B active) and Gemma-4 (25.2B) — that is, up to a
-122-billion-parameter model running entirely on the machine.
+machine runs five profiles, in order of size: Nemotron-3.5-Super-VL-120B-A12B
+(120B in total, ~12B active), Ornith-1.5-122B (122B in total, ~6B active),
+Ornith-1.5-35B-A3B (35B in total, 3B active), Inkling-2-Mini (26.4B in total,
+~5.4B active) and Gemma-4 (25.2B) — that is, up to a 122-billion-parameter
+model running entirely on the machine, and a 120B one beside it.
 Other models can be added the same way. See
 [Choose a model profile](#choose-a-model-profile).
 
@@ -997,16 +998,21 @@ JSON tool calls, answering reasoning questions exactly, and extracting facts fro
 documents — and each task is scored by its own checker, not by a judge model, into a 0-100
 composite with a tier band. It compares quality, not speed.
 
-The runs of 2026-10-22, and the reference runs of 2026-11-06 and 2026-11-07, were made **on the
-host itself**, so the leaderboard page describes the machine that really serves the model. Each
-run switched the profile, warmed it with three short calls until the latency settled, and was
-submitted (`--user andrea-bruno`). One seed per profile.
+The runs of 2026-10-22, the reference runs of 2026-11-06 and 2026-11-07, and the profile runs of
+2026-11-27, were made **on the host itself**, so the leaderboard page describes the machine that
+really serves the model. Each run switched the profile, warmed it with three short calls until the
+latency settled, and was submitted (`--user andrea-bruno`). One seed per profile.
 
 *Nemotron 3.5 Super VL 120B-A12B* is the second reference measurement, run on 2026-11-07 on an
-engine built for it from mainline (llama.cpp `ca89968`, no patches) with its vision projector.
-Its four quality families are **identical to the 122B's** (code 100, reason 80, tool use 87.5,
-RAG 100), so the whole gap to the others is speed — a 120B MoE with 12B active on a hybrid
-Mamba-2 architecture, whose Vulkan kernels are plainly less mature than the transformer ones.
+engine built for it from mainline (llama.cpp `ca89968`, no patches) with its vision projector. It
+became a **profile of its own on 2026-11-27** — `nemotron`, `nemotron.service`, the projector in
+its vision drop-in, 131,072 tokens of served context out of the 1M the card declares — and the row
+in the table is that profile. Its four quality families are **identical to the 122B's** (code 100,
+reason 80, tool use 87.5, RAG 100), so the whole gap to the others is speed — a 120B MoE with 12B
+active on a hybrid Mamba-2 architecture, whose Vulkan kernels are plainly less mature than the
+transformer ones. Measured again after the first load of the profile: 69 GB of GTT, **30.1 t/s**
+decode on prose and **35.2** on code with the MTP head, which is the 29.7 t/s of the Q3 column
+below with the head's accepted drafts in it.
 
 The score was run twice the same day, which is what makes the second number worth reading. The
 first run (80.2) served it plain and **was the slowest thing measured here**: speed 12.1 against
@@ -1032,14 +1038,15 @@ off; the row to read them against is therefore the 122B's thinking-off **73.5**,
 | ornith122, q8_0 KV | `ornith-1.5-122b` | **81.9** | MAINLINE |
 | ornith122, f16 KV | `ornith-1.5-122b` | 84.0 | MAINLINE |
 | ornith122, thinking off | `ornith-1.5-122b` | 73.5 | FEEDER |
+| inkling | `inkling-2-mini` | **82.7** | MAINLINE |
 | *Qwen3.8-Flash-Next, shipped flags — removed* | `qwen3.8-flash-next` | 83.8 | MAINLINE |
 | *Qwen3.8-Flash-Next, original flags — removed* | `qwen3.8-flash-next` | 80.7 | MAINLINE |
 | *GLM-5.3-Flash, reference* | `glm-5.3-flash` | 82.4 | MAINLINE |
-| *Nemotron 3.5, reference — plain serving* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
-| *Nemotron 3.5, reference — MTP + ub 256, 88.6 GB* | `nemotron-3.5-super-vl-120b` | 80.7 | MAINLINE |
-| *Nemotron 3.5, reference — MTP + ub 256, 65.8 GB* | `nemotron-3.5-super-vl-120b` | **80.9** | MAINLINE |
+| *Nemotron 3.5, plain serving — before the profile* | `nemotron-3.5-super-vl-120b` | 80.2 | MAINLINE |
+| *Nemotron 3.5, MTP + ub 256, 88.6 GB — before the profile* | `nemotron-3.5-super-vl-120b` | 80.7 | MAINLINE |
+| nemotron | `nemotron-3.5-super-vl-120b` | **80.9** | MAINLINE |
 
-**Every run above is published.** The twelve of them, with their tiers, are listed on the
+**Every run above is published.** The thirteen of them, with their tiers, are listed on the
 [andrea-bruno profile](https://pipelinescore.ai/users/andrea-bruno) alongside everyone else's
 runs, which is the comparison the numbers are for; the individual cards are linked in the
 paragraphs below.
@@ -1062,6 +1069,13 @@ model with `--reasoning off` scored **73.5**. The cards are
 (q8_0) and
 [67b71bf8](https://pipelinescore.ai/s/67b71bf8-f37d-4a40-9662-4cb4e8f19e20)
 (f16).
+
+Inkling-2-Mini scored **82.7** on its first run, and its four quality families are identical to
+the 122B's and to Nemotron's — code 100, reasoning 80, tool use 87.5, RAG 100 — so what separates
+it from the two above is speed: 29.1, better than the 122B's 23.5. That makes it the third of the
+five profiles now installed (ornith 90.1, ornith122 84.0, inkling 82.7, gemma 81.2, nemotron
+80.9), and it fails the same three tasks the 122B and GLM fail. Card:
+[552ecb6e](https://pipelinescore.ai/s/552ecb6e-e353-4a0b-9402-1b6d305e1f7e).
 
 The two italic `Qwen3.8-Flash-Next` rows are the **125B model the lineup used until
 2026-11-05**, kept because they record why it left. It scored **83.8** with the memory flags
@@ -1113,20 +1127,22 @@ assumed:
 
 | profile | best passed | how | median s/task | total |
 |---|---|---|---|---|
-| *Nemotron 3.5 Super VL 120B-A12B, reference* | **97** | thinking on | 27.3 | 1h27m |
+| nemotron | **97** | thinking on | 27.3 | 1h27m |
 | ornith-1.5-35b-a3b | **96** | thinking on | 6.8 | 0h23m |
 | ornith-1.5-122b | **94** | thinking on | 17.9 | 1h05m |
+| inkling-2-mini | **94** | thinking on, effort low | 17.2 | 1h00m |
 | gemma-4-26b-a4b | 90 | thinking off | 4.0 | 0h15m |
 
 **The seven tasks between first and last are not a ranking.** Pairing the runs task by task, the
 leader beats the 35B on nine problems and loses eight (McNemar χ² 0.00), beats the 122B on eight
 and loses five (0.31), and beats gemma on thirteen and loses six (1.89) — none of the three clears
-the 3.84 threshold. On 158 tasks the four are indistinguishable at code synthesis, and a gap of
-about ten tasks would be needed to separate them; 21 of Nemotron's own answers also end at the
-2,048 cap, which can only understate it. So the column gives an order, not a verdict: read it
-together with the time, which spans 4.0 to 27.3 s per task, and with the general axis in the
-PipelineScore table above, where Nemotron is last of the four (80.9 against 90.1 for ornith) and
-the 35B first.
+the 3.84 threshold. On 158 tasks they are indistinguishable at code synthesis, and a gap of about
+ten tasks would be needed to separate them; 21 of Nemotron's own answers also end at the 2,048 cap,
+which can only understate it. Inkling lands at 94, level with the 122B, and it is the one row whose
+setting was picked by measuring it: at the template's default effort it passed 71, with 50 answers
+cut at the cap. So the column gives an order, not a verdict: read it together with the time, which
+spans 4.0 to 27.3 s per task, and with the general axis in the PipelineScore table above, where
+Nemotron is last of the five profiles installed (80.9 against 90.1 for ornith) and the 35B first.
 
 **Reasoning helps three of the four, and the table looked different without it.** The same
 runs with the reasoning channel closed, on the same engine:
@@ -1135,8 +1151,13 @@ runs with the reasoning channel closed, on the same engine:
 |---|---|---|---|---|
 | ornith-1.5-35b-a3b | 66 | **96** | **+30** | 1.9× the time |
 | ornith-1.5-122b | 85 | **94** | +9 | 2.7× |
-| *Nemotron 3.5, reference* | 95 | **97** | +2 | 4.4× |
+| *Nemotron 3.5, before the profile* | 95 | **97** | +2 | 4.4× |
 | gemma-4-26b-a4b | **90** | 7 of 20 (control) | **−** | — |
+
+Inkling is a different switch again: its pair is `--reasoning-effort low` against the template's
+default `high`, and it is worth **23 tasks** — 94 against 71 — with 50 of the high arm's answers cut
+at the 2,048 cap against 7. That is why its unit ships `low`: the setting is part of the model's
+configuration on this machine, not a global policy either.
 
 The 35B is the model this machine runs for agentic work, and it was the last on code only
 because its unit ships `--reasoning off`: with the channel open it passes 96, second by one
@@ -1270,7 +1291,7 @@ What this does and does not say:
   changes it later, which restarts the profile with or without the encoder. The
   optional `deepseek` profile is text-only — no encoder exists in its repository.
   **Both clients now declare it too**: `generationConfig.modalities.image` in Qwen Code and
-  `input: ["text", "image"]` in PI, for the four profiles that carry an encoder, because that key
+  `input: ["text", "image"]` in PI, for the five profiles that carry an encoder, because that key
   is what makes `read_file` pass pixels instead of a placeholder. Verified end to end on 2026-11-08 —
   gemma read a real screenshot and quoted the text in it. [`docs/MODEL-CARDS.md`](docs/MODEL-CARDS.md)
   carries the per-model table: image, video (no client has a channel for it), reasoning switch,
@@ -1455,6 +1476,8 @@ superfast-switch status          # what is running now
 superfast-switch list            # available profiles
 superfast-switch use gemma       # Gemma-4-26B-A4B ROCmFP4
 superfast-switch use ornith122  # Ornith-1.5-122B MXFP4
+superfast-switch use inkling     # Inkling-2-Mini IQ4_NL
+superfast-switch use nemotron   # Nemotron-3.5-Super-VL-120B-A12B UD-Q3_K_XL
 superfast-switch mode auto       # let the client's model field pick the profile
 superfast-switch stop            # stop everything
 superfast-switch api-key on      # require the API key from the LAN (:8741)
@@ -1521,6 +1544,7 @@ reference machine:
 |---|---|---|---|
 | Gemma-4-26B-A4B | 262,144 | ~23 GB | its native 256K; its sliding-window attention keeps the KV cache small |
 | Ornith-1.5-122B | 262,144 | ~75 GB | native maximum; only 12 of its 48 layers use full attention and the q8_0 KV cache is ~3 GB for the whole window |
+| Nemotron-3.5-Super-VL-120B-A12B | 131,072 | ~69 GB | 131,072 of the 1M the card declares: a 950k-token prompt was measured at 91 t/s prefill, i.e. 2.9 hours before the first token. The 69 GB are the GTT in use with the projector loaded |
 
 Three properties that matter when a program uses this machine as its model:
 
@@ -1569,7 +1593,7 @@ machine itself use `http://127.0.0.1:8731/v1` with no key.
 | setting | what to do |
 |---|---|
 | model name | the `id for the client` column of the profile table at the top; it changes with the active profile, and it is what `/health` reports as `"model"` |
-| context window | set it to what the profile serves — 262,144 for the four, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
+| context window | set it to what the profile serves — 262,144 for gemma, ornith, ornith122 and inkling, 131,072 for nemotron, 524,288 for DeepSeek. Never larger: the server refuses, because the window is allocated memory, not a preference |
 | answer budget | per profile, see the table below. The budget covers the reasoning tokens as well, so a small one truncates a turn that thinks and then writes a file, and a large one can outlast the client's stream limit |
 | sampling | the server declares **no** sampling default — `/props` reports only `n_ctx` — so the client chooses. Greedy (`temperature: 0`) is what a coding agent wants, and it is what the numbers in this README were measured with |
 | reasoning effort | the field is ignored: thinking is switched in the unit, with `--chat-template-kwargs`, not per request |
