@@ -58,8 +58,8 @@
 #   SKIP_IMAGE=1      do not pull the engine image (it is still checked first)
 #   VISION_DEFAULT=0  keep the text-only default: stage the vision drop-in but
 #                     leave it inactive. Unset or 1 (the default) installs the
-#                     vision drop-in active for gemma, ornith, ornith122 and
-#                     inkling, so
+#                     vision drop-in active for gemma, ornith, ornith122,
+#                     inkling and nemotron, so
 #                     the machine comes up with vision on for the models that
 #                     can carry it. Change it later with `superfast-switch vision`.
 #   SMOKE=1           also run the small container device test
