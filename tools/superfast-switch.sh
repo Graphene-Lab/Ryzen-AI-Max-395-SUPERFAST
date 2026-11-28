@@ -622,7 +622,10 @@ ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 # the image generator's gate is what reads it. inkling's 27 GB is the shipped
 # 262,144 window on a 2.3 GB idle host (26.3 GiB, measured 2026-11-28); at 1M
 # the same profile takes 56.4 GiB, so the number is a property of the shipped
-# window, not of the weights.
+# window, not of the weights. nemotron's 69 was first read from
+# mem_info_gtt_used, a host-wide counter that proved unreliable; re-measured on
+# 2026-11-28 with free -m against a 2.4 GB idle host it is 68.5 GiB, so the
+# number stands.
 declare -A PROFILE_GB=(
     [gemma]=23 [ornith]=25 [ornith122]=75 [inkling]=27 [nemotron]=69 [small]=2
 )
