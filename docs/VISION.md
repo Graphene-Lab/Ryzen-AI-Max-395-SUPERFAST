@@ -62,7 +62,7 @@ switch does not leave the machine down: after waiting for `/health` it
 **removes the override and restarts the profile text-only**, so the machine
 keeps serving. You get a clear message in the log rather than a silent outage.
 
-## Memory: the extra is not cumulative
+## Memory: the extra is not cumulative, and how to tell whether it fits
 
 The three vision files together look like ~3 GiB, but they are **never all in
 memory at once**, because only one profile runs at a time. Turning vision on
@@ -73,12 +73,39 @@ adds the encoder to whichever profile is already running:
 - ornith + projector: the ~861 MiB projector sits on top of the running ornith
   profile, which is about 25 GB at the same window;
 - ornith122 + projector: the ~870 MiB projector sits on top of the running
-  ornith122 profile, which is about 75 GB.
+  ornith122 profile, which is about 75 GB;
+- inkling + projector: measured, not estimated — see the table below.
 
-None pushes the machine into memory pressure: the largest profile,
-Ornith-1.5-122B, is 75 GB resident and still leaves about 45 GB of the 124 GB
-pool — 44 GB with its projector loaded. The projectors are never stacked,
-because the profile that would carry the second one is not running.
+### The rule
+
+Whether a profile with vision fits is decided by one sum, and all three terms
+are resident at the same time:
+
+    RAM(llm) + RAM(vision) + RAM(os) < RAM(total)
+
+The window is part of `RAM(llm)` and is allocated when the profile starts, not
+when the context fills, so the check happens before starting it. The image
+generator's gate (`superfast-switch image check`) applies the same idea with
+the profile's footprint taken from `PROFILE_GB`.
+
+### Measured on the reference host (124 GB pool, 2.4 GB idle)
+
+| profile | window | vision | resident | available | notes |
+|---|---|---|---|---|---|
+| inkling | 262,144 | off | 26.3 GiB | 98 GB | |
+| inkling | 262,144 | on | 26.8 GiB | 97 GB | +478 MiB for the Q8_0 projector |
+| inkling | 524,288 | off | 36.3 GiB | 88 GB | |
+| inkling | 524,288 | on | 36.8 GiB | 87 GB | **the widest window that works with vision here** |
+| inkling | 1,048,576 | on | 56.4 GiB | 48 GB | opens, but a text-then-image turn kills llama.cpp |
+
+The KV is **~40 KiB per token** for this model: 262,144 → 524,288 costs 10 GiB,
+and 524,288 → 1,048,576 another 20 GiB. The projector's standing cost is
+**478 MiB** and it does not grow with the window.
+
+So a 512K inkling with vision leaves 87 GB: 63 GB for the image generator's
+24 GB peak, the OS, and room to work. The 1M window is not a memory problem
+either — it leaves 48 GB — it is llama.cpp's prompt-cache path that fails on
+the second request, which is why the profile ships 524,288 and not more.
 
 ## Turning it on and off
 

@@ -15,9 +15,15 @@
   0012. Weights are `ggml-org/Inkling-2-Mini-GGUF` IQ4_NL (17,627,940,768 B,
   SHA-256 `cbdf3fa9…81af4` — the quant ggml-org's own command uses, and at 4.3
   bits per weight the closest to the vendor checkpoint's NVFP4/MXFP8 mix) plus
-  the Q8_0 projector (345,910,944 B). Served context is 262,144 of the
-  1,048,576 the model holds: that is the cap the vendor's own vLLM recipe sets
-  for a 32 GB-class machine, and the looped layers keep three KV copies.
+  the Q8_0 projector (345,910,944 B). Served context is **524,288** of the
+  1,048,576 the model holds, measured on 2026-11-28: 512K opens with the
+  projector and answers a text-then-image turn, 1M also opens but that same
+  turn kills llama.cpp (`GGML_ASSERT ... "tensor not allocated"` in
+  `update_prompt_cache`, exit 139), and 262,144 is only the vendor's cap for
+  this hardware class. The window costs ~40 KiB of KV per token — 26.3 GiB at
+  262,144, 36.3 at 524,288, 56.4 at 1,048,576 — and the projector adds 478 MiB;
+  the rule that decides whether a profile with vision fits is in
+  `docs/VISION.md`.
   Sampling is Unsloth's llama.cpp recipe for this model — `--temp 1.0 --top-p
   1.0 --top-k 0 --min-p 0.0` — which agrees with the repository's
   `generation_config.json` (temperature 1.0, no other sampler); the card

@@ -15,7 +15,7 @@ client has to declare for that to happen.
 | gemma-4-26b-a4b | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | no client channel | per request, but it hurts code (measured) | 262,144 | MTP head `mtp-gemma-…-Q8_0.gguf` | 14.9 GB |
 | ornith-1.5-35b-a3b | **yes**, `--mmproj` in its vision drop-in | no client channel | `--reasoning on` since 2026-11-08 | 262,144 | MTP inside the weights, **not used** (−16% prefill for +3% decode) | 19 GB |
 | ornith-1.5-122b | **yes**, `--mmproj mmproj-Ornith-1.5-122B-BF16.gguf` in its active drop-in | no client channel | on (vendor default; no `--reasoning` flag) | 262,144 | MTP inside the weights, f16 KV | 69.7 GB |
-| inkling-2-mini | **yes**, `--mmproj mmproj-Inkling-2-Mini-Q8_0.gguf` in its active drop-in | no client channel | `--reasoning on`, effort `low` — measured: 94/158 on MultiPL-E at low against 71/158 at the template default `high` | 262,144 served of 1,048,576 native | DSpark drafter exists, **not used** | 17.6 GB |
+| inkling-2-mini | **yes**, `--mmproj mmproj-Inkling-2-Mini-Q8_0.gguf` in its active drop-in | no client channel | `--reasoning on`, effort `low` — measured: 94/158 on MultiPL-E at low against 71/158 at the template default `high` | 524,288 served of 1,048,576 native | DSpark drafter exists, **not used** | 17.6 GB |
 | deepseek-v4-flash (optional) | no: text-only repository | no client channel | not switchable through the API here | 524,288 | — | 96 GB |
 | nemotron-3.5-super-vl-120b (optional profile) | **yes**, `--mmproj mmproj-BF16.gguf` in its active drop-in | trained for it, still no client channel | `chat_template_kwargs.enable_thinking` (on / on-medium / off), on by default | 131,072 served of 1,048,576 native | MTP head `mtp-Q8_0.gguf`, **used** | 65.8 GB |
 
