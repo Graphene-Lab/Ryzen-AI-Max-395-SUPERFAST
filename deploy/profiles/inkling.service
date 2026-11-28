@@ -27,18 +27,28 @@ ExecStart=/usr/bin/podman run --name inkling-server --rm -p 127.0.0.1:8731:8731 
 # repository's generation_config.json, which sets temperature 1.0 and no other
 # sampler. The model card publishes no sampler at all.
 #
-# 262144 is the vendor's own number for this class of machine, not ours: the
-# vLLM recipe serves the full 1,048,576 on a GB200 and caps the window at
-# 262,144 on H100 and DGX Spark "to fit in memory" — a unified-memory box with
-# ~128 GB is that second case, not the 32 GB floor the card asks for. The model
-# holds 1M natively, but its 24 layers are visited 48 times per token (the
-# 12-layer loop core runs three passes), so the KV is 48 caches and a full
-# window costs tens of gigabytes and hours of prefill at ~100 t/s. Raise -c
-# deliberately, not by default: measured on this host on 2026-11-28, -c 1048576
-# loads and serves (n_ctx reported 1048576, ready in 30 s) but leaves 5.1 GB of
-# the 127.4 GB pool free, against 29.4 GB at 262144 — 24 GB for the extra 786k
-# tokens, ~31 KiB each. That is the vendor's reason for the cap, seen from the
-# other side: the window fits, the machine does not have room for anything else.
+# 262144 is the vendor's own number for this class of machine, and it is also
+# where vision works. The vLLM recipe serves the full 1,048,576 on a GB200 and
+# caps the window at 262,144 on H100 and DGX Spark "to fit in memory"; this
+# host is the second case, and the card's 32 GB is the floor the model needs at
+# all, not the reason for the cap.
+#
+# A 1M window was tried here on 2026-11-28 and it does not hold up: it opens
+# (n_ctx reported 1048576, ready in 20 s, 56.4 GiB resident against 26.3 GiB at
+# 262,144, 48 GiB left) and text prefills at 438 t/s, but an image request that
+# follows another request on the same slot kills the server —
+# `GGML_ASSERT(tensors[i]->data != NULL && "tensor not allocated")` in
+# update_prompt_cache, exit 139 — while the same image as the first request is
+# answered correctly. A conversation does text and then images, so the window
+# that breaks it is not shippable. The assert is llama.cpp's, not the memory's.
+#
+# The time cost is paid on the first prompt only: the prefix cache carries the
+# rest, measured at 19 prefilled tokens on a follow-up turn against 4,893 on the
+# first. Prefill runs at 459 t/s here (4,809 tokens, measured 2026-11-28 on an
+# idle host), so the whole 262,144-token window costs ~9.5 minutes to rebuild
+# after a restart, a different client or a changed system prompt — and the same
+# rate at 1M is ~40 minutes. The 100 t/s reported on 2026-11-27 was measured
+# while a stuck container held 73 GiB: memory pressure, not the model.
 #
 # --reasoning-effort low is a measured choice, not the template default: at
 # effort high (0.9, the default) the trace does not fit a 2,048-token answer

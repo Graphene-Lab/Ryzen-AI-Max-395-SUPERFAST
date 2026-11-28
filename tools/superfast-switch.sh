@@ -619,11 +619,12 @@ SYSTEM_RESERVE_GB="${SUPERFAST_SYSTEM_RESERVE_GB:-10}"
 ORCH_RESERVE_GB="${SUPERFAST_ORCH_RESERVE_GB:-2}"
 
 # Resident footprint per profile, measured on the reference host, because
-# the image generator's gate is what reads it. inkling's 30 GB is the one
-# entry that is still an estimate (weights plus the KV of a 262,144 window);
-# replace it with the measured figure the first time the profile is loaded.
+# the image generator's gate is what reads it. inkling's 27 GB is the shipped
+# 262,144 window on a 2.3 GB idle host (26.3 GiB, measured 2026-11-28); at 1M
+# the same profile takes 56.4 GiB, so the number is a property of the shipped
+# window, not of the weights.
 declare -A PROFILE_GB=(
-    [gemma]=23 [ornith]=25 [ornith122]=75 [inkling]=30 [nemotron]=69 [small]=2
+    [gemma]=23 [ornith]=25 [ornith122]=75 [inkling]=27 [nemotron]=69 [small]=2
 )
 
 image_peak_gb() { [ "${1:-standard}" = "2k" ] && echo "$IMAGE_2K_GB" || echo "$IMAGE_PEAK_GB"; }

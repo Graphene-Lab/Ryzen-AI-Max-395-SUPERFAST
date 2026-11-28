@@ -109,7 +109,7 @@ installer does not download their checkpoints unless `PROFILES` names them:
 | `gemma` | **Gemma-4-26B-A4B**, 25.2B | `gemma-4-26b-a4b` | 57.3 / 57.6 t/s | the fastest answers; reads images by default |
 | `ornith122` | **Ornith-1.5-122B**, mixture-of-experts, 122B in total, ~6B active per token | `ornith-1.5-122b` | 25.0 / 28.2 t/s | the largest model that still fits with room to spare: 262K context, f16 KV, MTP inside the weights, reads images by default |
 | `ornith` | **Ornith-1.5-35B-A3B**, 35B in total, 3B active | `ornith-1.5-35b-a3b` | — / 63.9 t/s | 256K context and vision on a quarter of the 122B's memory |
-| `inkling` | **Inkling-2-Mini**, 26.4B in total, ~5.4B active per token (a looped mixture-of-experts) | `inkling-2-mini` | — | 262K served context out of the 1M the model holds, vision, on 18 GB of weights |
+| `inkling` | **Inkling-2-Mini**, 26.4B in total, ~5.4B active per token (a looped mixture-of-experts) | `inkling-2-mini` | — | 262K served context, the vendor's cap for this hardware class (a 1M window opens here but a vision request after another one segfaults llama.cpp), vision, on 18 GB of weights |
 | `nemotron` | **Nemotron-3.5-Super-VL-120B-A12B**, mixture-of-experts, 120B in total, ~12B active per token | `nemotron-3.5-super-vl-120b` | 30.1 / 35.2 t/s | 128K served context out of the 1M the model holds, vision, reasoning on, on 66 GB of weights; optional in the installer (`PROFILES=... nemotron`) |
 
 ![The GNOME panel menu: the profile names from the table above, the running one marked, the orchestrator toggle below](assets/desktop-extension.png)
