@@ -3,9 +3,10 @@
 
 Starts a fake engine that answers like llama-server (chunked SSE, and the
 peg-native format failure as an SSE event or as a 500 body), puts the real
-gateway in front of it, and checks what a client sees. Run from the repo root:
+gateway in front of it, and checks what a client sees. Run from the repo root
+on Linux, because the gateway imports fcntl and does not start elsewhere:
 
-    python tools/gateway-retry-selftest.py
+    python3 tools/gateway-retry-selftest.py
 """
 import io
 import json
@@ -16,6 +17,11 @@ import sys
 import tempfile
 import threading
 import time
+
+if sys.platform != "linux":
+    raise SystemExit(
+        "this self-test starts the real gateway, which imports fcntl: run it on "
+        "the Linux host, not here")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATEWAY = os.path.join(HERE, "superfast-gateway.py")
