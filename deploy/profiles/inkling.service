@@ -14,7 +14,7 @@ ExecStart=/usr/bin/podman run --name inkling-server --rm -p 127.0.0.1:8731:8731 
   ghcr.io/ggml-org/llama.cpp:server-vulkan \
   -m /models/Inkling-2-Mini-IQ4_NL.gguf \
   --host 0.0.0.0 --port 8731 \
-  -c 524288 --alias inkling-2-mini --jinja \
+  -c 262144 --alias inkling-2-mini --jinja \
   --parallel 1 --reasoning on --reasoning-effort low --timeout 0 \
   --temp 1.0 --top-p 1.0 --top-k 0 --min-p 0.0
 # This profile runs the UPSTREAM llama.cpp Vulkan image, not the project's
@@ -27,26 +27,29 @@ ExecStart=/usr/bin/podman run --name inkling-server --rm -p 127.0.0.1:8731:8731 
 # repository's generation_config.json, which sets temperature 1.0 and no other
 # sampler. The model card publishes no sampler at all.
 #
-# 524288 is twice the vendor's own number for this class of machine, and it is
-# the widest window that works here with vision. The vLLM recipe serves the
-# full 1,048,576 on a GB200 and caps at 262,144 on H100 and DGX Spark "to fit
-# in memory". Measured here on 2026-11-28: 524,288 opens with the projector and
-# answers a text-then-image turn; 1,048,576 also opens (48 GiB free) and answers
-# text, but the same text-then-image turn kills the server with
-# `GGML_ASSERT(tensors[i]->data != NULL && "tensor not allocated")` in
-# update_prompt_cache (exit 139), while the image as the first request works.
-# So the limit at 1M is llama.cpp's prompt-cache path, not the memory.
+# 262144 is the vendor's own number for this class of machine, and it is the
+# window this profile ships because it is the one that survives the harness.
+# Measured on 2026-11-28 with free -m against a 2.4 GiB idle host: 262,144 ->
+# 26.3 GiB (26.8 with the projector), 524,288 -> 36.3/36.8, 1,048,576 -> 56.4.
+# The KV is ~40 KiB per token and the projector adds 478 MiB.
 #
-# What the window costs, measured with free -m against a 2.4 GiB idle host:
-# 262,144 -> 26.3 GiB, 524,288 -> 36.3 GiB, 1,048,576 -> 56.4 GiB, i.e. ~40 KiB
-# of KV per token; the projector adds 478 MiB and does not grow with the window.
-# The rule that decides whether a profile with vision fits is in docs/VISION.md:
+# Two larger windows were tried and both were rejected, for different reasons:
+#   * 1,048,576 opens (48 GiB free) and answers text, but a text-then-image
+#     turn kills the server with `GGML_ASSERT(tensors[i]->data != NULL &&
+#     "tensor not allocated")` in update_prompt_cache (exit 139), while the
+#     image as the first request works — llama.cpp's prompt cache, not memory;
+#   * 524,288 answers small prompts and a text-then-image turn, but Qwen Code
+#     sends ~132,000 tokens of context with its tool schemas, and at that size
+#     the Vulkan backend floods `Failed to allocate pinned memory` and the slot
+#     never progresses. At 262,144 the same prompt does progress, at 395 t/s
+#     falling to ~110 t/s over 132k tokens, i.e. ~20 minutes for the first turn.
+# The rule for whether a profile with vision fits at all is in docs/VISION.md:
 # RAM(llm) + RAM(vision) + RAM(os) < RAM(total).
 #
 # The time cost is paid on the first prompt only: the prefix cache carries the
 # rest, measured at 19 prefilled tokens on a follow-up turn against 4,893 on the
 # first. Prefill runs at 459 t/s here (4,809 tokens, measured 2026-11-28 on an
-# idle host), so the whole 524,288-token window costs ~19 minutes to rebuild
+# idle host), so the whole 262,144-token window costs ~9.5 minutes to rebuild
 # after a restart, a different client or a changed system prompt — and the same
 # rate at 1M is ~40 minutes. The 100 t/s reported on 2026-11-27 was measured
 # while a stuck container held 73 GiB: memory pressure, not the model.

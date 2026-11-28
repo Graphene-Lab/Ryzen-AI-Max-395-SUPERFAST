@@ -105,7 +105,17 @@ and 524,288 → 1,048,576 another 20 GiB. The projector's standing cost is
 So a 512K inkling with vision leaves 87 GB: 63 GB for the image generator's
 24 GB peak, the OS, and room to work. The 1M window is not a memory problem
 either — it leaves 48 GB — it is llama.cpp's prompt-cache path that fails on
-the second request, which is why the profile ships 524,288 and not more.
+the second request.
+
+Neither larger window is shipped, for two different reasons, and the second one
+only shows up with a client in front of the engine. Qwen Code sends about
+**132,000 tokens** of context once its tool schemas are loaded; at 512K that
+prompt makes the Vulkan backend flood `ggml_vulkan: Failed to allocate pinned
+memory` and the slot never progresses, while at 262,144 the same prompt does
+progress — 395 t/s at the start of the prefill, decaying to ~110 t/s by 132k
+tokens, i.e. about 20 minutes for the first turn. So the memory rule above says
+whether vision fits, and the prompt size says whether a given window survives
+being used.
 
 ## Turning it on and off
 
