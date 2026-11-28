@@ -318,6 +318,10 @@ Workstation 44. There are two ways to get there:
 
   # the same set, named explicitly
   PROFILES="gemma ornith ornith122 small" bash deploy/setup-fedora.sh
+
+  # add the two optional profiles: 66 GB and 91 GB of weights, and nemotron
+  # also needs its own engine image, which the installer builds
+  PROFILES="gemma ornith ornith122 inkling small nemotron" bash deploy/setup-fedora.sh
   ```
 
   For a run that nobody has to watch, add `UNATTENDED=1`. It needs
@@ -936,6 +940,7 @@ so they are connected to this repository and appear in its Packages section.
 | `ghcr.io/graphene-lab/superfast-runtime:llama-rocmfpx-1` | GHCR (ours) | the GGUF runtime: llama.cpp with the ROCmFPX fork, built for gfx1151. Needed by the `gemma`, `deepseek` and orchestrator profiles |
 | `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:flash-vk-1` | GHCR (ours) | the Vulkan engine image as it was first published. It predates patch 0012, so `deploy/build-vulkan-image.sh` tries it, checks that its `llama-server` knows `--reasoning`, and otherwise builds `localhost/superfast-vk:patch0012` from the `qwen4exp-conv-ring-slots` branch |
 | `ghcr.io/graphene-lab/ryzen-ai-max-395-superfast:image-1` | GHCR (ours) | `sd-server` from stable-diffusion.cpp: the optional image generator on `:8733`. Pulled the same way, with the build from `runtime/Dockerfile.sd` as fallback |
+| `localhost/superfast-vk:nemotron` | local only | the engine for the `nemotron` profile: plain llama.cpp **mainline** at a pinned commit, no patch series, because `nemotron_h_moe` is upstream and the fork snapshot predates it. Nothing publishes it, so `deploy/build-nemotron-image.sh` builds it on the machine and refuses to call it done unless `libllama.so` carries the architecture |
 | `kingjones777/Gemma-4-26B-A4B-it-ROCmFP4-GGUF` | Hugging Face | the Gemma-4 weights used by the `gemma` profile |
 | `otheru/DeepSeek-V4-Flash-Strix-Halo-GGUF` | Hugging Face | the DeepSeek-V4-Flash weights used by the `deepseek` profile |
 | `LiquidAI/LFM2.5-350M-GGUF`, `Nichonauta/LFM2.5-1.2B-Thinking-ToMoE-GGUF` | Hugging Face | the small models used by the orchestrator |

@@ -391,6 +391,19 @@ phase_engine() {
                 || log "warning: could not pull the llama.cpp Vulkan image; inkling will not start until it exists"
         fi
     fi
+    # The nemotron profile runs an engine built from UPSTREAM llama.cpp at a
+    # pinned commit: nemotron_h_moe is upstream, and the project's fork
+    # snapshot predates it. The image is local, so it is built here, and the
+    # build checks the architecture in libllama.so before declaring success.
+    if in_profiles nemotron && [ "$VULKAN_ENGINE" = "1" ]; then
+        if podman image exists localhost/superfast-vk:nemotron; then
+            log "nemotron engine image already present (localhost/superfast-vk:nemotron)"
+        else
+            log "building the nemotron engine from llama.cpp mainline (this takes a while)"
+            bash "$SCRIPT_DIR/build-nemotron-image.sh" \
+                || log "warning: nemotron image build failed; the nemotron unit will not start until it exists"
+        fi
+    fi
     # The optional image generator runs sd-server (stable-diffusion.cpp) on
     # Vulkan. Its Dockerfile clones the source itself, so there is no upstream
     # snapshot to fetch here. Set IMAGE_GENERATOR=0 to skip the build.
